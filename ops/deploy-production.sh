@@ -24,7 +24,9 @@ mkdir -p '$REMOTE_RELEASE'
 rsync -az --delete \
   --exclude '.git' \
   --exclude '.dart_tool' \
-  --exclude 'build' \
+  --include 'build/' \
+  --include 'build/web/***' \
+  --exclude 'build/**' \
   --exclude 'node_modules' \
   --exclude '.next' \
   --exclude 'dist' \
@@ -35,6 +37,9 @@ rsync -az --delete \
   --exclude '*.mp4' \
   --exclude 'tmp' \
   "$ROOT_DIR/" "$SERVER:$REMOTE_RELEASE/"
+
+ssh "$SERVER" "mkdir -p '$REMOTE_RELEASE/build/web'"
+rsync -az --delete "$ROOT_DIR/build/web/" "$SERVER:$REMOTE_RELEASE/build/web/"
 
 ssh "$SERVER" "set -euo pipefail
 if [ -f '${APP_DIR}/backend/.env' ]; then
