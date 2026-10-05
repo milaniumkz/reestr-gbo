@@ -1,0 +1,53 @@
+{
+  "name": "ersi-gbo-backend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "nest start --watch",
+    "build": "nest build",
+    "start": "node dist/main.js",
+    "lint": "eslint \"src/**/*.ts\"",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1136.0",
+    "@nestjs/bullmq": "^12.0.0",
+    "@nestjs/common": "^12.0.4",
+    "@nestjs/config": "^12.0.0",
+    "@nestjs/core": "^12.0.4",
+    "@nestjs/jwt": "^12.0.2",
+    "@nestjs/passport": "^12.0.0",
+    "@nestjs/platform-express": "^12.0.4",
+    "@prisma/client": "6.12.0",
+    "bcryptjs": "^3.0.2",
+    "bullmq": "^5.58.5",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.2",
+    "fast-xml-parser": "^5.11.1",
+    "ioredis": "^5.7.0",
+    "jszip": "^3.10.2",
+    "pdfkit": "^0.20.2",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^12.0.1",
+    "@nestjs/schematics": "^12.0.1",
+    "@nestjs/testing": "^12.0.4",
+    "@types/express": "^5.0.3",
+    "@types/jest": "^30.0.0",
+    "@types/multer": "^2.2.0",
+    "@types/node": "^24.5.2",
+    "@types/pdfkit": "^0.17.6",
+    "eslint": "^9.36.0",
+    "jest": "^30.1.3",
+    "prisma": "6.12.0",
+    "ts-jest": "^29.4.4",
+    "tsx": "^4.20.5",
+    "typescript": "^6.0.0"
+  }
+}

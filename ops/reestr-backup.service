@@ -1,0 +1,11 @@
+[Unit]
+Description=Reestr PostgreSQL and storage backup
+Wants=postgresql@16-main.service
+After=postgresql@16-main.service
+
+[Service]
+Type=oneshot
+Environment=APP_DIR=/opt/reestr/app
+Environment=BACKUP_DIR=/opt/reestr/backups
+Environment=RETENTION_DAYS=14
+ExecStart=/usr/local/bin/backup-reestr.sh

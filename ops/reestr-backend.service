@@ -1,0 +1,18 @@
+[Unit]
+Description=Reestr NestJS backend
+After=network.target postgresql.service redis-server.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/reestr/app/backend
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+EnvironmentFile=/opt/reestr/app/backend/.env
+ExecStart=/usr/bin/node dist/src/main.js
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/reestr/backend.log
+StandardError=append:/var/log/reestr/backend-error.log
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,402 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String    @id @default(uuid())
+  phone       String    @unique
+  email       String?
+  fullName    String
+  iin         String?
+  isBlocked   Boolean   @default(false)
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  roles       UserRole[]
+  sessions    Session[]
+  memberships OrganizationMember[]
+  vehicles    VehicleOwner[]
+  audits      AuditLog[]
+  createdInspections  Inspection[] @relation("InspectionCreatedBy")
+  submittedInspections Inspection[] @relation("InspectionSubmittedBy")
+  approvedInspections Inspection[] @relation("InspectionApprovedBy")
+}
+
+model UserRole {
+  id     String @id @default(uuid())
+  role   String
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role])
+}
+
+model Session {
+  id          String    @id @default(uuid())
+  userId      String
+  refreshHash String
+  deviceName  String?
+  ipAddress   String?
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+  revokedAt   DateTime?
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model OtpChallenge {
+  id          String    @id @default(uuid())
+  phone       String
+  codeHash    String
+  purpose     String    @default("login")
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5)
+  expiresAt   DateTime
+  verifiedAt  DateTime?
+  ipAddress   String?
+  createdAt   DateTime  @default(now())
+
+  @@index([phone, purpose, createdAt])
+}
+
+model Organization {
+  id        String   @id @default(uuid())
+  type      String
+  name      String
+  bin       String   @unique
+  status    String   @default("active")
+  address   String?
+  region    String?
+  contactPhone String?
+  contactEmail String?
+  lat       Decimal? @db.Decimal(9, 6)
+  lng       Decimal? @db.Decimal(9, 6)
+  rating    Decimal? @db.Decimal(3, 2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members     OrganizationMember[]
+  inspections Inspection[]
+  cameras     Camera[]
+  balances    Balance[]
+  importJobs  CertificateImportJob[]
+}
+
+model Banner {
+  id              String   @id @default(uuid())
+  title           String
+  linkUrl         String?
+  objectKey       String
+  durationSeconds Int      @default(5)
+  startsAt        DateTime?
+  endsAt          DateTime?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model GboEquipmentItem {
+  id        String   @id @default(uuid())
+  type      String
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([type, name])
+  @@index([type, isActive])
+}
+
+model LegalDocument {
+  id        String   @id @default(uuid())
+  title     String
+  excerpt   String?
+  body      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, createdAt])
+}
+
+model OrganizationMember {
+  id             String       @id @default(uuid())
+  organizationId String
+  userId         String
+  role           String
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId, role])
+}
+
+model Vehicle {
+  id              String   @id @default(uuid())
+  vin             String   @unique
+  plateNumber     String
+  normalizedPlate String?
+  vinLast3        String?
+  make            String
+  model           String
+  year            Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  owners       VehicleOwner[]
+  cylinders    GasCylinder[]
+  inspections  Inspection[]
+  certificates Certificate[]
+
+  @@index([normalizedPlate, vinLast3])
+}
+
+model VehicleOwner {
+  id        String  @id @default(uuid())
+  vehicleId String
+  userId    String
+  iin       String?
+  fullName  String
+  address   String?
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model GasCylinder {
+  id              String    @id @default(uuid())
+  vehicleId       String
+  serialNumber    String
+  manufacturer    String
+  volumeLiters    Int
+  reducerName     String?
+  controlUnitName String?
+  producedAt      DateTime?
+  validUntil      DateTime
+  vehicle         Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+}
+
+model Inspection {
+  id                String            @id @default(uuid())
+  organizationId    String
+  vehicleId         String
+  createdById       String?
+  submittedById     String?
+  approvedById      String?
+  status            String            @default("draft")
+  certificateNumber String?           @unique
+  inspectorName     String?
+  notes             String?
+  lat               Float?
+  lng               Float?
+  address           String?
+  autoPublishAt     DateTime?
+  submittedAt       DateTime?
+  approvedAt        DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  organization      Organization      @relation(fields: [organizationId], references: [id])
+  vehicle           Vehicle           @relation(fields: [vehicleId], references: [id])
+  createdBy         User?             @relation("InspectionCreatedBy", fields: [createdById], references: [id])
+  submittedBy       User?             @relation("InspectionSubmittedBy", fields: [submittedById], references: [id])
+  approvedBy        User?             @relation("InspectionApprovedBy", fields: [approvedById], references: [id])
+  photos            InspectionPhoto[]
+  certificate       Certificate?
+}
+
+model InspectionPhoto {
+  id           String     @id @default(uuid())
+  inspectionId String
+  type         String
+  objectKey    String
+  checksum     String?
+  lat          Float?
+  lng          Float?
+  createdAt    DateTime   @default(now())
+  inspection   Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+}
+
+model Certificate {
+  id           String                 @id @default(uuid())
+  number       String                 @unique
+  vehicleId    String
+  inspectionId String                 @unique
+  status       String                 @default("active")
+  qrPayload    String
+  pdfObjectKey String?
+  validUntil   DateTime
+  issuedAt     DateTime               @default(now())
+  vehicle      Vehicle                @relation(fields: [vehicleId], references: [id])
+  inspection   Inspection             @relation(fields: [inspectionId], references: [id])
+  views        CertificateView[]
+  imports      CertificateImportJob[]
+}
+
+model CertificateView {
+  id            String      @id @default(uuid())
+  certificateId String
+  viewerIp      String?
+  createdAt     DateTime    @default(now())
+  certificate   Certificate @relation(fields: [certificateId], references: [id], onDelete: Cascade)
+}
+
+model PublicCertificateCheck {
+  id                String   @id @default(uuid())
+  plateNumber       String
+  normalizedPlate   String
+  vinLast3          String
+  found             Boolean  @default(false)
+  vehicleId         String?
+  certificateId     String?
+  certificateNumber String?
+  lat               Float?
+  lng               Float?
+  address           String?
+  ipAddress         String?
+  userAgent         String?
+  createdAt         DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([found, createdAt])
+  @@index([normalizedPlate, vinLast3])
+  @@index([certificateNumber])
+}
+
+model Payment {
+  id             String   @id @default(uuid())
+  organizationId String?
+  provider       String
+  externalId     String?
+  amount         Int
+  currency       String   @default("KZT")
+  status         String   @default("pending")
+  purpose        String
+  metadata       Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model StorageObject {
+  id          String   @id @default(uuid())
+  objectKey   String   @unique
+  bucket      String
+  contentType String?
+  sizeBytes   Int
+  checksum    String?
+  createdById String?
+  createdAt   DateTime @default(now())
+}
+
+model CertificateImportJob {
+  id             String                   @id @default(uuid())
+  status         String                   @default("pending")
+  filename       String
+  objectKey      String
+  fileHash       String
+  organizationId String?
+  certificateId  String?
+  createdById    String?
+  createdCount   Int                      @default(0)
+  updatedCount   Int                      @default(0)
+  skippedCount   Int                      @default(0)
+  errorCount     Int                      @default(0)
+  summary        Json?
+  createdAt      DateTime                 @default(now())
+  finishedAt     DateTime?
+  certificate    Certificate?             @relation(fields: [certificateId], references: [id])
+  organization   Organization?            @relation(fields: [organizationId], references: [id])
+  errors         CertificateImportError[]
+
+  @@unique([fileHash, filename])
+  @@index([status, createdAt])
+}
+
+model CertificateImportError {
+  id        String               @id @default(uuid())
+  jobId     String
+  field     String?
+  message   String
+  rawValue  String?
+  createdAt DateTime             @default(now())
+  job       CertificateImportJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+}
+
+model Tariff {
+  id         String   @id @default(uuid())
+  code       String   @unique
+  name       String
+  amount     Int
+  currency   String   @default("KZT")
+  periodDays Int?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Balance {
+  id             String       @id @default(uuid())
+  organizationId String
+  amount         Int          @default(0)
+  currency       String       @default("KZT")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId])
+}
+
+model Camera {
+  id               String          @id @default(uuid())
+  organizationId   String
+  name             String
+  rtspUrlEncrypted String
+  status           String          @default("active")
+  hlsPath          String?
+  createdAt        DateTime        @default(now())
+  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sessions         CameraSession[]
+}
+
+model CameraSession {
+  id        String    @id @default(uuid())
+  cameraId  String
+  status    String    @default("live")
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+  events    Json?
+  camera    Camera    @relation(fields: [cameraId], references: [id], onDelete: Cascade)
+}
+
+model ApiToken {
+  id             String    @id @default(uuid())
+  organizationId String
+  name           String
+  tokenHash      String
+  scopes         String[]
+  createdAt      DateTime  @default(now())
+  revokedAt      DateTime?
+}
+
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String?
+  role      String?
+  title     String
+  body      String
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  actorId   String?
+  action    String
+  entity    String
+  entityId  String?
+  ipAddress String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+  actor     User?    @relation(fields: [actorId], references: [id])
+}

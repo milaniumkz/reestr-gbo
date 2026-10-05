@@ -1,0 +1,17 @@
+[Unit]
+Description=Reestr Next.js admin
+After=network.target reestr-backend.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/reestr/app/admin
+Environment=NODE_ENV=production
+Environment=NEXT_PUBLIC_API_URL=http://89.207.255.42/api/v1
+ExecStart=/usr/bin/npm run start
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/reestr/admin.log
+StandardError=append:/var/log/reestr/admin-error.log
+
+[Install]
+WantedBy=multi-user.target

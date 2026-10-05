@@ -1,0 +1,90 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+._*
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+tmp/
+*.tmp
+*.bak
+*.backup
+*.tgz
+*.tar.gz
+*.zip
+*.mov
+*.mp4
+*.webm
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+.playwright-mcp/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+test/failures/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+/android/.gradle/
+/android/.kotlin/
+/android/local.properties
+/android/key.properties
+/android/app/*.jks
+/android/app/*.keystore
+
+# Node / Next / Nest
+**/node_modules/
+**/.next/
+**/dist/
+**/.turbo/
+**/.cache/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local/generated design references
+Новая папка/
+assets/screens/
+
+# Local secrets
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+admin/.env
+admin/.env.*
+!admin/.env.example

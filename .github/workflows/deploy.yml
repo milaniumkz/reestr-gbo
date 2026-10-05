@@ -1,0 +1,83 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to deploy
+        required: false
+        type: string
+      operation:
+        description: Operation
+        required: true
+        default: deploy
+        type: choice
+        options:
+          - deploy
+          - status
+          - logs
+          - restart
+          - rollback
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name == 'push' || github.event.inputs.operation == 'deploy'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.sha }}
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.41.1"
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter build web --release --pwa-strategy=none --dart-define=API_BASE_URL=https://89-207-255-42.sslip.io/api/v1 --dart-define=APP_MODE=production
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+      - name: Trust server host key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+      - name: Deploy checked commit
+        run: |
+          bash ops/deploy-production.sh "$(git rev-parse HEAD)"
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          APP_DIR: /opt/reestr/app
+          PUBLIC_ORIGIN: https://89-207-255-42.sslip.io
+
+  operate:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.operation != 'deploy'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+      - name: Trust server host key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+      - name: Run operation
+        run: bash ops/remote-operation.sh "${{ github.event.inputs.operation }}"
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          APP_DIR: /opt/reestr/app
