@@ -1,8 +1,10 @@
 name: Deploy
 
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
     branches: [main]
+    types: [completed]
   workflow_dispatch:
     inputs:
       ref:
@@ -30,13 +32,15 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.event_name == 'push' || github.event.inputs.operation == 'deploy'
+    if: |
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.operation == 'deploy')
     runs-on: ubuntu-latest
     environment: production
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.ref || github.sha }}
+          ref: ${{ github.event.inputs.ref || github.event.workflow_run.head_sha || github.sha }}
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.41.1"
