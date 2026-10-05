@@ -42,6 +42,11 @@ if [ -f '${APP_DIR}/backend/.env' ]; then
   cp '${APP_DIR}/backend/.env' '$REMOTE_RELEASE/backend/.env'
 fi
 cd '$REMOTE_RELEASE/backend'
+if [ -f .env ]; then
+  set -a
+  . ./.env
+  set +a
+fi
 npm ci
 npx prisma migrate deploy
 npx prisma generate
