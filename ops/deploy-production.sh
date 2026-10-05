@@ -37,6 +37,10 @@ rsync -az --delete \
   "$ROOT_DIR/" "$SERVER:$REMOTE_RELEASE/"
 
 ssh "$SERVER" "set -euo pipefail
+if [ -f '${APP_DIR}/backend/.env' ]; then
+  mkdir -p '$REMOTE_RELEASE/backend'
+  cp '${APP_DIR}/backend/.env' '$REMOTE_RELEASE/backend/.env'
+fi
 cd '$REMOTE_RELEASE/backend'
 npm ci
 npx prisma migrate deploy
@@ -66,10 +70,6 @@ s = s.replace(\"build.mainJsPath === 'main.dart.js'\", f\"build.mainJsPath === '
 p.write_text(s)
 PY
 
-if [ -f '${APP_DIR}/backend/.env' ]; then
-  mkdir -p '$REMOTE_RELEASE/backend'
-  cp '${APP_DIR}/backend/.env' '$REMOTE_RELEASE/backend/.env'
-fi
 ln -sfn '$REMOTE_RELEASE' /opt/reestr/current
 rsync -a --delete '$REMOTE_RELEASE/backend/' '${APP_DIR}/backend/'
 rsync -a --delete '$REMOTE_RELEASE/admin/' '${APP_DIR}/admin/'
