@@ -1,16 +1,20 @@
-name: CI
+name: Native Mac Pilot
 
 on:
-  pull_request:
   push:
-    branches: [main]
+    branches: [codex/mac-ci-pilot]
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: native-mac-reestr-gbo-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   backend:
+    if: github.repository == 'milaniumkz/reestr-gbo' && (github.ref == 'refs/heads/codex/mac-ci-pilot' || github.ref == 'refs/heads/main')
     runs-on: ${{ github.event_name != 'pull_request' && fromJSON('["milanium-mac-arm64", "repo-reestr-gbo"]') || fromJSON('["ubuntu-latest"]') }}
     defaults:
       run:
@@ -45,6 +49,7 @@ jobs:
       - run: npm test -- --runInBand
 
   admin:
+    if: github.repository == 'milaniumkz/reestr-gbo' && (github.ref == 'refs/heads/codex/mac-ci-pilot' || github.ref == 'refs/heads/main')
     runs-on: ${{ github.event_name != 'pull_request' && fromJSON('["milanium-mac-arm64", "repo-reestr-gbo"]') || fromJSON('["ubuntu-latest"]') }}
     defaults:
       run:
@@ -79,6 +84,7 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost:3000/api/v1
 
   flutter:
+    if: github.repository == 'milaniumkz/reestr-gbo' && (github.ref == 'refs/heads/codex/mac-ci-pilot' || github.ref == 'refs/heads/main')
     runs-on: ${{ github.event_name != 'pull_request' && fromJSON('["milanium-mac-arm64", "repo-reestr-gbo"]') || fromJSON('["ubuntu-latest"]') }}
     timeout-minutes: 45
     env:
