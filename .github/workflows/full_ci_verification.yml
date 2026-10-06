@@ -1,5 +1,10 @@
 ---
-name: CI
+name: Full CI Verification
+'on':
+  push:
+    branches:
+    - codex/full-ci-pilot
+  workflow_dispatch: {}
 permissions:
   contents: read
 jobs:
@@ -37,6 +42,8 @@ jobs:
     - run: npm run prisma:generate
     - run: npm run build
     - run: npm test -- --runInBand
+    if: github.repository == 'milaniumkz/reestr-gbo' && github.event_name != 'pull_request'
+      && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/full-ci-pilot')
   admin:
     runs-on: ${{ github.event_name != 'pull_request' && fromJSON('["milanium-mac-arm64",
       "repo-reestr-gbo"]') || fromJSON('["ubuntu-latest"]') }}
@@ -71,6 +78,8 @@ jobs:
     - run: npm run build
       env:
         NEXT_PUBLIC_API_URL: http://localhost:3000/api/v1
+    if: github.repository == 'milaniumkz/reestr-gbo' && github.event_name != 'pull_request'
+      && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/full-ci-pilot')
   flutter:
     runs-on: ${{ github.event_name != 'pull_request' && fromJSON('["milanium-mac-arm64",
       "repo-reestr-gbo"]') || fromJSON('["ubuntu-latest"]') }}
@@ -104,9 +113,5 @@ jobs:
     - run: flutter test
     - run: flutter build web --release --pwa-strategy=none --dart-define=API_BASE_URL=https://89-207-255-42.sslip.io/api/v1
         --dart-define=APP_MODE=production
-'on':
-  pull_request: 
-  push:
-    branches:
-    - main
-  workflow_dispatch: 
+    if: github.repository == 'milaniumkz/reestr-gbo' && github.event_name != 'pull_request'
+      && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/full-ci-pilot')
