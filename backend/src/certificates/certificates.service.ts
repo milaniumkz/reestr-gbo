@@ -380,6 +380,9 @@ export class CertificatesService {
   async verify(number: string) {
     const certificate = await this.prisma.certificate.findUnique({
       where: { number },
+      include: { inspection: { select: { organization: { select: {
+        name: true, bin: true, accreditationValidFrom: true, accreditationValidUntil: true,
+      } } } } },
     });
     if (!certificate) return { valid: false, status: "not_found" };
     const valid =
@@ -393,6 +396,7 @@ export class CertificatesService {
       number: certificate.number,
       validUntil: certificate.validUntil,
       qrPayload: certificate.qrPayload,
+      organization: certificate.inspection.organization,
     };
   }
 
@@ -1348,6 +1352,9 @@ export class CertificatesService {
         "Инспекционный орган",
         certificate.inspection.organization.name,
       );
+      const organization = certificate.inspection.organization;
+      const accreditationDate = (date: Date | null) => date ? date.toISOString().slice(0, 10).split("-").reverse().join(".") : "не указан";
+      this.row(doc, "Аттестат аккредитации", `от ${accreditationDate(organization.accreditationValidFrom)} до ${accreditationDate(organization.accreditationValidUntil)}`);
       this.row(doc, "Выдано", certificate.issuedAt.toISOString().slice(0, 10));
       this.row(
         doc,

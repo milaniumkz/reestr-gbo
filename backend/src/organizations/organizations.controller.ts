@@ -46,6 +46,8 @@ export class OrganizationsController {
     region?: string;
     contactPhone?: string;
     contactEmail?: string;
+    accreditationValidFrom?: string;
+    accreditationValidUntil?: string;
     lat?: number;
     lng?: number;
   }) {
@@ -76,6 +78,8 @@ export class OrganizationsController {
       region?: string | null;
       contactPhone?: string | null;
       contactEmail?: string | null;
+      accreditationValidFrom?: string;
+      accreditationValidUntil?: string;
       lat?: number | string | null;
       lng?: number | string | null;
     },

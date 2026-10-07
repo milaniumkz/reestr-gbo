@@ -1,3 +1,4 @@
+import { accreditationPeriod } from '../lib/accreditation';
 import { AuditRow, Inspection } from '@/lib/api';
 import { statusLabel } from '../lib/labels';
 import { Info, MiniTable } from './ui-primitives';
@@ -27,6 +28,7 @@ export function InspectionDetailPanel({
         <Info label="Статус" value={statusLabel(inspection.status)} />
         <Info label="Свидетельство" value={inspection.certificate?.number ?? inspection.certificateNumber ?? '-'} />
         <Info label="ИО" value={inspection.organization?.name ?? '-'} />
+        <Info label="Аттестат аккредитации" value={accreditationPeriod(inspection.organization)} />
         <Info label="VIN" value={inspection.vehicle?.vin ?? '-'} />
         <Info label="Госномер" value={inspection.vehicle?.plateNumber ?? '-'} />
         <Info label="ТС" value={inspection.vehicle ? `${inspection.vehicle.make ?? '-'} ${inspection.vehicle.model ?? ''}`.trim() : '-'} />

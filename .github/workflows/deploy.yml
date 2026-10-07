@@ -48,6 +48,26 @@ jobs:
           cache: true
       - run: flutter pub get
       - run: flutter build web --release --pwa-strategy=none --dart-define=API_BASE_URL=https://89-207-255-42.sslip.io/api/v1 --dart-define=APP_MODE=production
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Build Android APK for the production API
+        run: |
+          flutter build apk --release --build-number="$(date +%s)" --dart-define=API_BASE_URL=https://89-207-255-42.sslip.io/api/v1 --dart-define=APP_MODE=production
+          mkdir -p build/web/downloads
+          cp build/app/outputs/flutter-apk/app-release.apk build/web/downloads/ersi-gbo.apk
+          cd build/web/downloads
+          sha256sum ersi-gbo.apk > ersi-gbo.apk.sha256
+      - name: Retain downloadable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ersi-gbo-apk
+          path: |
+            build/web/downloads/ersi-gbo.apk
+            build/web/downloads/ersi-gbo.apk.sha256
+          if-no-files-found: error
+          retention-days: 30
       - uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
@@ -64,6 +84,12 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           APP_DIR: /opt/reestr/app
           PUBLIC_ORIGIN: https://89-207-255-42.sslip.io
+
+      - name: Verify public APK download
+        run: |
+          curl --fail --show-error --location --retry 3 https://89-207-255-42.sslip.io/downloads/ersi-gbo.apk --output "$RUNNER_TEMP/published-ersi-gbo.apk"
+          cmp build/web/downloads/ersi-gbo.apk "$RUNNER_TEMP/published-ersi-gbo.apk"
+          echo 'APK: https://89-207-255-42.sslip.io/downloads/ersi-gbo.apk' >> "$GITHUB_STEP_SUMMARY"
 
   operate:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.operation != 'deploy'

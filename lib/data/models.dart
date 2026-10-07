@@ -1,3 +1,13 @@
+String accreditationPeriodLabel(String from, String until) {
+  if (from.isEmpty && until.isEmpty) {
+    return "Аттестат аккредитации: срок не указан";
+  }
+  String date(String value) => value.isEmpty
+      ? "не указан"
+      : value.split("T").first.split("-").reversed.join(".");
+  return "Аттестат аккредитации от ${date(from)} до ${date(until)}";
+}
+
 class AppUser {
   const AppUser({required this.id, required this.phone, required this.roles});
 
@@ -53,6 +63,8 @@ class RegistryVehicle {
     required this.model,
     required this.certificateNumber,
     required this.validUntil,
+    this.accreditationValidFrom = '',
+    this.accreditationValidUntil = '',
     this.ownerName = '',
     this.ownerIin = '',
     this.ownerPhone = '',
@@ -80,6 +92,11 @@ class RegistryVehicle {
     this.certificateIssuedAt = '',
     this.documents = const [],
   });
+
+  final String accreditationValidFrom;
+  final String accreditationValidUntil;
+  String get accreditationLabel =>
+      accreditationPeriodLabel(accreditationValidFrom, accreditationValidUntil);
 
   final String vin;
   final String plateNumber;
@@ -159,6 +176,10 @@ class RegistryVehicle {
       cylinderValidUntil:
           cylinder['validUntil']?.toString().split('T').first ?? '',
       organizationName: organization['name']?.toString() ?? '',
+      accreditationValidFrom:
+          organization['accreditationValidFrom']?.toString() ?? '',
+      accreditationValidUntil:
+          organization['accreditationValidUntil']?.toString() ?? '',
       organizationBin: organization['bin']?.toString() ?? '',
       organizationAddress: organization['address']?.toString() ?? '',
       organizationRegion: organization['region']?.toString() ?? '',
@@ -224,6 +245,10 @@ class RegistryVehicle {
       cylinderValidUntil:
           cylinder['validUntil']?.toString().split('T').first ?? '',
       organizationName: organization['name']?.toString() ?? '',
+      accreditationValidFrom:
+          organization['accreditationValidFrom']?.toString() ?? '',
+      accreditationValidUntil:
+          organization['accreditationValidUntil']?.toString() ?? '',
       organizationBin: organization['bin']?.toString() ?? '',
       organizationAddress: organization['address']?.toString() ?? '',
       organizationRegion: organization['region']?.toString() ?? '',
@@ -339,6 +364,8 @@ class OrganizationSummary {
     required this.bin,
     required this.status,
     required this.region,
+    this.accreditationValidFrom = '',
+    this.accreditationValidUntil = '',
     this.type = '',
     this.address = '',
     this.phone = '',
@@ -346,6 +373,11 @@ class OrganizationSummary {
     this.lng,
     this.members = const [],
   });
+
+  final String accreditationValidFrom;
+  final String accreditationValidUntil;
+  String get accreditationLabel =>
+      accreditationPeriodLabel(accreditationValidFrom, accreditationValidUntil);
 
   final String id;
   final String name;
@@ -370,6 +402,9 @@ class OrganizationSummary {
     return OrganizationSummary(
       id: json['id']?.toString() ?? '',
       name: json['name']?.toString() ?? '',
+      accreditationValidFrom: json['accreditationValidFrom']?.toString() ?? '',
+      accreditationValidUntil:
+          json['accreditationValidUntil']?.toString() ?? '',
       bin: json['bin']?.toString() ?? '',
       status: json['status']?.toString() ?? '',
       region: json['region']?.toString() ?? '',
@@ -435,6 +470,8 @@ class InspectionSummary {
     required this.organizationName,
     required this.photoCount,
     required this.certificateNumber,
+    this.accreditationValidFrom = '',
+    this.accreditationValidUntil = '',
     this.certificateIssuedAt = '',
     this.certificateValidUntil = '',
     this.ownerName = '',
@@ -462,6 +499,11 @@ class InspectionSummary {
     this.approvedAt = '',
     this.files = const [],
   });
+
+  final String accreditationValidFrom;
+  final String accreditationValidUntil;
+  String get accreditationLabel =>
+      accreditationPeriodLabel(accreditationValidFrom, accreditationValidUntil);
 
   final String id;
   final String status;
@@ -537,6 +579,10 @@ class InspectionSummary {
       vehicleVin: vehicle['vin']?.toString() ?? '',
       vehicleName: [make, model].where((item) => item.isNotEmpty).join(' '),
       organizationName: organization['name']?.toString() ?? '',
+      accreditationValidFrom:
+          organization['accreditationValidFrom']?.toString() ?? '',
+      accreditationValidUntil:
+          organization['accreditationValidUntil']?.toString() ?? '',
       photoCount: photos.length,
       certificateNumber:
           certificate['number']?.toString() ??

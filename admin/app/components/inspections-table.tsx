@@ -1,3 +1,4 @@
+import { accreditationPeriod } from '../lib/accreditation';
 import { Inspection, Organization } from '@/lib/api';
 import { statusLabel } from '../lib/labels';
 import { EmptyTableRow } from './ui-primitives';
@@ -88,7 +89,7 @@ export function InspectionsTable({
               <tr key={row.id}>
                 <td>{row.vehicle?.vin ?? '-'}</td>
                 <td>{row.vehicle?.plateNumber ?? '-'}</td>
-                <td>{row.organization?.name ?? '-'}</td>
+                <td>{row.organization?.name ?? '-'}<div className="muted">{accreditationPeriod(row.organization)}</div></td>
                 <td><span className="pill">{statusLabel(row.status)}</span></td>
                 <td>{row.photos?.length ?? 0}</td>
                 <td>

@@ -1,3 +1,4 @@
+import { accreditationPeriod } from '../lib/accreditation';
 import { CertificateRow, Organization } from '@/lib/api';
 import { statusLabel } from '../lib/labels';
 import { EmptyTableRow } from './ui-primitives';
@@ -94,7 +95,7 @@ export function CertificatesTable({
               <td>{row.number}</td>
               <td>{row.vehicle ? `${row.vehicle.vin} · ${row.vehicle.plateNumber}` : '-'}</td>
               <td>{row.vehicle?.owners?.[0]?.fullName ?? '-'}</td>
-              <td>{row.inspection?.organization?.name ?? '-'}</td>
+              <td>{row.inspection?.organization?.name ?? '-'}<div className="muted">{accreditationPeriod(row.inspection?.organization)}</div></td>
               <td><span className="pill">{statusLabel(row.status)}</span></td>
               <td>{new Date(row.issuedAt).toLocaleDateString('ru-RU')}</td>
               <td>{new Date(row.validUntil).toLocaleDateString('ru-RU')}</td>

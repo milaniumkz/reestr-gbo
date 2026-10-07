@@ -1,3 +1,4 @@
+import { accreditationPeriod } from '../lib/accreditation';
 import { Organization, RegistryVehicle } from '@/lib/api';
 import { statusLabel } from '../lib/labels';
 import { EmptyTableRow } from './ui-primitives';
@@ -85,7 +86,7 @@ export function RegistryTable({
                   <td>{row.plateNumber}</td>
                   <td>{row.make} {row.model}</td>
                   <td>{owner?.fullName ?? '-'}</td>
-                  <td>{certificate?.inspection?.organization?.name ?? '-'}</td>
+                  <td>{certificate?.inspection?.organization?.name ?? '-'}<div className="muted">{accreditationPeriod(certificate?.inspection?.organization)}</div></td>
                   <td className="actions">
                     {certificate ? (
                       <button className="smallButton" type="button" onClick={() => onOpenCertificate(certificate.number)}>

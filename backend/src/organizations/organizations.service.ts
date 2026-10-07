@@ -91,6 +91,8 @@ export class OrganizationsService {
       region?: string | null;
       contactPhone?: string | null;
       contactEmail?: string | null;
+      accreditationValidFrom?: string;
+      accreditationValidUntil?: string;
       lat?: number | string | null;
       lng?: number | string | null;
     },
@@ -102,6 +104,8 @@ export class OrganizationsService {
       region?: string | null;
       contactPhone?: string | null;
       contactEmail?: string | null;
+      accreditationValidFrom?: Date;
+      accreditationValidUntil?: Date;
       lat?: number | null;
       lng?: number | null;
     } = {};
@@ -114,6 +118,13 @@ export class OrganizationsService {
     if (input.lat !== undefined) data.lat = this.coordinate(input.lat, -90, 90);
     if (input.lng !== undefined) data.lng = this.coordinate(input.lng, -180, 180);
 
+    if (input.accreditationValidFrom !== undefined || input.accreditationValidUntil !== undefined) {
+      const current = await this.prisma.organization.findUniqueOrThrow({ where: { id } });
+      Object.assign(data, this.accreditationPeriod(
+        input.accreditationValidFrom ?? current.accreditationValidFrom?.toISOString().slice(0, 10),
+        input.accreditationValidUntil ?? current.accreditationValidUntil?.toISOString().slice(0, 10),
+      ));
+    }
     const organization = await this.prisma.organization.update({
       where: { id },
       data,
@@ -244,6 +255,8 @@ export class OrganizationsService {
     region?: string;
     contactPhone?: string;
     contactEmail?: string;
+    accreditationValidFrom?: string;
+    accreditationValidUntil?: string;
     lat?: number | string;
     lng?: number | string;
   }) {
@@ -252,6 +265,9 @@ export class OrganizationsService {
         type: input.type || "inspection_org",
         name: this.requiredText(input.name, "Название ИО"),
         bin: this.requiredText(input.bin, "БИН"),
+        ...((input.type || "inspection_org") === "inspection_org" || input.accreditationValidFrom || input.accreditationValidUntil
+          ? this.accreditationPeriod(input.accreditationValidFrom, input.accreditationValidUntil)
+          : {}),
         address: this.optionalText(input.address),
         region: this.optionalText(input.region),
         contactPhone: this.optionalText(input.contactPhone),
@@ -313,6 +329,25 @@ export class OrganizationsService {
       where: { id: organizationId },
       include: { balances: true, members: { include: { user: true } } },
     });
+  }
+
+  private accreditationPeriod(from: unknown, until: unknown) {
+    const parse = (value: unknown) => {
+      if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        throw new BadRequestException("Укажите обе даты аттестата аккредитации в формате ГГГГ-ММ-ДД");
+      }
+      const date = new Date(`${value}T00:00:00.000Z`);
+      if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) {
+        throw new BadRequestException("Некорректная дата аттестата аккредитации");
+      }
+      return date;
+    };
+    const accreditationValidFrom = parse(from);
+    const accreditationValidUntil = parse(until);
+    if (accreditationValidUntil < accreditationValidFrom) {
+      throw new BadRequestException("Дата окончания аккредитации не может быть раньше даты начала");
+    }
+    return { accreditationValidFrom, accreditationValidUntil };
   }
 
   private async createMemberUser(input: { fullName?: string; phone?: string; iin?: string }) {

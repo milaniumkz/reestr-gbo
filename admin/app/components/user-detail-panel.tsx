@@ -1,3 +1,4 @@
+import { accreditationPeriod } from '../lib/accreditation';
 import { AuditRow, Inspection, Organization, UserRow } from '@/lib/api';
 import { roleLabel, statusLabel } from '../lib/labels';
 import { Info, MiniTable } from './ui-primitives';
@@ -38,7 +39,7 @@ export function UserDetailPanel({
       <MiniTable
         headers={['Организация', 'БИН', 'Роль']}
         rows={(user.memberships ?? []).map((item) => [
-          item.organization?.name ?? '-',
+          item.organization?.type === 'inspection_org' ? `${item.organization.name} · ${accreditationPeriod(item.organization)}` : item.organization?.name ?? '-',
           item.organization?.bin ?? '-',
           roleLabel(item.role),
         ])}
@@ -60,7 +61,7 @@ export function UserDetailPanel({
         headers={['Дата', 'ИО', 'Госномер / VIN', 'Свидетельство', 'Статус']}
         rows={userInspections.slice(0, 20).map((inspection) => [
           new Date(inspection.createdAt).toLocaleString('ru-RU'),
-          inspection.organization?.name ?? '-',
+          `${inspection.organization?.name ?? '-'} · ${accreditationPeriod(inspection.organization)}`,
           [inspection.vehicle?.plateNumber, inspection.vehicle?.vin].filter(Boolean).join(' · ') || '-',
           inspection.certificate?.number ?? inspection.certificateNumber ?? '-',
           statusLabel(inspection.status),

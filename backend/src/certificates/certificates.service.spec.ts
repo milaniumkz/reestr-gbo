@@ -297,3 +297,26 @@ function storageMock() {
     objectUrl: (objectKey: string) => ({ url: `/objects/${objectKey}` }),
   } as never;
 }
+
+describe('Public certificate accreditation', () => {
+  it('exposes issuing organization dates using a public field selection', async () => {
+    const organization = {
+      name: 'ТОО ИО', bin: '220340010835',
+      accreditationValidFrom: new Date('2026-01-01'), accreditationValidUntil: new Date('2028-01-01'),
+    };
+    const prisma = {
+      certificate: { findUnique: jest.fn(async () => ({
+        id: 'certificate_1', number: 'ERSI-1', status: 'active',
+        validUntil: new Date('2099-01-01'), qrPayload: 'ERSI-1', inspection: { organization },
+      })) }, certificateView: { create: jest.fn(async () => ({})) },
+    };
+    const result = await new CertificatesService(prisma as never, storageMock()).verify('ERSI-1');
+    expect(result).toMatchObject({ valid: true, organization });
+    expect(prisma.certificate.findUnique).toHaveBeenCalledWith({
+      where: { number: 'ERSI-1' },
+      include: { inspection: { select: { organization: { select: {
+        name: true, bin: true, accreditationValidFrom: true, accreditationValidUntil: true,
+      } } } } },
+    });
+  });
+});

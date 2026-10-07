@@ -49,3 +49,14 @@ git pull origin main
 cd backend && npm ci && cd ..
 cd admin && npm ci && cd ..
 ```
+
+## Android download
+
+Successful `Deploy` builds a release APK for the production API and publishes it at
+`https://89-207-255-42.sslip.io/downloads/ersi-gbo.apk`. Its SHA256 is published at
+`/downloads/ersi-gbo.apk.sha256`. The workflow also retains an `ersi-gbo-apk` artifact
+for 30 days and verifies the public download against the built file.
+
+The repository currently signs release APKs with the Android debug key. Installing
+an update over an existing installation requires the same signing certificate;
+a stable production signing key must be configured separately for repeatable updates.

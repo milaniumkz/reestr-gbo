@@ -248,3 +248,51 @@ describe('OrganizationsService create/update validation', () => {
     expect(prisma.organization.update).not.toHaveBeenCalled();
   });
 });
+
+describe('Organization accreditation period', () => {
+  const user = { sub: 'operator_1', phone: '', roles: ['operator'] };
+  function fixture() {
+    const prisma = {
+      organization: {
+        create: jest.fn(async (args: any) => ({ id: 'org_1', ...args.data })),
+        update: jest.fn(async (args: any) => ({ id: 'org_1', ...args.data })),
+        findUniqueOrThrow: jest.fn(async () => ({
+          accreditationValidFrom: new Date('2026-01-01'),
+          accreditationValidUntil: new Date('2028-01-01'),
+        })),
+      }, auditLog: { create: jest.fn(async () => ({})) },
+    };
+    return { prisma, service: new OrganizationsService(prisma as never) };
+  }
+  it('saves both dates for a new inspection organization', async () => {
+    const { service } = fixture();
+    const result = await service.create(user, {
+      type: 'inspection_org', name: 'ТОО ИО', bin: '220340010835',
+      accreditationValidFrom: '2026-10-07', accreditationValidUntil: '2028-10-07',
+    });
+    expect(result.accreditationValidFrom).toEqual(new Date('2026-10-07'));
+    expect(result.accreditationValidUntil).toEqual(new Date('2028-10-07'));
+  });
+  it.each([
+    [undefined, undefined], ['2026-01-01', undefined],
+    ['2026-02-30', '2028-01-01'], ['2028-01-02', '2028-01-01'],
+  ])('rejects missing, invalid or reversed dates (%s, %s)', async (from, until) => {
+    const { service, prisma } = fixture();
+    await expect(service.create(user, {
+      type: 'inspection_org', name: 'ТОО ИО', bin: '220340010835',
+      accreditationValidFrom: from, accreditationValidUntil: until,
+    })).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.organization.create).not.toHaveBeenCalled();
+  });
+  it('checks a partial update against the saved other date', async () => {
+    const { service, prisma } = fixture();
+    await expect(service.update(user, 'org_1', {
+      accreditationValidFrom: '2029-01-01',
+    })).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.organization.update).not.toHaveBeenCalled();
+    await service.update(user, 'org_1', { accreditationValidUntil: '2029-01-01' });
+    expect(prisma.organization.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: { accreditationValidFrom: new Date('2026-01-01'), accreditationValidUntil: new Date('2029-01-01') },
+    }));
+  });
+});

@@ -1,3 +1,4 @@
+import { accreditationPeriod } from '../lib/accreditation';
 import { AuditRow, CertificateRow, PublicCertificateCheckRow } from '@/lib/api';
 import { statusLabel } from '../lib/labels';
 import { Info, MiniTable } from './ui-primitives';
@@ -31,6 +32,7 @@ export function CertificateDetailPanel({
         <Info label="Выдано" value={new Date(certificate.issuedAt).toLocaleDateString('ru-RU')} />
         <Info label="Действует до" value={new Date(certificate.validUntil).toLocaleDateString('ru-RU')} />
         <Info label="ИО" value={inspection?.organization?.name ?? '-'} />
+        <Info label="Аттестат аккредитации" value={accreditationPeriod(inspection?.organization)} />
         <Info label="БИН ИО" value={inspection?.organization?.bin ?? '-'} />
         <Info label="Адрес ИО" value={inspection?.organization?.address ?? '-'} />
         <Info label="VIN" value={certificate.vehicle?.vin ?? '-'} />

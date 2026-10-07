@@ -1,3 +1,4 @@
+import { accreditationPeriod } from '../lib/accreditation';
 import { FormEvent } from 'react';
 import { CertificateImportJob, CertificateRow, Organization } from '@/lib/api';
 import { statusLabel } from '../lib/labels';
@@ -67,6 +68,7 @@ export function XlsxImportsTable({
           <Info label="Пропущено" value={String(selected.skippedCount)} />
           <Info label="Ошибки" value={String(selected.errorCount)} />
           <Info label="ИО" value={selectedOrganization?.name ?? selected.organizationId ?? '-'} />
+          <Info label="Аттестат аккредитации" value={accreditationPeriod(selectedOrganization)} />
           <Info label="Свидетельство" value={selected.certificate?.number ?? '-'} />
           <Info label="ТС" value={selectedVehicle ? `${selectedVehicle.make} ${selectedVehicle.model}` : '-'} />
           <Info label="VIN" value={selectedVehicle?.vin ?? '-'} />
@@ -176,7 +178,7 @@ export function XlsxImportsTable({
                   <td>{job.updatedCount}</td>
                   <td>{job.skippedCount}</td>
                   <td>{job.errorCount}</td>
-                  <td>{organizationName}</td>
+                  <td>{organizationName}<div className="muted">{accreditationPeriod(job.organization ?? job.certificate?.inspection?.organization)}</div></td>
                   <td>{job.certificate?.number ?? '-'}</td>
                   <td>
                     <button className="smallButton" type="button" onClick={() => onOpen(job)}>

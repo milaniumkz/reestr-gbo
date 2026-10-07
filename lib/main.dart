@@ -3380,6 +3380,18 @@ class _CertificatePreview extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
+          if (vehicle.organizationName.isNotEmpty)
+            Text(
+              vehicle.organizationName,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: ink, fontWeight: FontWeight.w800),
+            ),
+          Text(
+            vehicle.accreditationLabel,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: muted, height: 1.4),
+          ),
+
           _Chip(
             vehicle.validUntil.isEmpty ? 'Найдено' : 'до ${vehicle.validUntil}',
           ),
@@ -3669,6 +3681,7 @@ class _Certificate extends StatelessWidget {
                     item.organizationName.isEmpty
                         ? 'Не указан'
                         : item.organizationName,
+                    item.accreditationLabel,
                     item.organizationBin.isEmpty
                         ? ''
                         : 'БИН ${item.organizationBin}',
@@ -3747,7 +3760,7 @@ class _Certificate extends StatelessWidget {
                   (
                     Icons.apartment_rounded,
                     'ИНСПЕКЦИОННЫЙ ОРГАН',
-                    item.organizationName,
+                    '${item.organizationName} · ${item.accreditationLabel}',
                   ),
               ],
             ),
@@ -4039,7 +4052,7 @@ class _InspectionDetailScreen extends StatelessWidget {
                   'ИНСПЕКЦИОННЫЙ ОРГАН',
                   item.organizationName.isEmpty
                       ? 'Не указан'
-                      : item.organizationName,
+                      : '${item.organizationName} · ${item.accreditationLabel}',
                 ),
               ],
             ),
@@ -6613,6 +6626,7 @@ class _GovRegistry extends StatelessWidget {
                       item.organizationName.isEmpty
                           ? ''
                           : 'ИО: ${item.organizationName}',
+                      item.accreditationLabel,
                     ].where((value) => value.trim().isNotEmpty).join(' · '),
                     status: item.validUntil.isEmpty
                         ? 'Действует'
@@ -8793,6 +8807,7 @@ class _MapOrganization {
     required this.status,
     required this.phone,
     required this.point,
+    this.accreditationLabel = '',
     required this.isInspection,
   });
 
@@ -8804,6 +8819,7 @@ class _MapOrganization {
   final String status;
   final String phone;
   final LatLng point;
+  final String accreditationLabel;
   final bool isInspection;
 }
 
@@ -8821,6 +8837,7 @@ List<_MapOrganization> _mapOrganizations(List<OrganizationSummary> items) {
           region: items[index].region,
           address: items[index].address,
           bin: items[index].bin,
+          accreditationLabel: items[index].accreditationLabel,
           status: items[index].status,
           phone: items[index].phone,
           point: LatLng(
@@ -8979,6 +8996,11 @@ class _OsmOrganizationsMapState extends State<_OsmOrganizationsMap> {
                     ],
                   ),
                   const SizedBox(height: 18),
+                  if (item.isInspection)
+                    _InfoLine(
+                      icon: Icons.verified_rounded,
+                      text: item.accreditationLabel,
+                    ),
                   if (item.bin.isNotEmpty)
                     _InfoLine(
                       icon: Icons.badge_rounded,

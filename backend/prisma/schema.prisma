@@ -74,6 +74,8 @@ model Organization {
   region    String?
   contactPhone String?
   contactEmail String?
+  accreditationValidFrom DateTime? @db.Date
+  accreditationValidUntil DateTime? @db.Date
   lat       Decimal? @db.Decimal(9, 6)
   lng       Decimal? @db.Decimal(9, 6)
   rating    Decimal? @db.Decimal(3, 2)

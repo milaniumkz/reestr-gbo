@@ -142,6 +142,8 @@ export type Organization = {
   region?: string;
   contactPhone?: string;
   contactEmail?: string;
+  accreditationValidFrom?: string | null;
+  accreditationValidUntil?: string | null;
   lat?: number;
   lng?: number;
   balances?: Array<{ amount: number; currency: string }>;
@@ -188,7 +190,7 @@ export type Inspection = {
   address?: string;
   autoPublishAt?: string;
   certificateNumber?: string;
-  organization?: { name: string };
+  organization?: Organization;
   vehicle?: {
     vin: string;
     plateNumber: string;
@@ -584,6 +586,8 @@ export function createOrganization(token: string, input: {
   region?: string;
   contactPhone?: string;
   contactEmail?: string;
+  accreditationValidFrom?: string;
+  accreditationValidUntil?: string;
   lat?: number;
   lng?: number;
 }) {
@@ -597,6 +601,8 @@ export function updateOrganization(token: string, id: string, input: {
   region?: string | null;
   contactPhone?: string | null;
   contactEmail?: string | null;
+  accreditationValidFrom?: string;
+  accreditationValidUntil?: string;
   lat?: number | string | null;
   lng?: number | string | null;
 }) {

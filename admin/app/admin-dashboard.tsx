@@ -212,6 +212,8 @@ export default function AdminDashboard() {
   const [refreshToken, setRefreshToken] = useState<string | null>(null);
   const [user, setUser] = useState<AdminUser | null>(null);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [orgAccreditationValidFrom, setOrgAccreditationValidFrom] = useState('');
+  const [orgAccreditationValidUntil, setOrgAccreditationValidUntil] = useState('');
   const [orgName, setOrgName] = useState('');
   const [orgBin, setOrgBin] = useState('');
   const [orgRegion, setOrgRegion] = useState('');
@@ -1066,6 +1068,8 @@ export default function AdminDashboard() {
         address: orgAddress,
         contactPhone: orgContactPhone,
         contactEmail: orgContactEmail,
+        accreditationValidFrom: orgAccreditationValidFrom,
+        accreditationValidUntil: orgAccreditationValidUntil,
         lat: latValue ? Number(latValue) : undefined,
         lng: lngValue ? Number(lngValue) : undefined,
       });
@@ -1075,6 +1079,8 @@ export default function AdminDashboard() {
       setOrgAddress('');
       setOrgContactPhone('');
       setOrgContactEmail('');
+      setOrgAccreditationValidFrom('');
+      setOrgAccreditationValidUntil('');
       setOrgLat('');
       setOrgLng('');
       await refresh();
@@ -1387,6 +1393,8 @@ export default function AdminDashboard() {
     address: string;
     contactPhone: string;
     contactEmail: string;
+    accreditationValidFrom: string;
+    accreditationValidUntil: string;
     lat: string;
     lng: string;
   }) {
@@ -1399,6 +1407,10 @@ export default function AdminDashboard() {
         address: input.address || null,
         contactPhone: input.contactPhone || null,
         contactEmail: input.contactEmail || null,
+        ...(org.type === "inspection_org" ? {
+          accreditationValidFrom: input.accreditationValidFrom,
+          accreditationValidUntil: input.accreditationValidUntil,
+        } : {}),
         lat: input.lat || null,
         lng: input.lng || null,
       });
@@ -1749,6 +1761,10 @@ export default function AdminDashboard() {
             address={orgAddress}
             contactPhone={orgContactPhone}
             contactEmail={orgContactEmail}
+            accreditationValidFrom={orgAccreditationValidFrom}
+            accreditationValidUntil={orgAccreditationValidUntil}
+            onAccreditationValidFrom={setOrgAccreditationValidFrom}
+            onAccreditationValidUntil={setOrgAccreditationValidUntil}
             lat={orgLat}
             lng={orgLng}
             memberOrgId={memberOrgId}
@@ -2159,6 +2175,8 @@ function exportRows(active: string, data: ExportState): Array<Record<string, str
       address: row.address ?? '',
       contactPhone: row.contactPhone ?? '',
       contactEmail: row.contactEmail ?? '',
+      accreditationValidFrom: row.accreditationValidFrom?.slice(0, 10) ?? '',
+      accreditationValidUntil: row.accreditationValidUntil?.slice(0, 10) ?? '',
       lat: row.lat ?? '',
       lng: row.lng ?? '',
       status: statusLabel(row.status),

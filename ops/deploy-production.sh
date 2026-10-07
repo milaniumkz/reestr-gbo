@@ -64,6 +64,8 @@ NEXT_PUBLIC_API_URL='${PUBLIC_ORIGIN}/api/v1' npm run build
 
 cd '$REMOTE_RELEASE'
 test -f build/web/main.dart.js
+test -s build/web/downloads/ersi-gbo.apk
+(cd build/web/downloads && sha256sum -c ersi-gbo.apk.sha256)
 BUILD_ID=\$(date -u +%Y%m%d%H%M%S)
 cp build/web/main.dart.js \"build/web/main.\$BUILD_ID.dart.js\"
 BUILD_ID=\"\$BUILD_ID\" python3 - <<'PY'

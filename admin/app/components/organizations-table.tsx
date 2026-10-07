@@ -1,3 +1,4 @@
+import { accreditationPeriod } from '../lib/accreditation';
 import { FormEvent } from 'react';
 import { Organization, UserRow } from '@/lib/api';
 import { roleLabel, statusLabel } from '../lib/labels';
@@ -16,6 +17,10 @@ type OrganizationsTableProps = {
   address?: string;
   contactPhone?: string;
   contactEmail?: string;
+  accreditationValidFrom?: string;
+  accreditationValidUntil?: string;
+  onAccreditationValidFrom?: (value: string) => void;
+  onAccreditationValidUntil?: (value: string) => void;
   lat?: string;
   lng?: string;
   memberOrgId?: string;
@@ -62,6 +67,10 @@ export function OrganizationsTable({
   address = '',
   contactPhone = '',
   contactEmail = '',
+  accreditationValidFrom = '',
+  accreditationValidUntil = '',
+  onAccreditationValidFrom,
+  onAccreditationValidUntil,
   lat = '',
   lng = '',
   memberOrgId = '',
@@ -124,6 +133,8 @@ export function OrganizationsTable({
           <input placeholder="Адрес" value={address} onChange={(event) => onAddress?.(event.target.value)} />
           <input placeholder="Контактный телефон" value={contactPhone} onChange={(event) => onContactPhone?.(normalizeKzPhone(event.target.value))} />
           <input placeholder="Контактный email" value={contactEmail} onChange={(event) => onContactEmail?.(event.target.value)} />
+          <label>Аттестат аккредитации от<input type="date" required value={accreditationValidFrom} max={accreditationValidUntil || undefined} onChange={(event) => onAccreditationValidFrom?.(event.target.value)} /></label>
+          <label>Аттестат аккредитации до<input type="date" required value={accreditationValidUntil} min={accreditationValidFrom || undefined} onChange={(event) => onAccreditationValidUntil?.(event.target.value)} /></label>
           <input placeholder="Широта" value={lat} onChange={(event) => onLat?.(event.target.value)} />
           <input placeholder="Долгота" value={lng} onChange={(event) => onLng?.(event.target.value)} />
           <button type="submit">Создать организацию</button>
@@ -192,7 +203,7 @@ export function OrganizationsTable({
               const members = org.members ?? [];
               return (
                 <tr key={org.id}>
-                  <td>{org.name}</td>
+                  <td>{org.name}{org.type === "inspection_org" && <div className="muted">{accreditationPeriod(org)}</div>}</td>
                   <td>{org.bin}</td>
                   <td>{org.region ?? '-'}</td>
                   <td>

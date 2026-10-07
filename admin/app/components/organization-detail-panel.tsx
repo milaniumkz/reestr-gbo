@@ -1,3 +1,4 @@
+import { accreditationPeriod } from '../lib/accreditation';
 import { FormEvent, useEffect, useState } from 'react';
 import { Inspection, Organization, OrganizationActivity, UserRow } from '@/lib/api';
 import { roleLabel, statusLabel } from '../lib/labels';
@@ -17,6 +18,8 @@ type OrganizationDetailPanelProps = {
       address: string;
       contactPhone: string;
       contactEmail: string;
+      accreditationValidFrom: string;
+      accreditationValidUntil: string;
       lat: string;
       lng: string;
     },
@@ -54,6 +57,8 @@ export function OrganizationDetailPanel({
   const [region, setRegion] = useState(organization.region ?? '');
   const [address, setAddress] = useState(organization.address ?? '');
   const [contactPhone, setContactPhone] = useState(organization.contactPhone ?? '');
+  const [accreditationValidFrom, setAccreditationValidFrom] = useState(organization.accreditationValidFrom?.slice(0, 10) ?? '');
+  const [accreditationValidUntil, setAccreditationValidUntil] = useState(organization.accreditationValidUntil?.slice(0, 10) ?? '');
   const [contactEmail, setContactEmail] = useState(organization.contactEmail ?? '');
   const [lat, setLat] = useState(organization.lat === undefined ? '' : String(organization.lat));
   const [lng, setLng] = useState(organization.lng === undefined ? '' : String(organization.lng));
@@ -94,7 +99,7 @@ export function OrganizationDetailPanel({
           className="wideForm flatForm"
           onSubmit={(event) => {
             event.preventDefault();
-            onSave(organization, { name, bin, region, address, contactPhone, contactEmail, lat, lng });
+            onSave(organization, { name, bin, region, address, contactPhone, contactEmail, accreditationValidFrom, accreditationValidUntil, lat, lng });
           }}
         >
           <input placeholder="Название" value={name} onChange={(event) => setName(event.target.value)} />
@@ -103,12 +108,17 @@ export function OrganizationDetailPanel({
           <input placeholder="Адрес" value={address} onChange={(event) => setAddress(event.target.value)} />
           <input placeholder="Контактный телефон" value={contactPhone} onChange={(event) => setContactPhone(normalizeKzPhone(event.target.value))} />
           <input placeholder="Контактный email" value={contactEmail} onChange={(event) => setContactEmail(event.target.value)} />
+          {isInspectionOrg && <>
+            <label>Аттестат аккредитации от<input type="date" required value={accreditationValidFrom} max={accreditationValidUntil || undefined} onChange={(event) => setAccreditationValidFrom(event.target.value)} /></label>
+            <label>Аттестат аккредитации до<input type="date" required value={accreditationValidUntil} min={accreditationValidFrom || undefined} onChange={(event) => setAccreditationValidUntil(event.target.value)} /></label>
+          </>}
           <input placeholder="Широта" value={lat} onChange={(event) => setLat(event.target.value)} />
           <input placeholder="Долгота" value={lng} onChange={(event) => setLng(event.target.value)} />
           <button type="submit">Сохранить ИО</button>
         </form>
       )}
       <div className="detailGrid">
+        {isInspectionOrg && <Info label="Аттестат аккредитации" value={accreditationPeriod(organization)} />}
         <Info label="БИН" value={organization.bin} />
         <Info label="Статус" value={statusLabel(organization.status)} />
         <Info label="Город/регион" value={organization.region ?? '-'} />
