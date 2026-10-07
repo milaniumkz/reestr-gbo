@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   backend:
-    runs-on: ${{ github.event_name != 'pull_request' && fromJSON('["milanium-mac-arm64", "repo-reestr-gbo"]') || fromJSON('["ubuntu-latest"]') }}
+    runs-on: ${{ (github.event_name == 'pull_request' || contains(github.event.head_commit.message, '[hosted-ci]')) && fromJSON('["ubuntu-latest"]') || fromJSON('["milanium-mac-arm64", "repo-reestr-gbo"]') }}
     defaults:
       run:
         working-directory: backend
@@ -29,13 +29,13 @@ jobs:
         with:
           persist-credentials: false
       - uses: actions/setup-node@v4
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || contains(github.event.head_commit.message, '[hosted-ci]')
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: backend/package-lock.json
       - name: Select installed Mac Node 22
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && !contains(github.event.head_commit.message, '[hosted-ci]')
         run: |
           echo /opt/homebrew/opt/node@22/bin >> "$GITHUB_PATH"
           /opt/homebrew/opt/node@22/bin/node -e 'if (process.versions.node.split(".")[0] !== "22") process.exit(1)'
@@ -45,7 +45,7 @@ jobs:
       - run: npm test -- --runInBand
 
   admin:
-    runs-on: ${{ github.event_name != 'pull_request' && fromJSON('["milanium-mac-arm64", "repo-reestr-gbo"]') || fromJSON('["ubuntu-latest"]') }}
+    runs-on: ${{ (github.event_name == 'pull_request' || contains(github.event.head_commit.message, '[hosted-ci]')) && fromJSON('["ubuntu-latest"]') || fromJSON('["milanium-mac-arm64", "repo-reestr-gbo"]') }}
     defaults:
       run:
         working-directory: admin
@@ -63,13 +63,13 @@ jobs:
         with:
           persist-credentials: false
       - uses: actions/setup-node@v4
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || contains(github.event.head_commit.message, '[hosted-ci]')
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: admin/package-lock.json
       - name: Select installed Mac Node 22
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && !contains(github.event.head_commit.message, '[hosted-ci]')
         run: |
           echo /opt/homebrew/opt/node@22/bin >> "$GITHUB_PATH"
           /opt/homebrew/opt/node@22/bin/node -e 'if (process.versions.node.split(".")[0] !== "22") process.exit(1)'
@@ -79,7 +79,7 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost:3000/api/v1
 
   flutter:
-    runs-on: ${{ github.event_name != 'pull_request' && fromJSON('["milanium-mac-arm64", "repo-reestr-gbo"]') || fromJSON('["ubuntu-latest"]') }}
+    runs-on: ${{ (github.event_name == 'pull_request' || contains(github.event.head_commit.message, '[hosted-ci]')) && fromJSON('["ubuntu-latest"]') || fromJSON('["milanium-mac-arm64", "repo-reestr-gbo"]') }}
     timeout-minutes: 45
     env:
       DATABASE_URL: ""
@@ -94,13 +94,13 @@ jobs:
         with:
           persist-credentials: false
       - uses: subosito/flutter-action@v2
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || contains(github.event.head_commit.message, '[hosted-ci]')
         with:
           flutter-version: "3.41.1"
           channel: stable
           cache: true
       - name: Select installed Mac Flutter
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && !contains(github.event.head_commit.message, '[hosted-ci]')
         run: |
           echo /Volumes/PD1000/job/flutter/bin >> "$GITHUB_PATH"
           /Volumes/PD1000/job/flutter/bin/flutter --version --machine | python3 -c 'import json,sys; assert json.load(sys.stdin)["frameworkVersion"] == "3.41.1"'
