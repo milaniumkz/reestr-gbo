@@ -11,6 +11,28 @@ SELECT json_build_object('orgId','login-role-'||m.role,'name','role='||m.role||'
 SELECT json_build_object('orgId','login-denials','name','Recent login denials','members',count(*),'additions',count(*) FILTER (WHERE a."actorId" IS NOT NULL),'distinctAdditions',count(DISTINCT a."entityId"),'lastAddition',max(a."createdAt")) FROM "AuditLog" a WHERE a.action='auth.inspection_otp_denied' AND a."createdAt">now()-interval '2 hours';
 
 SQL
+cd /opt/reestr/app/backend
+node <<'JSCODE'
+const {PrismaClient}=require('@prisma/client');
+const {AuthService}=require('./dist/src/auth/auth.service');
+(async()=>{
+ const db=new PrismaClient();
+ try {
+  const members=await db.organizationMember.findMany({where:{organization:{type:'inspection_org'}},include:{user:true,organization:true}});
+  const auth=new AuthService({user:db.user,organizationMember:db.organizationMember,otpChallenge:{findFirst:async()=>({id:'diagnostic_cooldown'})}}, {}, {}, {get:()=>undefined}, {log:async()=>{}});
+  let allowed=0,binAllowed=0;
+  for(const m of members){
+   try{await auth.sendOtp(m.user.phone,undefined,'inspection_org')}catch(e){if(e.message==='OTP resend cooldown is active')allowed++;}
+   if(await auth.isInspectionMemberForBin(m.userId,m.organization.bin))binAllowed++;
+  }
+  console.log(JSON.stringify({orgId:'login-runtime',name:'Actual server login gate',members:members.length,additions:allowed,distinctAdditions:binAllowed,lastAddition:null}));
+  const denied=await db.auditLog.findMany({where:{action:'auth.inspection_otp_denied',createdAt:{gt:new Date(Date.now()-7200000)}},select:{actorId:true}});
+  const ids=new Set(members.map(m=>m.userId));
+  console.log(JSON.stringify({orgId:'login-denied-members',name:'Denials matching current IO staff',members:denied.length,additions:denied.filter(a=>ids.has(a.actorId)).length,distinctAdditions:0,lastAddition:null}));
+ } finally {await db.$disconnect();}
+})().catch(()=>{console.error('Read-only login diagnostic failed');process.exitCode=1});
+JSCODE
+
 python3 - <<'PYCODE'
 import collections, json, re
 counts=collections.Counter()
