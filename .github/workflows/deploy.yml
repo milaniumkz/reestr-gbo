@@ -19,6 +19,7 @@ on:
         options:
           - deploy
           - deploy-services
+          - diagnose-members
           - status
           - logs
           - restart
@@ -115,6 +116,7 @@ jobs:
         run: |
           set -o pipefail
           case "${{ github.event.inputs.operation }}" in
+            diagnose-members) bash ops/diagnose-members.sh ;;
             deploy-services) DEPLOY_COMPONENTS=services bash ops/deploy-production.sh "$(git rev-parse HEAD)" ;;
             inventory-inspection-data) bash ops/purge-inspection-data.sh inventory ;;
             purge-inspection-data) bash ops/purge-inspection-data.sh apply ;;
@@ -147,3 +149,17 @@ jobs:
           PY
           )"
           gh api "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" -f state=success -f context="production-data/${{ github.event.inputs.operation }}" -f description="$description" -f target_url="https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --silent
+
+      - name: Record member diagnostics
+        if: success() && github.event.inputs.operation == 'diagnose-members'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PYCODE'
+          import json, os, subprocess
+          for line in open(os.environ['RUNNER_TEMP']+'/operation.log'):
+              try: row=json.loads(line)
+              except ValueError: continue
+              description=f"{row['name'][:65]}: members={row['members']}; adds={row['additions']}; distinct={row['distinctAdditions']}; last={str(row['lastAddition'])[:19]}"[:140]
+              subprocess.run(['gh','api',f"repos/{os.environ['GITHUB_REPOSITORY']}/statuses/{os.environ['GITHUB_SHA']}",'-f','state=success','-f',f"context=member-diagnostics/{row['orgId']}",'-f',f'description={description}','--silent'],check=True)
+          PYCODE
