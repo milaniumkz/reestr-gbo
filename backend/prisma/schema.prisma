@@ -198,6 +198,9 @@ model Inspection {
   address           String?
   autoPublishAt     DateTime?
   submittedAt       DateTime?
+  qualityDocumentUploadedAt DateTime?
+  qualityConfirmedAt DateTime?
+  qualityConfirmedById String?
   approvedAt        DateTime?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt

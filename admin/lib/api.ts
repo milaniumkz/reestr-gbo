@@ -213,6 +213,9 @@ export type Inspection = {
   submittedBy?: { id: string; phone: string; fullName: string; lastLoginAt?: string };
   approvedBy?: { id: string; phone: string; fullName: string; lastLoginAt?: string };
   submittedAt?: string;
+  qualityDocumentUploadedAt?: string;
+  qualityConfirmedAt?: string;
+  qualityConfirmedById?: string;
   approvedAt?: string;
 };
 

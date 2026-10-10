@@ -48,6 +48,7 @@ export function InspectionDetailPanel({
         <Info label="Руководитель" value={inspection.approvedBy ? `${inspection.approvedBy.fullName} · ${inspection.approvedBy.phone}` : '-'} />
         <Info label="Создано" value={new Date(inspection.createdAt).toLocaleString('ru-RU')} />
         <Info label="Отправлено на проверку" value={inspection.submittedAt ? new Date(inspection.submittedAt).toLocaleString('ru-RU') : '-'} />
+        <Info label="Контроль качества подтвержден" value={inspection.qualityConfirmedAt ? new Date(inspection.qualityConfirmedAt).toLocaleString('ru-RU') : '-'} />
         <Info label="Опубликовано в реестре" value={inspection.approvedAt ? new Date(inspection.approvedAt).toLocaleString('ru-RU') : '-'} />
         <Info label="Автопубликация" value={inspection.autoPublishAt ? new Date(inspection.autoPublishAt).toLocaleString('ru-RU') : '-'} />
       </div>

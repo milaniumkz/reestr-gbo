@@ -7,6 +7,7 @@ const roleLabels: Record<string, string> = {
   super_admin: 'Суперадминистратор',
   admin: 'Руководитель ИО',
   inspector: 'Сотрудник ИО',
+  quality_control: 'Контроль качества',
 };
 
 const statusLabels: Record<string, string> = {
@@ -14,7 +15,8 @@ const statusLabels: Record<string, string> = {
   blocked: 'Заблокировано',
   hidden: 'Скрыто',
   draft: 'Черновик',
-  submitted: 'На проверке',
+  submitted: 'Контроль качества',
+  quality_approved: 'На утверждении руководителя',
   approved: 'В реестре',
   rejected: 'Отклонено',
   suspended: 'Ограничено',

@@ -451,7 +451,7 @@ export class CertificatesService {
         errors: true,
       },
     });
-    const inspectionDraftMode = options?.mode === "inspectionDraft";
+    const inspectionDraftMode = options?.mode === "inspectionDraft" || Boolean(user && !hasGlobalAccess(user));
     if (existingJob?.status === "completed" && !inspectionDraftMode) {
       return {
         ok: true,
@@ -493,6 +493,13 @@ export class CertificatesService {
         user,
         options?.organizationBin,
       );
+
+      if (inspectionDraftMode) {
+        const currentInspection = await this.prisma.inspection.findUnique({ where: { certificateNumber: parsed.certificateNumber } });
+        if (currentInspection && !["draft", "rejected"].includes(currentInspection.status)) {
+          throw new BadRequestException("Инспекция уже отправлена на проверку. Верните ее на исправление перед повторным импортом.");
+        }
+      }
 
       const ownerPhone =
         parsed.ownerPhone ||

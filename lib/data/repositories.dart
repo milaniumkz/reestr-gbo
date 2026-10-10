@@ -488,10 +488,12 @@ class InspectionRepository {
 
   Future<InspectionSummary> setStatus(
     String inspectionId,
-    String status,
-  ) async {
+    String status, {
+    bool? confirmed,
+  }) async {
     final response = await _api.patchJson('/inspections/$inspectionId/status', {
       'status': status,
+      'confirmed': ?confirmed,
     });
     return InspectionSummary.fromJson(response);
   }

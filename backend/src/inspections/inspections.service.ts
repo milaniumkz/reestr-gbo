@@ -194,32 +194,51 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
     return inspection;
   }
 
-  async setStatus(user: RequestUser | undefined, id: string, status: string) {
-    if (!["draft", "submitted", "approved", "rejected", "blocked"].includes(status)) {
+  async setStatus(user: RequestUser | undefined, id: string, status: string, confirmed?: boolean) {
+    if (!["draft", "submitted", "quality_approved", "approved", "rejected", "blocked"].includes(status)) {
       throw new BadRequestException("Некорректный статус инспекции");
     }
     const existing = await this.assertInspectionAccess(id, user);
-    if (status === "approved") {
-      await this.assertOrganizationManager(existing.organizationId, user);
-      if (existing.status !== "submitted") {
-        throw new BadRequestException(
-          "Отправить в реестр можно только инспекцию в статусе submitted",
-        );
+    if (status === "submitted") {
+      if (!["draft", "rejected"].includes(existing.status)) {
+        throw new BadRequestException("В контроль качества можно отправить только черновик или исправленную инспекцию");
       }
       const readiness = await this.readiness(id, user);
-      if (!readiness.ready) {
-        throw new BadRequestException({
-          message: "Inspection is not ready for approval",
-          missing: readiness.missing,
-        });
+      if (!readiness.ready) throw new BadRequestException({ message: "Не хватает данных инспекции", missing: readiness.missing });
+    }
+    if (status === "quality_approved") {
+      await this.assertQualityControl(existing.organizationId, user);
+      if (existing.status !== "submitted") throw new BadRequestException("Инспекция должна находиться в контроле качества");
+      if (confirmed !== true) throw new BadRequestException("Поставьте галочку Подтверждаю");
+      if (!existing.qualityDocumentUploadedAt) throw new BadRequestException("Контроль качества должен загрузить свидетельство после отправки инспекции");
+      const readiness = await this.readiness(id, user);
+      if (!readiness.ready) throw new BadRequestException({ message: "Загрузите свидетельство и проверьте комплектность документов", missing: readiness.missing });
+    }
+    if (status === "approved") {
+      await this.assertOrganizationManager(existing.organizationId, user);
+      if (existing.status !== "quality_approved" || !existing.qualityConfirmedAt) {
+        throw new BadRequestException("Отправить в реестр можно только после подтверждения контроля качества");
       }
+      const readiness = await this.readiness(id, user);
+      if (!readiness.ready) throw new BadRequestException({ message: "Inspection is not ready for approval", missing: readiness.missing });
+    }
+    if (status === "rejected") {
+      if (existing.status === "submitted") await this.assertQualityControl(existing.organizationId, user);
+      else if (existing.status === "quality_approved") await this.assertOrganizationManager(existing.organizationId, user);
+      else throw new BadRequestException("На исправление можно вернуть только инспекцию на проверке");
+    }
+    if (status === "draft" && !["draft", "rejected"].includes(existing.status)) {
+      throw new BadRequestException("Нельзя вернуть инспекцию в черновик в обход проверки качества");
     }
 
     const now = new Date();
     const inspection = await this.prisma.inspection.update({
-      where: { id },
+      where: { id, status: existing.status, ...(status === "quality_approved" ? { qualityDocumentUploadedAt: existing.qualityDocumentUploadedAt } : {}) },
       data: {
         status,
+        qualityDocumentUploadedAt: ["submitted", "rejected", "draft"].includes(status) ? null : undefined,
+        qualityConfirmedAt: status === "quality_approved" ? now : ["submitted", "rejected", "draft"].includes(status) ? null : undefined,
+        qualityConfirmedById: status === "quality_approved" ? user?.sub : ["submitted", "rejected", "draft"].includes(status) ? null : undefined,
         submittedAt: status === "submitted" ? now : undefined,
         approvedAt: status === "approved" ? now : undefined,
         submittedById: status === "submitted" ? user?.sub : undefined,
@@ -262,8 +281,8 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
     input: { vehicleId: string; certificateNumber?: string },
   ) {
     const existing = await this.assertInspectionAccess(id, user);
-    if (existing.status === "approved" || existing.status === "blocked") {
-      throw new BadRequestException("Нельзя изменить опубликованную или заблокированную инспекцию");
+    if (!["draft", "rejected"].includes(existing.status)) {
+      throw new BadRequestException("Данные можно изменять только в черновике или после возврата на исправление");
     }
     const vehicleId = input.vehicleId?.trim();
     if (!vehicleId) throw new BadRequestException("Vehicle is required");
@@ -336,7 +355,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       "cylinder_work_record",
       "gas_inspection_report",
       "cylinder_inspection_report",
-      "certificate_document",
+      ...(["draft", "rejected"].includes(inspection.status) ? [] : ["certificate_document"]),
     ];
     const missing = [
       ...required.filter((type) => !photoTypes.has(type)),
@@ -407,7 +426,14 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
     user?: RequestUser,
     location: { lat?: number | string; lng?: number | string } = {},
   ) {
-    await this.assertInspectionAccess(id, user);
+    const inspection = await this.assertInspectionAccess(id, user);
+    if (type === "certificate_document") {
+      await this.assertQualityControl(inspection.organizationId, user);
+      if (inspection.status !== "submitted") throw new BadRequestException("Свидетельство загружается на этапе контроля качества");
+    } else if (!["draft", "rejected"].includes(inspection.status)) {
+      throw new BadRequestException("Документы инспектора зафиксированы. Верните инспекцию на исправление");
+    }
+    if (!file?.buffer?.length) throw new BadRequestException("Выберите непустой файл");
     const lat = this.coordinate(location.lat, -90, 90);
     const lng = this.coordinate(location.lng, -180, 180);
     const extension =
@@ -419,16 +445,20 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       body: file.buffer,
       contentType: file.mimetype,
     });
-    const photo = await this.prisma.inspectionPhoto.create({
-      data: {
+    const photoData = {
         inspectionId: id,
         type,
         objectKey,
         checksum,
         lat,
         lng,
-      },
-    });
+      };
+    const photo = type === "certificate_document"
+      ? await this.prisma.$transaction(async (tx) => {
+          await tx.inspection.update({ where: { id, status: "submitted" }, data: { qualityDocumentUploadedAt: new Date() } });
+          return tx.inspectionPhoto.create({ data: photoData });
+        })
+      : await this.prisma.inspectionPhoto.create({ data: photoData });
     await this.prisma.auditLog.create({
       data: {
         actorId: user?.sub,
@@ -452,6 +482,14 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       user,
     );
     return inspection;
+  }
+
+  private async assertQualityControl(organizationId: string, user?: RequestUser) {
+    if (!user?.sub) throw new ForbiddenException("Только контроль качества может подтвердить документы");
+    const membership = await this.prisma.organizationMember.findFirst({
+      where: { organizationId, userId: user.sub, role: "quality_control" },
+    });
+    if (!membership) throw new ForbiddenException("Только контроль качества может загрузить свидетельство и подтвердить инспекцию");
   }
 
   private async assertOrganizationManager(organizationId: string, user?: RequestUser) {

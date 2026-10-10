@@ -48,7 +48,8 @@ export function InspectionsTable({
         <select value={statusFilter} onChange={(event) => onStatusFilter(event.target.value)}>
           <option value="all">Все статусы</option>
           <option value="draft">Черновик</option>
-          <option value="submitted">На проверке</option>
+          <option value="submitted">Контроль качества</option>
+          <option value="quality_approved">На утверждении руководителя</option>
           <option value="approved">В реестре</option>
           <option value="rejected">Отклонено</option>
         </select>
@@ -152,7 +153,8 @@ export function InspectionsTable({
                       onChange={(event) => onStatusChange(row, event.target.value)}
                     >
                       <option value="draft">Черновик</option>
-                      <option value="submitted">На проверке</option>
+                      <option value="submitted">Контроль качества</option>
+                      <option value="quality_approved">На утверждении руководителя</option>
                       <option value="rejected">Отклонено</option>
                       <option value="blocked">Заблокировано</option>
                     </select>

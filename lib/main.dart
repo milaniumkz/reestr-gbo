@@ -39,13 +39,13 @@ const inspectionPackageDocuments = <String, String>{
   'cylinder_work_record': 'Рабочая запись баллона (подписи)',
   'gas_inspection_report': 'Отчет инспекции ГБО (подпись и печать)',
   'cylinder_inspection_report': 'Отчет инспекции баллона (подпись и печать)',
-  'certificate_document': 'Свидетельство (рус./каз.)',
 };
 const inspectionRequiredLabels = <String, String>{
   'cylinder_label': 'фото бирки баллона',
   'vehicle_photo': 'фото автомобиля',
   'tech_passport': 'фото техпаспорта',
   ...inspectionPackageDocuments,
+  'certificate_document': 'Свидетельство (рус./каз.)',
   'gas_cylinder': 'данные баллона',
   'vehicle_owner': 'данные владельца',
 };
@@ -490,6 +490,8 @@ class _ErsiDemoState extends State<ErsiDemo> {
   bool techPassportPhotoUploaded = false;
   Position? lastKnownInspectionPosition;
   String? documentFileName;
+  bool qualityConfirmed = false;
+  bool qualityBusy = false;
   Map<String, String> packageDocumentNames = const {};
   Map<String, List<int>> packageDocumentBytes = const {};
   Map<String, Position> packageDocumentPositions = const {};
@@ -688,6 +690,74 @@ class _ErsiDemoState extends State<ErsiDemo> {
           (member) => member.userId == userId && member.isManager,
         ) ??
         false;
+  }
+
+  bool get _isQualityControl {
+    final userId = currentUser?.id ?? '';
+    return _currentInspectionOrganization?.members.any(
+          (member) =>
+              member.userId == userId && member.role == 'quality_control',
+        ) ??
+        false;
+  }
+
+  Future<void> _uploadQualityCertificate() async {
+    final inspection = selectedInspection;
+    if (inspection == null || qualityBusy || !_isQualityControl) return;
+    try {
+      final file = kIsWeb
+          ? await pickLocalFile(const ['pdf', 'jpg', 'jpeg', 'png'])
+          : await _pickPluginFile(const ['pdf', 'jpg', 'jpeg', 'png']);
+      if (file == null) return;
+      if (!mounted) return;
+      setState(() {
+        qualityBusy = true;
+        qualityConfirmed = false;
+      });
+      await repositories.inspections.uploadPhoto(
+        inspectionId: inspection.id,
+        type: 'certificate_document',
+        filename: file.name,
+        bytes: file.bytes,
+      );
+      final detail = await repositories.inspections.detail(inspection.id);
+      if (mounted) {
+        setState(() {
+          selectedInspection = detail;
+          apiState = 'Свидетельство загружено. Подтвердите проверку качества.';
+        });
+      }
+    } catch (error) {
+      if (mounted) setState(() => apiState = _apiErrorText(error.toString()));
+    } finally {
+      if (mounted) setState(() => qualityBusy = false);
+    }
+  }
+
+  Future<void> _confirmQuality() async {
+    final inspection = selectedInspection;
+    if (inspection == null || !qualityConfirmed || qualityBusy) return;
+    setState(() => qualityBusy = true);
+    try {
+      await repositories.inspections.setStatus(
+        inspection.id,
+        'quality_approved',
+        confirmed: true,
+      );
+      final detail = await repositories.inspections.detail(inspection.id);
+      await _loadMyInspections();
+      if (mounted) {
+        setState(() {
+          selectedInspection = detail;
+          qualityConfirmed = false;
+          apiState = 'Инспекция передана руководителю на утверждение';
+        });
+      }
+    } catch (error) {
+      if (mounted) setState(() => apiState = _apiErrorText(error.toString()));
+    } finally {
+      if (mounted) setState(() => qualityBusy = false);
+    }
   }
 
   Future<void> _loadControlCertificates({String q = ''}) async {
@@ -1544,9 +1614,10 @@ class _ErsiDemoState extends State<ErsiDemo> {
   Future<void> _returnInspectionForCorrection(
     InspectionSummary inspection,
   ) async {
-    if (!_isInspectionManager) {
+    if (!_isInspectionManager && !_isQualityControl) {
       setState(
-        () => apiState = 'Только руководитель ИО возвращает на исправление',
+        () => apiState =
+            'Только контроль качества или руководитель ИО возвращает на исправление',
       );
       return;
     }
@@ -1753,6 +1824,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       if (!mounted) return;
       setState(() {
         selectedInspection = detail;
+        qualityConfirmed = false;
         apiState = 'Инспекция загружена';
       });
       go(40);
@@ -2019,6 +2091,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         inspections: myInspections,
         organization: _currentInspectionOrganization,
         isManager: _isInspectionManager,
+        isQualityControl: _isQualityControl,
         onReload: _loadMyInspections,
         onNewInspection: _startNewInspection,
         onImportXlsx: _pickImportXlsx,
@@ -2119,6 +2192,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         inspections: myInspections,
         organization: _currentInspectionOrganization,
         isManager: _isInspectionManager,
+        isQualityControl: _isQualityControl,
         onReload: _loadMyInspections,
         onNewInspection: _startNewInspection,
         onImportXlsx: _pickImportXlsx,
@@ -2129,6 +2203,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         inspections: myInspections,
         organization: _currentInspectionOrganization,
         isManager: _isInspectionManager,
+        isQualityControl: _isQualityControl,
         onReload: _loadMyInspections,
         onNewInspection: _startNewInspection,
         onImportXlsx: _pickImportXlsx,
@@ -2139,6 +2214,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         inspections: myInspections,
         organization: _currentInspectionOrganization,
         isManager: _isInspectionManager,
+        isQualityControl: _isQualityControl,
         onReload: _loadMyInspections,
         onNewInspection: _startNewInspection,
         onImportXlsx: _pickImportXlsx,
@@ -2149,6 +2225,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         inspections: myInspections,
         organization: _currentInspectionOrganization,
         isManager: _isInspectionManager,
+        isQualityControl: _isQualityControl,
         onReload: _loadMyInspections,
         onNewInspection: _startNewInspection,
         onImportXlsx: _pickImportXlsx,
@@ -2218,9 +2295,20 @@ class _ErsiDemoState extends State<ErsiDemo> {
       _ => _InspectionDetailScreen(
         inspection: selectedInspection,
         canApprove:
-            _isInspectionManager && selectedInspection?.status == 'submitted',
-        canEdit:
-            _isInspectionManager && selectedInspection?.status == 'submitted',
+            _isInspectionManager &&
+            selectedInspection?.status == 'quality_approved',
+        canEdit: false,
+        canReturn:
+            (_isQualityControl && selectedInspection?.status == 'submitted') ||
+            (_isInspectionManager &&
+                selectedInspection?.status == 'quality_approved'),
+        canQualityReview:
+            _isQualityControl && selectedInspection?.status == 'submitted',
+        qualityConfirmed: qualityConfirmed,
+        qualityBusy: qualityBusy,
+        onUploadQuality: _uploadQualityCertificate,
+        onConfirmQuality: _confirmQuality,
+        onQualityChecked: (value) => setState(() => qualityConfirmed = value),
         onApprove: selectedInspection == null
             ? null
             : () => _approveInspectionToRegistry(selectedInspection!),
@@ -3953,6 +4041,13 @@ class _InspectionDetailScreen extends StatelessWidget {
     required this.inspection,
     required this.canApprove,
     required this.canEdit,
+    required this.canReturn,
+    required this.canQualityReview,
+    required this.qualityConfirmed,
+    required this.qualityBusy,
+    required this.onUploadQuality,
+    required this.onConfirmQuality,
+    required this.onQualityChecked,
     required this.onApprove,
     required this.onEdit,
     required this.onReturnForCorrection,
@@ -3960,6 +4055,13 @@ class _InspectionDetailScreen extends StatelessWidget {
   final InspectionSummary? inspection;
   final bool canApprove;
   final bool canEdit;
+  final bool canReturn;
+  final bool canQualityReview;
+  final bool qualityConfirmed;
+  final bool qualityBusy;
+  final VoidCallback onUploadQuality;
+  final VoidCallback onConfirmQuality;
+  final ValueChanged<bool> onQualityChecked;
   final VoidCallback? onApprove;
   final VoidCallback? onEdit;
   final VoidCallback? onReturnForCorrection;
@@ -4004,10 +4106,44 @@ class _InspectionDetailScreen extends StatelessWidget {
                   : 'Свидетельство',
               onTap: null,
             ),
+            if (canQualityReview) ...[
+              const SizedBox(height: 12),
+              const Text('Контроль качества', style: _section),
+              _PrimaryButton(
+                text: 'Загрузить свидетельство',
+                icon: Icons.upload_file_rounded,
+                onTap: qualityBusy ? null : onUploadQuality,
+              ),
+              CheckboxListTile(
+                title: const Text('Подтверждаю'),
+                subtitle: const Text(
+                  'Документы проверены, свидетельство загружено',
+                ),
+                value: qualityConfirmed,
+                onChanged:
+                    qualityBusy ||
+                        !files.any(
+                          (file) => file.type == 'certificate_document',
+                        )
+                    ? null
+                    : (value) => onQualityChecked(value ?? false),
+              ),
+              _PrimaryButton(
+                text: 'Передать руководителю на утверждение',
+                onTap:
+                    qualityBusy ||
+                        !qualityConfirmed ||
+                        !files.any(
+                          (file) => file.type == 'certificate_document',
+                        )
+                    ? null
+                    : onConfirmQuality,
+              ),
+            ],
             if (canApprove && onApprove != null) ...[
               const SizedBox(height: 12),
               _PrimaryButton(
-                text: 'Отправить в реестр',
+                text: 'Утвердить и отправить в реестр',
                 icon: Icons.verified_rounded,
                 onTap: onApprove!,
               ),
@@ -4020,7 +4156,7 @@ class _InspectionDetailScreen extends StatelessWidget {
                 onTap: onEdit!,
               ),
             ],
-            if (canEdit && onReturnForCorrection != null) ...[
+            if (canReturn && onReturnForCorrection != null) ...[
               const SizedBox(height: 12),
               _PrimaryButton(
                 text: 'Отправить на исправление',
@@ -4875,6 +5011,7 @@ class _InspectorHome extends StatelessWidget {
     required this.inspections,
     required this.organization,
     required this.isManager,
+    required this.isQualityControl,
     required this.onReload,
     required this.onNewInspection,
     required this.onImportXlsx,
@@ -4884,6 +5021,7 @@ class _InspectorHome extends StatelessWidget {
   final List<InspectionSummary> inspections;
   final OrganizationSummary? organization;
   final bool isManager;
+  final bool isQualityControl;
   final VoidCallback onReload;
   final VoidCallback onNewInspection;
   final VoidCallback onImportXlsx;
@@ -4893,12 +5031,20 @@ class _InspectorHome extends StatelessWidget {
   Widget build(BuildContext context) {
     final active = inspections.where((item) => item.status != 'draft').toList();
     final pending = inspections
-        .where((item) => item.status == 'submitted')
+        .where(
+          (item) =>
+              item.status ==
+              (isQualityControl ? 'submitted' : 'quality_approved'),
+        )
         .toList();
     return _AppScreen(
       title: 'Инспекционный орган',
       subtitle: organization?.name.isNotEmpty == true
-          ? '${organization!.name} · ${isManager ? 'руководитель' : 'сотрудник'}'
+          ? '${organization!.name} · ${isQualityControl
+                ? 'контроль качества'
+                : isManager
+                ? 'руководитель'
+                : 'сотрудник'}'
           : isManager
           ? 'Руководитель'
           : 'Сотрудник',
@@ -4928,11 +5074,16 @@ class _InspectorHome extends StatelessWidget {
               ),
             ],
           ),
-          if (isManager && pending.isNotEmpty) ...[
+          if ((isManager || isQualityControl) && pending.isNotEmpty) ...[
             const SizedBox(height: 12),
-            const Padding(
-              padding: EdgeInsets.only(left: 4, bottom: 8),
-              child: Text('Ожидают отправки в реестр', style: _section),
+            Padding(
+              padding: const EdgeInsets.only(left: 4, bottom: 8),
+              child: Text(
+                isQualityControl
+                    ? 'Контроль качества'
+                    : 'Ожидают утверждения руководителя',
+                style: _section,
+              ),
             ),
             for (final item in pending.take(5))
               _ListTileCard(
@@ -5010,7 +5161,8 @@ class _InspectorHome extends StatelessWidget {
 String _inspectionStatusLabel(String status) {
   return switch (status) {
     'draft' => 'Черновик',
-    'submitted' => 'На проверке',
+    'submitted' => 'Контроль качества',
+    'quality_approved' => 'На утверждении руководителя',
     'approved' => 'В реестре',
     'rejected' => 'На исправлении',
     'blocked' => 'Заблокировано',
@@ -5379,7 +5531,7 @@ class _DocumentScanStep extends StatelessWidget {
     );
     return _AppScreen(
       title: 'Пакет документов',
-      subtitle: '5 обязательных файлов',
+      subtitle: '4 обязательных файла',
       activeNav: 1,
       leadingBack: true,
       paymentNav: true,
@@ -5480,7 +5632,7 @@ class _ReviewStep extends StatelessWidget {
     ];
     return _AppScreen(
       title: 'Проверка данных',
-      subtitle: 'Перед отправкой оператору',
+      subtitle: 'Перед отправкой в контроль качества',
       activeNav: 1,
       child: Column(
         children: [
@@ -5494,7 +5646,7 @@ class _ReviewStep extends StatelessWidget {
               status: 'Готово',
             ),
           _PrimaryButton(
-            text: 'Отправить оператору',
+            text: 'Отправить в контроль качества',
             icon: Icons.send_rounded,
             onTap: onSubmit,
           ),

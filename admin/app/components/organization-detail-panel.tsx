@@ -167,6 +167,7 @@ export function OrganizationDetailPanel({
               <>
                 <option value="admin">Руководитель ИО</option>
                 <option value="inspector">Сотрудник ИО</option>
+                <option value="quality_control">Контроль качества</option>
               </>
             ) : (
               <>

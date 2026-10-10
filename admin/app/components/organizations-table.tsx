@@ -181,6 +181,7 @@ export function OrganizationsTable({
           <select value={memberRole} onChange={(event) => onMemberRole?.(event.target.value)}>
             <option value="admin">Руководитель ИО</option>
             <option value="inspector">Сотрудник ИО</option>
+            <option value="quality_control">Контроль качества</option>
           </select>
           <button type="submit">Добавить участника</button>
         </form>

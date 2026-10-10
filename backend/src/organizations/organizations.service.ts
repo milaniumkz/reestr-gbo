@@ -435,7 +435,7 @@ export class OrganizationsService {
 
   private memberRole(value: string, organizationType = "inspection_org") {
     if (organizationType === "inspection_org") {
-      if (["admin", "inspector"].includes(value)) return value;
+      if (["admin", "inspector", "quality_control"].includes(value)) return value;
       throw new BadRequestException("Некорректная роль участника ИО");
     }
     if (["government", "nca"].includes(value)) return value;

@@ -296,3 +296,17 @@ describe('Organization accreditation period', () => {
     }));
   });
 });
+
+describe('Quality control organization members', () => {
+  it('assigns quality control through the same member API and grants scoped IO access',async()=>{
+    const prisma={
+      organization:{findUniqueOrThrow:jest.fn(async()=>({id:'org_1',type:'inspection_org'}))},
+      userRole:{upsert:jest.fn(async()=>({}))},
+      organizationMember:{upsert:jest.fn(async()=>({}))},
+      auditLog:{create:jest.fn(async()=>({}))},
+    };
+    await new OrganizationsService(prisma as never).addMember({sub:'operator',phone:'test',roles:['operator']},'org_1',{userId:'qc_user',role:'quality_control'});
+    expect(prisma.organizationMember.upsert).toHaveBeenCalledWith(expect.objectContaining({create:{organizationId:'org_1',userId:'qc_user',role:'quality_control'}}));
+    expect(prisma.userRole.upsert).toHaveBeenCalledWith(expect.objectContaining({create:{userId:'qc_user',role:'inspection_org'}}));
+  });
+});

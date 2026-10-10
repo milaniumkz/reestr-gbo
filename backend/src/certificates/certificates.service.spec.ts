@@ -349,3 +349,18 @@ describe('XLSX issuing organization card', () => {
     expect(prisma.organization.upsert).not.toHaveBeenCalled();
   });
 });
+
+describe('Inspector XLSX imports preserve review workflow',()=>{
+  it('cannot overwrite a submitted inspection through reimport',async()=>{
+    const prisma={
+      certificateImportJob:{findUnique:jest.fn(async()=>null),create:jest.fn(async()=>({id:'job_1'})),update:jest.fn(async()=>({}))},
+      inspection:{findUnique:jest.fn(async()=>({id:'inspection_1',status:'submitted'}))},
+      user:{upsert:jest.fn()},
+    };
+    const service=new CertificatesService(prisma as never,{putObject:jest.fn(async()=>({}))} as never);
+    jest.spyOn(service as unknown as {tryParseCertificateXlsx:()=>Promise<Record<string,unknown>>},'tryParseCertificateXlsx').mockResolvedValue({certificateNumber:'TEST-1',organizationName:'IO'});
+    jest.spyOn(service as unknown as {resolveImportOrganization:()=>Promise<Record<string,unknown>>},'resolveImportOrganization').mockResolvedValue({id:'org_1'});
+    await expect(service.importXlsx({buffer:Buffer.from('workbook'),originalname:'file.xlsx'},{sub:'inspector',phone:'test',roles:['inspection_org']})).rejects.toThrow('уже отправлена на проверку');
+    expect(prisma.user.upsert).not.toHaveBeenCalled();
+  });
+});

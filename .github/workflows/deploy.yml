@@ -18,6 +18,7 @@ on:
         type: choice
         options:
           - deploy
+          - deploy-web
           - deploy-services
           - deploy-admin
           - diagnose-members
@@ -39,7 +40,7 @@ jobs:
   deploy:
     if: |
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.operation == 'deploy')
+      (github.event_name == 'workflow_dispatch' && contains(fromJSON('["deploy","deploy-web"]'), github.event.inputs.operation))
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -54,10 +55,12 @@ jobs:
       - run: flutter pub get
       - run: flutter build web --release --pwa-strategy=none --dart-define=API_BASE_URL=https://89-207-255-42.sslip.io/api/v1 --dart-define=APP_MODE=production
       - uses: actions/setup-java@v4
+        if: github.event.inputs.operation != 'deploy-web'
         with:
           distribution: temurin
           java-version: "17"
       - name: Build Android APK for the production API
+        if: github.event.inputs.operation != 'deploy-web'
         run: |
           flutter build apk --release --build-number="$(date +%s)" --dart-define=API_BASE_URL=https://89-207-255-42.sslip.io/api/v1 --dart-define=APP_MODE=production
           mkdir -p build/web/downloads
@@ -65,6 +68,7 @@ jobs:
           cd build/web/downloads
           sha256sum ersi-gbo.apk > ersi-gbo.apk.sha256
       - name: Retain downloadable APK
+        if: github.event.inputs.operation != 'deploy-web'
         uses: actions/upload-artifact@v4
         with:
           name: ersi-gbo-apk
@@ -81,6 +85,16 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
+      - name: Preserve published APK without rebuilding
+        if: github.event.inputs.operation == 'deploy-web'
+        run: |
+          mkdir -p build/web/downloads
+          scp "${DEPLOY_USER:-root}@${DEPLOY_HOST}:/opt/reestr/app/build/web/downloads/ersi-gbo.apk" build/web/downloads/ersi-gbo.apk
+          scp "${DEPLOY_USER:-root}@${DEPLOY_HOST}:/opt/reestr/app/build/web/downloads/ersi-gbo.apk.sha256" build/web/downloads/ersi-gbo.apk.sha256
+          (cd build/web/downloads && sha256sum -c ersi-gbo.apk.sha256)
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
       - name: Deploy checked commit
         run: |
           bash ops/deploy-production.sh "$(git rev-parse HEAD)"
@@ -100,7 +114,7 @@ jobs:
     permissions:
       contents: read
       statuses: write
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.operation != 'deploy'
+    if: github.event_name == 'workflow_dispatch' && !contains(fromJSON('["deploy","deploy-web"]'), github.event.inputs.operation)
     runs-on: ubuntu-latest
     environment: production
     steps:

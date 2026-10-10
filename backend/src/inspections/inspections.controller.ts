@@ -67,8 +67,9 @@ export class InspectionsController {
     @CurrentUser() user: RequestUser,
     @Param("id") id: string,
     @Body("status") status: string,
+    @Body("confirmed") confirmed?: boolean,
   ) {
-    return this.inspections.setStatus(user, id, status);
+    return this.inspections.setStatus(user, id, status, confirmed);
   }
 
   @Patch(":id/data")

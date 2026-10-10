@@ -496,6 +496,8 @@ class InspectionSummary {
     this.approvedByName = '',
     this.approvedByPhone = '',
     this.submittedAt = '',
+    this.qualityDocumentUploaded = false,
+    this.qualityConfirmedAt = '',
     this.approvedAt = '',
     this.files = const [],
   });
@@ -538,6 +540,8 @@ class InspectionSummary {
   final String approvedByName;
   final String approvedByPhone;
   final String submittedAt;
+  final bool qualityDocumentUploaded;
+  final String qualityConfirmedAt;
   final String approvedAt;
   final List<InspectionFileInfo> files;
 
@@ -616,6 +620,8 @@ class InspectionSummary {
       approvedByName: approvedBy['fullName']?.toString() ?? '',
       approvedByPhone: approvedBy['phone']?.toString() ?? '',
       submittedAt: json['submittedAt']?.toString() ?? '',
+      qualityDocumentUploaded: json['qualityDocumentUploadedAt'] != null,
+      qualityConfirmedAt: json['qualityConfirmedAt']?.toString() ?? '',
       approvedAt: json['approvedAt']?.toString() ?? '',
       files: photos
           .whereType<Map<String, dynamic>>()
