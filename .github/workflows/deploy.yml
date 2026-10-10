@@ -22,6 +22,8 @@ on:
           - logs
           - restart
           - rollback
+          - inventory-inspection-data
+          - purge-inspection-data
 
 permissions:
   contents: read
@@ -106,7 +108,12 @@ jobs:
           printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
       - name: Run operation
-        run: bash ops/remote-operation.sh "${{ github.event.inputs.operation }}"
+        run: |
+          case "${{ github.event.inputs.operation }}" in
+            inventory-inspection-data) bash ops/purge-inspection-data.sh inventory ;;
+            purge-inspection-data) bash ops/purge-inspection-data.sh apply ;;
+            *) bash ops/remote-operation.sh "${{ github.event.inputs.operation }}" ;;
+          esac
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
