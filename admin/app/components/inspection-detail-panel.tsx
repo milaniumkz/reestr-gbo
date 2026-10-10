@@ -43,9 +43,10 @@ export function InspectionDetailPanel({
         <Info label="Редуктор" value={cylinder?.reducerName ?? '-'} />
         <Info label="ЭБУ" value={cylinder?.controlUnitName ?? '-'} />
         <Info label="Место инспекции" value={inspection.address ?? coords(inspection.lat, inspection.lng)} />
-        <Info label="Сотрудник" value={inspection.createdBy ? `${inspection.createdBy.fullName} · ${inspection.createdBy.phone}` : '-'} />
+        <Info label="Создал свидетельство" value={inspection.createdBy ? `${inspection.createdBy.fullName} · ${inspection.createdBy.phone}` : '-'} />
         <Info label="Отправил на проверку" value={inspection.submittedBy ? `${inspection.submittedBy.fullName} · ${inspection.submittedBy.phone}` : '-'} />
-        <Info label="Руководитель" value={inspection.approvedBy ? `${inspection.approvedBy.fullName} · ${inspection.approvedBy.phone}` : '-'} />
+        <Info label="Утвердил и отправил в реестр" value={inspection.approvedBy ? `${inspection.approvedBy.fullName} · ${inspection.approvedBy.phone}` : '-'} />
+        <Info label="Подтвердил контроль качества" value={inspection.qualityConfirmedBy ? `${inspection.qualityConfirmedBy.fullName} · ${inspection.qualityConfirmedBy.phone}` : '-'} />
         <Info label="Создано" value={new Date(inspection.createdAt).toLocaleString('ru-RU')} />
         <Info label="Отправлено на проверку" value={inspection.submittedAt ? new Date(inspection.submittedAt).toLocaleString('ru-RU') : '-'} />
         <Info label="Контроль качества подтвержден" value={inspection.qualityConfirmedAt ? new Date(inspection.qualityConfirmedAt).toLocaleString('ru-RU') : '-'} />

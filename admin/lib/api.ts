@@ -211,6 +211,7 @@ export type Inspection = {
   certificate?: { number: string; status: string; validUntil: string };
   createdBy?: { id: string; phone: string; fullName: string; lastLoginAt?: string };
   submittedBy?: { id: string; phone: string; fullName: string; lastLoginAt?: string };
+  qualityConfirmedBy?: { id: string; phone: string; fullName: string; lastLoginAt?: string };
   approvedBy?: { id: string; phone: string; fullName: string; lastLoginAt?: string };
   submittedAt?: string;
   qualityDocumentUploadedAt?: string;
@@ -251,6 +252,7 @@ export type CertificateRow = {
     photos?: Array<{ id: string; type: string; objectKey: string; viewUrl?: string }>;
     createdBy?: { id: string; phone: string; fullName: string; lastLoginAt?: string };
     submittedBy?: { id: string; phone: string; fullName: string; lastLoginAt?: string };
+    qualityConfirmedBy?: { id: string; phone: string; fullName: string; lastLoginAt?: string };
     approvedBy?: { id: string; phone: string; fullName: string; lastLoginAt?: string };
     submittedAt?: string;
     approvedAt?: string;

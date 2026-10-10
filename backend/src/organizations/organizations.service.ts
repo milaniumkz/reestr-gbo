@@ -189,6 +189,9 @@ export class OrganizationsService {
             submittedBy: {
               select: { id: true, phone: true, fullName: true, lastLoginAt: true },
             },
+            qualityConfirmedBy: {
+              select: { id: true, phone: true, fullName: true, lastLoginAt: true },
+            },
             approvedBy: {
               select: { id: true, phone: true, fullName: true, lastLoginAt: true },
             },
@@ -214,6 +217,7 @@ export class OrganizationsService {
           vehicle: true,
           createdBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
           submittedBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
+          qualityConfirmedBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
           approvedBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
         },
         orderBy: { updatedAt: "desc" },

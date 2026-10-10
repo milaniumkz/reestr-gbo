@@ -498,6 +498,7 @@ class InspectionSummary {
     this.submittedAt = '',
     this.qualityDocumentUploaded = false,
     this.qualityConfirmedAt = '',
+    this.qualityConfirmedByName = '',
     this.approvedAt = '',
     this.files = const [],
   });
@@ -542,6 +543,7 @@ class InspectionSummary {
   final String submittedAt;
   final bool qualityDocumentUploaded;
   final String qualityConfirmedAt;
+  final String qualityConfirmedByName;
   final String approvedAt;
   final List<InspectionFileInfo> files;
 
@@ -563,6 +565,10 @@ class InspectionSummary {
         : const <String, dynamic>{};
     final approvedBy = json['approvedBy'] is Map<String, dynamic>
         ? json['approvedBy'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+    final qualityConfirmedBy =
+        json['qualityConfirmedBy'] is Map<String, dynamic>
+        ? json['qualityConfirmedBy'] as Map<String, dynamic>
         : const <String, dynamic>{};
     final photos = json['photos'] as List<dynamic>? ?? const [];
     final owners = vehicle['owners'] as List<dynamic>? ?? const [];
@@ -622,6 +628,7 @@ class InspectionSummary {
       submittedAt: json['submittedAt']?.toString() ?? '',
       qualityDocumentUploaded: json['qualityDocumentUploadedAt'] != null,
       qualityConfirmedAt: json['qualityConfirmedAt']?.toString() ?? '',
+      qualityConfirmedByName: qualityConfirmedBy['fullName']?.toString() ?? '',
       approvedAt: json['approvedAt']?.toString() ?? '',
       files: photos
           .whereType<Map<String, dynamic>>()

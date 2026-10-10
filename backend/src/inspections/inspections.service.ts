@@ -109,6 +109,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
           photos: true,
           createdBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
           submittedBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
+          qualityConfirmedBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
           approvedBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
         },
         orderBy: { createdAt: "desc" },
@@ -252,6 +253,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
         photos: true,
         createdBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
         submittedBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
+        qualityConfirmedBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
         approvedBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
       },
     });
@@ -394,6 +396,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
         vehicle: { include: { owners: true, cylinders: true } },
         createdBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
         submittedBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
+        qualityConfirmedBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
         approvedBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
       },
     });

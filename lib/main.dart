@@ -4165,6 +4165,42 @@ class _InspectionDetailScreen extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 16),
+            const Text('Участники и действия', style: _section),
+            const SizedBox(height: 10),
+            _CertificateDetailsCard(
+              rows: [
+                (
+                  Icons.person_rounded,
+                  'СОЗДАЛ СВИДЕТЕЛЬСТВО',
+                  item.createdByName.isEmpty
+                      ? 'Не указан'
+                      : '${item.createdByName} · ${item.createdAt}',
+                ),
+                (
+                  Icons.send_rounded,
+                  'ОТПРАВИЛ В КОНТРОЛЬ КАЧЕСТВА',
+                  [
+                    item.submittedByName,
+                    item.submittedAt,
+                  ].where((value) => value.isNotEmpty).join(' · '),
+                ),
+                (
+                  Icons.verified_rounded,
+                  'ПОДТВЕРДИЛ КОНТРОЛЬ КАЧЕСТВА',
+                  item.qualityConfirmedByName.isEmpty
+                      ? 'Не подтверждено'
+                      : '${item.qualityConfirmedByName} · ${item.qualityConfirmedAt}',
+                ),
+                (
+                  Icons.fact_check_rounded,
+                  'УТВЕРДИЛ И ОТПРАВИЛ В РЕЕСТР',
+                  item.approvedByName.isEmpty
+                      ? 'Не утверждено'
+                      : '${item.approvedByName} · ${item.approvedAt}',
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
             const Text('Данные свидетельства', style: _section),
             const SizedBox(height: 10),
             _CertificateDetailsCard(

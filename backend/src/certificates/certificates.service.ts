@@ -139,6 +139,7 @@ export class CertificatesService {
       photos: true,
       createdBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
       submittedBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
+      qualityConfirmedBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
       approvedBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
     };
   }
@@ -151,6 +152,7 @@ export class CertificatesService {
       vehicle: { include: { owners: { include: { user: true } }, cylinders: true } },
       createdBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
       submittedBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
+      qualityConfirmedBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
       approvedBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
     };
   }
