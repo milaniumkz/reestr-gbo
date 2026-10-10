@@ -32,7 +32,7 @@ export class AuthService {
       const hasInspectionMembership = allowedUser?.memberships.some((item) =>
         item.organization.type === 'inspection_org' &&
         item.organization.status === 'active' &&
-        ['inspection_org', 'inspector', 'admin'].includes(item.role),
+        ['inspection_org', 'inspector', 'admin', 'quality_control'].includes(item.role),
       ) ?? false;
       const isAllowed =
         allowedUser?.isBlocked === false &&
@@ -220,7 +220,7 @@ export class AuthService {
     const activeInspectionMembership = await this.prisma.organizationMember.findFirst({
       where: {
         userId: user.id,
-        role: { in: ['inspection_org', 'inspector', 'admin'] },
+        role: { in: ['inspection_org', 'inspector', 'admin', 'quality_control'] },
         organization: {
           type: 'inspection_org',
           status: 'active',
@@ -356,7 +356,7 @@ export class AuthService {
     const membership = await this.prisma.organizationMember.findFirst({
       where: {
         userId,
-        role: { in: ['inspection_org', 'inspector', 'admin'] },
+        role: { in: ['inspection_org', 'inspector', 'admin', 'quality_control'] },
         organization: {
           bin,
           type: 'inspection_org',

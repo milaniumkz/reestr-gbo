@@ -45,4 +45,29 @@ describe('AuthService', () => {
     expect(auth['requestedRole']('nca')).toBe('nca');
     expect(() => auth['requestedRole']('super_admin')).toThrow(ForbiddenException);
   });
+  it('allows quality control SMS and checks membership against the selected BIN', async () => {
+    const findMembership = jest.fn(async (query: any) =>
+      query.where.role.in.includes('quality_control') && query.where.organization.bin === '220340010835' ? { id: 'qc_member' } : null);
+    const prisma = {
+      user: { findUnique: jest.fn(async () => ({ id: 'qc_user', isBlocked: false, roles: [],
+        memberships: [{ role: 'quality_control', organization: { type: 'inspection_org', status: 'active' } }],
+      })) },
+      organizationMember: { findFirst: findMembership },
+      otpChallenge: { findFirst: jest.fn(async () => null), create: jest.fn(async () => ({})) },
+    };
+    const sms = { isMockEnabled: () => true, sendOtp: jest.fn(async () => undefined) };
+    const auth = new AuthService(prisma as never, {} as never, sms as never, config({}), { log: jest.fn() } as never);
+    await expect(auth.sendOtp('+77052574504', undefined, 'inspection_org')).resolves.toMatchObject({ ok: true });
+    expect(sms.sendOtp).toHaveBeenCalledTimes(1);
+    await expect(auth['isInspectionMemberForBin']('qc_user', '220340010835')).resolves.toBe(true);
+    await expect(auth['isInspectionMemberForBin']('qc_user', '111111111111')).resolves.toBe(false);
+  });
+  it('denies quality control SMS when the organization is blocked', async () => {
+    const auth = new AuthService({ user: { findUnique: jest.fn(async () => ({
+      id: 'qc_user', isBlocked: false, roles: [],
+      memberships: [{ role: 'quality_control', organization: { type: 'inspection_org', status: 'blocked' } }],
+    })) } } as never, {} as never, {} as never, config({}), { log: jest.fn() } as never);
+    await expect(auth.sendOtp('+77052574504', undefined, 'inspection_org')).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
 });
