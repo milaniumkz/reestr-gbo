@@ -8,6 +8,7 @@ type OrganizationsTableProps = {
   organizations: Organization[];
   users?: UserRow[];
   onToggle: (org: Organization) => void;
+  onDelete?: (org: Organization) => void;
   onOpen?: (org: Organization) => void;
   canManage?: boolean;
   compact?: boolean;
@@ -58,6 +59,7 @@ export function OrganizationsTable({
   organizations,
   users = [],
   onToggle,
+  onDelete,
   onOpen,
   canManage = false,
   compact = false,
@@ -238,6 +240,11 @@ export function OrganizationsTable({
                     {onOpen && (
                       <button className="smallButton" type="button" onClick={() => onOpen(org)}>
                         Открыть
+                      </button>
+                    )}
+                    {!compact && canManage && onDelete && (
+                      <button className="smallButton" type="button" onClick={() => onDelete(org)}>
+                        Удалить
                       </button>
                     )}
                     {!compact && canManage && (

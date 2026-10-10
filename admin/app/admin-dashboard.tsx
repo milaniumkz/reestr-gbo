@@ -1367,20 +1367,23 @@ export default function AdminDashboard() {
     });
   }
 
-  function requireBlockReason(isBlocking: boolean) {
-    if (!isBlocking) return true;
-    if (blockReason.trim()) return true;
+  function requestBlockReason(isBlocking: boolean): string | null {
+    if (!isBlocking) return '';
+    const reason = (blockReason.trim() || window.prompt('Укажите причину блокировки:'));
+    if (reason === null) return null;
+    if (reason.trim()) return reason.trim();
     setStatus('');
     setError('Укажите причину блокировки.');
-    return false;
+    return null;
   }
 
   async function toggleOrg(org: Organization) {
     if (!token) return;
     const nextStatus = org.status === 'blocked' ? 'active' : 'blocked';
-    if (!requireBlockReason(nextStatus === 'blocked')) return;
+    const reason = requestBlockReason(nextStatus === 'blocked');
+    if (reason === null) return;
     await runAction('Статус ИО обновлен', async () => {
-      await setOrganizationStatus(token, org.id, nextStatus, blockReason);
+      await setOrganizationStatus(token, org.id, nextStatus, reason);
       setBlockReason('');
       await refresh();
     });
@@ -1422,9 +1425,10 @@ export default function AdminDashboard() {
   async function toggleUser(row: UserRow) {
     if (!token) return;
     const nextBlocked = !row.isBlocked;
-    if (!requireBlockReason(nextBlocked)) return;
+    const reason = requestBlockReason(nextBlocked);
+    if (reason === null) return;
     await runAction('Статус пользователя обновлен', async () => {
-      await setUserBlocked(token, row.id, nextBlocked, blockReason);
+      await setUserBlocked(token, row.id, nextBlocked, reason);
       setBlockReason('');
       await refresh();
     });
@@ -1474,9 +1478,10 @@ export default function AdminDashboard() {
 
   async function changeCertificateStatus(row: CertificateRow, status: string) {
     if (!token) return;
-    if (!requireBlockReason(status !== 'active')) return;
+    const reason = requestBlockReason(status !== 'active');
+    if (reason === null) return;
     await runAction('Статус свидетельства обновлен', async () => {
-      await setCertificateStatus(token, row.number, status, blockReason);
+      await setCertificateStatus(token, row.number, status, reason);
       setBlockReason('');
       await refresh();
     });
@@ -1691,6 +1696,7 @@ export default function AdminDashboard() {
             onSave={saveOrganization}
             onAddMember={addSelectedOrganizationMember}
             onRemoveMember={deleteOrganizationMember}
+            onDelete={removeOrganization}
             onClose={closeDetails}
           />
         )}
@@ -1796,6 +1802,7 @@ export default function AdminDashboard() {
             onSubmit={submitOrganization}
             onRemoveMember={deleteOrganizationMember}
             onToggle={toggleOrg}
+            onDelete={removeOrganization}
             onOpen={openOrganization}
           />
         )}

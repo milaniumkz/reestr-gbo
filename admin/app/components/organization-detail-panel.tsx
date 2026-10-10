@@ -32,6 +32,7 @@ type OrganizationDetailPanelProps = {
     iin?: string;
   }) => void;
   onRemoveMember?: (organization: Organization, memberId: string) => void;
+  onDelete?: (organization: Organization) => void;
   onClose: () => void;
 };
 
@@ -43,6 +44,7 @@ export function OrganizationDetailPanel({
   onSave,
   onAddMember,
   onRemoveMember,
+  onDelete,
   onClose,
 }: OrganizationDetailPanelProps) {
   const inspections = activity?.inspections ?? organization.inspections ?? [];
@@ -92,7 +94,10 @@ export function OrganizationDetailPanel({
     <section className="detailPanel">
       <div className="tableHeader">
         <h2>{organization.name}</h2>
+        <div className="inlineActions">
+          {canManage && onDelete && <button className="smallButton" type="button" onClick={() => onDelete(organization)}>Удалить организацию</button>}
         <button className="smallButton" type="button" onClick={onClose}>Назад</button>
+        </div>
       </div>
       {canManage && (
         <form
