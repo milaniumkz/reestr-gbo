@@ -1361,7 +1361,9 @@ class _ErsiDemoState extends State<ErsiDemo> {
       if (vehicleVin.trim().isEmpty) 'VIN',
       if (cylinderNumber.trim().isEmpty) 'номер баллона',
       if (cylinderVolume.trim().isEmpty) 'объем баллона',
-      if (!const ['СНГ', 'КПГ'].contains(cylinderFuel.trim())) 'вид топлива',
+      if (draftInspectionId == null &&
+          !const ['СНГ', 'КПГ'].contains(cylinderFuel.trim()))
+        'вид топлива',
       if (reducerName.trim().isEmpty) 'название редуктора',
       if (controlUnitName.trim().isEmpty)
         'название электронного блока управления',
@@ -1860,7 +1862,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       setState(() {
         selectedInspection = detail;
         draftInspectionId = detail.id;
-        draftVehicleId = null;
+        draftVehicleId = detail.vehicleId.isEmpty ? null : detail.vehicleId;
         inspectionCertificateNumber = detail.certificateNumber;
         ownerId = detail.ownerIin;
         ownerName = detail.ownerName;

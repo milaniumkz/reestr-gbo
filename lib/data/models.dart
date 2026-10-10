@@ -478,6 +478,7 @@ class InspectionSummary {
     this.ownerIin = '',
     this.ownerPhone = '',
     this.ownerAddress = '',
+    this.vehicleId = '',
     this.vehicleYear = '',
     this.cylinderSerial = '',
     this.cylinderManufacturer = '',
@@ -511,6 +512,7 @@ class InspectionSummary {
   final String id;
   final String status;
   final String createdAt;
+  final String vehicleId;
   final String vehiclePlate;
   final String vehicleVin;
   final String vehicleName;
@@ -585,6 +587,8 @@ class InspectionSummary {
       id: json['id']?.toString() ?? '',
       status: json['status']?.toString() ?? '',
       createdAt: json['createdAt']?.toString().split('T').first ?? '',
+      vehicleId:
+          json['vehicleId']?.toString() ?? vehicle['id']?.toString() ?? '',
       vehiclePlate: vehicle['plateNumber']?.toString() ?? '',
       vehicleVin: vehicle['vin']?.toString() ?? '',
       vehicleName: [make, model].where((item) => item.isNotEmpty).join(' '),
