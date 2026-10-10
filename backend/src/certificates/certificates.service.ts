@@ -956,6 +956,7 @@ export class CertificatesService {
         where: { bin: selectedBin, type: "inspection_org" },
       });
       if (!organization) throw new BadRequestException("Выбранный ИО не найден. Выберите существующую карточку ИО.");
+      if (user?.sub) await assertOrganizationAccess(this.prisma, organization.id, user);
       return organization;
     }
 
@@ -979,7 +980,10 @@ export class CertificatesService {
     const matches = organizations.filter((organization) =>
       this.normalizeOrganizationName(organization.name).toLocaleUpperCase("ru") === normalizedName,
     );
-    if (matches.length === 1) return matches[0];
+    if (matches.length === 1) {
+      if (user?.sub) await assertOrganizationAccess(this.prisma, matches[0].id, user);
+      return matches[0];
+    }
     throw new BadRequestException("Выберите существующий ИО из списка. Срок аккредитации берется из его карточки, а не из XLSX.");
   }
 

@@ -334,6 +334,10 @@ describe('XLSX issuing organization card', () => {
     expect(prisma.organizationMember.findFirst).not.toHaveBeenCalled();
     expect(prisma.organization.upsert).not.toHaveBeenCalled();
   });
+  it('rejects selecting another IO card for an inspector', async () => {
+    const prisma = { organization: { findFirst: jest.fn(async () => card) }, organizationMember: { findMany: jest.fn(async () => [{ organizationId: 'own_io' }]) } };
+    await expect(resolver(prisma).resolveImportOrganization('Workbook IO', { sub: 'inspector', phone: 'test', roles: ['inspection_org'] }, '123')).rejects.toThrow(ForbiddenException);
+  });
   it('matches a workbook name to an existing card without modifying accreditation', async () => {
     const prisma = { organization: { findMany: jest.fn(async () => [card]), upsert: jest.fn() } };
     expect(await resolver(prisma).resolveImportOrganization('ТОО «Карточка»')).toEqual(card);
