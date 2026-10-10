@@ -12,7 +12,7 @@ describe('RegistryService.search', () => {
         count: jest.fn(async () => 0),
       },
     };
-    const service = new RegistryService(prisma as never);
+    const service = new RegistryService(prisma as never, { objectUrl: (key: string) => ({ url: `/storage/ersi-gbo/${key}` }) } as never);
 
     await service.search(
       { sub: 'inspector_1', phone: '+77000000000', roles: ['inspection_org'] },
@@ -42,7 +42,7 @@ describe('RegistryService.search', () => {
         count: jest.fn(async () => 0),
       },
     };
-    const service = new RegistryService(prisma as never);
+    const service = new RegistryService(prisma as never, { objectUrl: (key: string) => ({ url: `/storage/ersi-gbo/${key}` }) } as never);
 
     await service.search(
       { sub: 'owner_1', phone: '+77000000000', roles: ['vehicle_owner'] },
@@ -69,7 +69,7 @@ describe('RegistryService.publicCertificateChecks', () => {
         count: jest.fn(async () => 0),
       },
     };
-    const service = new RegistryService(prisma as never);
+    const service = new RegistryService(prisma as never, { objectUrl: (key: string) => ({ url: `/storage/ersi-gbo/${key}` }) } as never);
 
     await service.publicCertificateChecks('Chrome', undefined, '50', {}, '1');
 
@@ -89,7 +89,7 @@ describe('RegistryService.publicCertificateChecks', () => {
         count: jest.fn(async () => 0),
       },
     };
-    const service = new RegistryService(prisma as never);
+    const service = new RegistryService(prisma as never, { objectUrl: (key: string) => ({ url: `/storage/ersi-gbo/${key}` }) } as never);
 
     await service.publicCertificateChecks(
       '',
@@ -119,5 +119,25 @@ describe('RegistryService.publicCertificateChecks', () => {
       take: 25,
     });
     expect(prisma.publicCertificateCheck.count).toHaveBeenCalledWith({ where: findArg.where });
+  });
+});
+
+
+describe('RegistryService attachment viewing', () => {
+  const vehicle = { id: 'vehicle_1', certificates: [{ id: 'cert_1', number: 'CERT-1', inspection: {
+    organization: { name: 'IO' }, photos: [{ id: 'photo_1', objectKey: 'inspection/vehicle.jpg', type: 'vehicle_photo' }],
+  } }] };
+  const storage = { objectUrl: jest.fn((key: string) => ({ url: `https://files.example/ersi-gbo/${key}` })) };
+  it('returns working photo URLs for observer public certificate lookup', async () => {
+    const prisma = { vehicle: { findFirst: jest.fn(async () => vehicle) }, publicCertificateCheck: { create: jest.fn(async () => ({ id: 'check_1' })) } };
+    const result = await new RegistryService(prisma as never, storage as never).publicCertificateCheck('123ABC', '456');
+    expect(result.found).toBe(true);
+    expect(result.item?.certificates[0].inspection.photos[0]).toMatchObject({ id: 'photo_1', viewUrl: 'https://files.example/ersi-gbo/inspection/vehicle.jpg' });
+    expect(vehicle.certificates[0].inspection.photos[0]).not.toHaveProperty('viewUrl');
+  });
+  it('returns the same photo URLs in scoped registry search', async () => {
+    const prisma = { vehicle: { findMany: jest.fn(async () => [vehicle]), count: jest.fn(async () => 1) } };
+    const result = await new RegistryService(prisma as never, storage as never).search({ sub: 'admin', phone: 'test', roles: ['super_admin'] }, '123ABC');
+    expect(result.items[0].certificates[0].inspection.photos[0].viewUrl).toBe('https://files.example/ersi-gbo/inspection/vehicle.jpg');
   });
 });

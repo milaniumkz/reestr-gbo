@@ -51,6 +51,16 @@ const {AuthService}=require('./dist/src/auth/auth.service');
    const readiness=await inspectionsService.readiness(item.id,{sub:author.id,phone:author.phone,roles:['inspection_org']});
    console.log(JSON.stringify({orgId:'inspector-inspection-'+index,name:`status=${item.status}; missing=${readiness.missing.join(',')||'none'}`,members:readiness.ready?1:0,additions:readiness.photoTypes.length,distinctAdditions:0,lastAddition:item.createdAt}));
   }
+  const {RegistryService}=require('./dist/src/registry/registry.service');
+  const {StorageService}=require('./dist/src/storage/storage.service');
+  const storage=new StorageService({get:key=>process.env[key]},db);
+  const registry=new RegistryService(db,storage);
+  const certificates=await db.certificate.findMany({take:5,orderBy:{issuedAt:'desc'},include:{inspection:{include:{photos:true}}}});
+  const mapped=registry.withPhotoUrls({certificates});
+  const photoUrls=mapped.certificates.flatMap(c=>c.inspection.photos.map(p=>p.viewUrl));
+  let accessible=0;
+  for(const url of photoUrls){const response=await fetch(new URL(url,'https://89-207-255-42.sslip.io'),{method:'HEAD',signal:AbortSignal.timeout(10000)});if(response.ok)accessible++;}
+  console.log(JSON.stringify({orgId:'registry-photo-urls',name:'Registry attachments: links and HTTP availability',members:photoUrls.length,additions:accessible,distinctAdditions:certificates.length,lastAddition:null}));
   const denied=await db.auditLog.findMany({where:{action:'auth.inspection_otp_denied',createdAt:{gt:new Date(Date.now()-7200000)}},select:{actorId:true}});
   const ids=new Set(members.map(m=>m.userId));
   console.log(JSON.stringify({orgId:'login-denied-members',name:'Denials matching current IO staff',members:denied.length,additions:denied.filter(a=>ids.has(a.actorId)).length,distinctAdditions:0,lastAddition:null}));
