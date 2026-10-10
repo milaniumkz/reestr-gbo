@@ -26,6 +26,15 @@ const {AuthService}=require('./dist/src/auth/auth.service');
    if(await auth.isInspectionMemberForBin(m.userId,m.organization.bin))binAllowed++;
   }
   console.log(JSON.stringify({orgId:'login-runtime',name:'Actual server login gate',members:members.length,additions:allowed,distinctAdditions:binAllowed,lastAddition:null}));
+  const hash=value=>require('crypto').createHash('sha256').update(value||'').digest('hex');
+  const allUsers=await db.user.findMany({select:{id:true,phone:true,fullName:true,isBlocked:true,iin:true}});
+  const targetUser=allUsers.find(u=>hash(u.phone)==='93cf12495592a960f7d1dc6937be30f5248205dad8616c0312c40521d5b72fcf');
+  const orgs=await db.organization.findMany({select:{id:true,bin:true,type:true,status:true,contactPhone:true}});
+  const targetOrg=orgs.find(o=>hash(o.bin)==='eb11cb54a2599006bcffda9e7c0666761f3c3f81f9fe5e5a81fa4e83f60fa96c');
+  const targetMembers=targetOrg?members.filter(m=>m.organizationId===targetOrg.id):[];
+  const links=targetUser?targetMembers.filter(m=>m.userId===targetUser.id):[];
+  console.log(JSON.stringify({orgId:'target-login',name:`Target: user=${!!targetUser}; org=${targetOrg?.type}/${targetOrg?.status}; blocked=${targetUser?.isBlocked}`,members:links.length,additions:targetMembers.length,distinctAdditions:targetUser?targetMembers.filter(m=>m.user.fullName===targetUser.fullName||!!targetUser.iin&&m.user.iin===targetUser.iin).length:0,lastAddition:null}));
+  console.log(JSON.stringify({orgId:'target-contact',name:'Target phone equals organization contact',members:targetUser&&targetOrg?.contactPhone===targetUser.phone?1:0,additions:links.filter(m=>m.role==='admin').length,distinctAdditions:links.filter(m=>m.role==='inspector').length,lastAddition:null}));
   const denied=await db.auditLog.findMany({where:{action:'auth.inspection_otp_denied',createdAt:{gt:new Date(Date.now()-7200000)}},select:{actorId:true}});
   const ids=new Set(members.map(m=>m.userId));
   console.log(JSON.stringify({orgId:'login-denied-members',name:'Denials matching current IO staff',members:denied.length,additions:denied.filter(a=>ids.has(a.actorId)).length,distinctAdditions:0,lastAddition:null}));
