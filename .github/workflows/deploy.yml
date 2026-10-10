@@ -21,6 +21,7 @@ on:
           - deploy-web
           - deploy-services
           - deploy-admin
+          - restore-confirmed-inspector
           - diagnose-members
           - status
           - logs
@@ -131,6 +132,7 @@ jobs:
         run: |
           set -o pipefail
           case "${{ github.event.inputs.operation }}" in
+            restore-confirmed-inspector) bash ops/restore-confirmed-inspector.sh ;;
             diagnose-members) bash ops/diagnose-members.sh ;;
             deploy-admin) DEPLOY_COMPONENTS=admin bash ops/deploy-production.sh "$(git rev-parse HEAD)" ;;
             deploy-services) DEPLOY_COMPONENTS=services bash ops/deploy-production.sh "$(git rev-parse HEAD)" ;;
@@ -167,7 +169,7 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" -f state=success -f context="production-data/${{ github.event.inputs.operation }}" -f description="$description" -f target_url="https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --silent
 
       - name: Record member diagnostics
-        if: success() && github.event.inputs.operation == 'diagnose-members'
+        if: success() && contains(fromJSON('["diagnose-members","restore-confirmed-inspector"]'), github.event.inputs.operation)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
