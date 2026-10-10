@@ -9,7 +9,9 @@ if [[ "$mode" == inventory ]]; then
 set -a
 source /opt/reestr/app/backend/.env
 set +a
-psql "${DATABASE_URL%%\?*}" -X -v ON_ERROR_STOP=1 -c 'SELECT type, count(*) FROM "Organization" GROUP BY type; SELECT count(*) AS certificates FROM "Certificate"; SELECT count(*) AS inspections FROM "Inspection";'
+psql "${DATABASE_URL%%\?*}" -X -At -v ON_ERROR_STOP=1 <<'SQL'
+SELECT jsonb_build_object('organizations', (SELECT count(*) FROM "Organization" WHERE type='inspection_org'), 'certificates', (SELECT count(*) FROM "Certificate"), 'inspections', (SELECT count(*) FROM "Inspection"));
+SQL
 REMOTE
  exit
 fi

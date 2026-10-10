@@ -27,6 +27,7 @@ on:
 
 permissions:
   contents: read
+  statuses: write
 
 concurrency:
   group: production-deploy
@@ -109,12 +110,36 @@ jobs:
           chmod 600 ~/.ssh/known_hosts
       - name: Run operation
         run: |
+          set -o pipefail
           case "${{ github.event.inputs.operation }}" in
             inventory-inspection-data) bash ops/purge-inspection-data.sh inventory ;;
             purge-inspection-data) bash ops/purge-inspection-data.sh apply ;;
             *) bash ops/remote-operation.sh "${{ github.event.inputs.operation }}" ;;
-          esac
+          esac | tee "$RUNNER_TEMP/operation.log"
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           APP_DIR: /opt/reestr/app
+
+      - name: Record data operation result
+        if: success() && contains(github.event.inputs.operation, 'inspection-data')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          description="$(python3 - <<'PY'
+          import json, os
+          rows=[]
+          for line in open(os.environ['RUNNER_TEMP']+'/operation.log'):
+              try:
+                  row=json.loads(line.strip())
+                  if isinstance(row,dict): rows.append(row)
+              except ValueError: pass
+          if not rows: raise SystemExit('Missing operation counts')
+          first,last=rows[0],rows[-1]
+          if 'inspectionOrganizations' in last:
+              print(f"Deleted IO={first['organizations']}, certificates={first['certificates']}; remaining IO={last['inspectionOrganizations']}, certificates={last['certificates']}; backup verified")
+          else:
+              print(f"IO={last['organizations']}; certificates={last['certificates']}; inspections={last['inspections']}")
+          PY
+          )"
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" -f state=success -f context="production-data/${{ github.event.inputs.operation }}" -f description="$description" -f target_url="https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --silent
