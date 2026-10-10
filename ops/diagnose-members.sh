@@ -6,6 +6,10 @@ source /opt/reestr/app/backend/.env
 set +a
 psql "${DATABASE_URL%%\?*}" -X -At -v ON_ERROR_STOP=1 <<'SQL'
 SELECT json_build_object('orgId',o.id,'name',o.name,'members',(SELECT count(*) FROM "OrganizationMember" m WHERE m."organizationId"=o.id),'additions',count(a.id),'distinctAdditions',count(DISTINCT (a.metadata->>'userId',a.metadata->>'role')) FILTER (WHERE a.id IS NOT NULL),'lastAddition',max(a."createdAt")) FROM "Organization" o LEFT JOIN "AuditLog" a ON a."entityId"=o.id AND a.action='organization.member.add' AND a."createdAt">now()-interval '1 day' WHERE o.type='inspection_org' GROUP BY o.id,o.name;
+SELECT json_build_object('orgId','login-summary','name','Login membership','members',count(*),'additions',count(*) FILTER (WHERE u.phone ~ '^\+7[0-9]{10}$'),'distinctAdditions',count(*) FILTER (WHERE o.status='active' AND NOT u."isBlocked" AND m.role IN ('inspection_org','inspector','admin','quality_control')),'lastAddition',NULL) FROM "OrganizationMember" m JOIN "User" u ON u.id=m."userId" JOIN "Organization" o ON o.id=m."organizationId" WHERE o.type='inspection_org';
+SELECT json_build_object('orgId','login-role-'||m.role,'name','role='||m.role||'; org='||o.status,'members',count(*),'additions',count(*) FILTER (WHERE u.phone ~ '^\+7[0-9]{10}$'),'distinctAdditions',count(*) FILTER (WHERE NOT u."isBlocked"),'lastAddition',NULL) FROM "OrganizationMember" m JOIN "User" u ON u.id=m."userId" JOIN "Organization" o ON o.id=m."organizationId" WHERE o.type='inspection_org' GROUP BY m.role,o.status;
+SELECT json_build_object('orgId','login-denials','name','Recent login denials','members',count(*),'additions',count(*) FILTER (WHERE a."actorId" IS NOT NULL),'distinctAdditions',count(DISTINCT a."entityId"),'lastAddition',max(a."createdAt")) FROM "AuditLog" a WHERE a.action='auth.inspection_otp_denied' AND a."createdAt">now()-interval '2 hours';
+
 SQL
 python3 - <<'PYCODE'
 import collections, json, re
