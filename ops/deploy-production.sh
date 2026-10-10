@@ -3,9 +3,10 @@ set -euo pipefail
 
 COMMIT_SHA="${1:-unknown}"
 DEPLOY_COMPONENTS="${DEPLOY_COMPONENTS:-all}"
-case "$DEPLOY_COMPONENTS" in all|services) ;; *) exit 2;; esac
+case "$DEPLOY_COMPONENTS" in all|services|admin) ;; *) exit 2;; esac
 BUILD_EXCLUDES=()
-if [[ "$DEPLOY_COMPONENTS" == services ]]; then BUILD_EXCLUDES=(--exclude "/build/"); fi
+if [[ "$DEPLOY_COMPONENTS" != all ]]; then BUILD_EXCLUDES=(--exclude "/build/"); fi
+if [[ "$DEPLOY_COMPONENTS" == admin ]]; then BUILD_EXCLUDES+=(--exclude "/backend/"); fi
 DEPLOY_HOST="${DEPLOY_HOST:?DEPLOY_HOST is required}"
 DEPLOY_USER="${DEPLOY_USER:-root}"
 APP_DIR="${APP_DIR:-/opt/reestr/app}"
@@ -52,11 +53,16 @@ else
   ssh "$SERVER" "mkdir -p '$REMOTE_RELEASE/build/web'; cp -a '${APP_DIR}/build/web/.' '$REMOTE_RELEASE/build/web/'"
 fi
 
+if [[ "$DEPLOY_COMPONENTS" == admin ]]; then
+  ssh "$SERVER" "mkdir -p '$REMOTE_RELEASE/backend'; cp -a '${APP_DIR}/backend/.' '$REMOTE_RELEASE/backend/'"
+fi
+
 ssh "$SERVER" "set -euo pipefail
 if [ -f '${APP_DIR}/backend/.env' ]; then
   mkdir -p '$REMOTE_RELEASE/backend'
   cp '${APP_DIR}/backend/.env' '$REMOTE_RELEASE/backend/.env'
 fi
+if [ '$DEPLOY_COMPONENTS' != admin ]; then
 cd '$REMOTE_RELEASE/backend'
 if [ -f .env ]; then
   set -a
@@ -68,6 +74,7 @@ npx prisma migrate deploy
 npx prisma generate
 npm run build
 npm test -- --runInBand
+fi
 
 cd '$REMOTE_RELEASE/admin'
 npm ci
@@ -96,7 +103,9 @@ PY
 fi
 
 ln -sfn '$REMOTE_RELEASE' /opt/reestr/current
-rsync -a --delete '$REMOTE_RELEASE/backend/' '${APP_DIR}/backend/'
+if [ '$DEPLOY_COMPONENTS' != admin ]; then
+  rsync -a --delete '$REMOTE_RELEASE/backend/' '${APP_DIR}/backend/'
+fi
 rsync -a --delete '$REMOTE_RELEASE/admin/' '${APP_DIR}/admin/'
 rsync -a --delete '$REMOTE_RELEASE/ops/' '${APP_DIR}/ops/'
 if [ '$DEPLOY_COMPONENTS' = all ]; then
@@ -107,11 +116,16 @@ install -m 0644 '${APP_DIR}/ops/reestr-backend.service' /etc/systemd/system/rees
 install -m 0644 '${APP_DIR}/ops/reestr-admin.service' /etc/systemd/system/reestr-admin.service
 nginx -t
 systemctl daemon-reload
-systemctl restart reestr-backend reestr-admin
+if [ '$DEPLOY_COMPONENTS' = admin ]; then
+  systemctl restart reestr-admin
+else
+  systemctl restart reestr-backend reestr-admin
+fi
 systemctl reload nginx
 for attempt in 1 2 3 4 5 6 7 8 9 10; do
   if curl -fsS http://127.0.0.1:3000/api/v1/health >/dev/null; then
     curl -fsS '${PUBLIC_ORIGIN}/api/v1/health' >/dev/null
+    curl -fsS --retry 3 --retry-delay 2 '${PUBLIC_ORIGIN}/admin/' >/dev/null
     exit 0
   fi
   sleep 2

@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { withRefreshedSession } from './lib/session-action';
 import {
   AdminUser,
   AuditRow,
@@ -473,22 +474,23 @@ export default function AdminDashboard() {
     setLegalDocuments([]);
   }
 
-  async function refresh() {
-    if (!token) return;
+  async function refresh(accessToken = token) {
+    if (!accessToken) return;
     setLoading(true);
     setError('');
     try {
-      const data = await getDashboardData(token, query, pages, dashboardOptions).catch(async (err) => {
+      const data = await getDashboardData(accessToken, query, pages, dashboardOptions).catch(async (err) => {
         if (!isUnauthorizedError(err)) throw err;
         const nextToken = await refreshSession();
         if (!nextToken) throw new Error('Session expired');
+        accessToken = nextToken;
         return getDashboardData(nextToken, query, pages, dashboardOptions);
       });
       applyDashboardData(data);
       const [nextBanners, nextEquipment, nextLegalDocuments] = await Promise.all([
-        getBanners(token),
-        getEquipment(token),
-        getLegalDocuments(token),
+        getBanners(accessToken),
+        getEquipment(accessToken),
+        getLegalDocuments(accessToken),
       ]);
       setBanners(nextBanners);
       setEquipment(nextEquipment);
@@ -707,11 +709,11 @@ export default function AdminDashboard() {
     });
   }
 
-  async function reloadSelectedOrganization(organizationId: string) {
-    if (!token) return;
+  async function reloadSelectedOrganization(organizationId: string, accessToken = token) {
+    if (!accessToken) return;
     const [detail, activity] = await Promise.all([
-      getOrganizationDetail(token, organizationId),
-      getOrganizationActivity(token, organizationId),
+      getOrganizationDetail(accessToken, organizationId),
+      getOrganizationActivity(accessToken, organizationId),
     ]);
     setSelectedOrganization(detail);
     setSelectedOrganizationActivity(activity);
@@ -1107,21 +1109,21 @@ export default function AdminDashboard() {
       return;
     }
     await runAction('Участник добавлен', async () => {
-      await addOrganizationMember(token, organizationId, memberUserId
+      const session = await withRefreshedSession(token, refreshSession, (actionToken) => addOrganizationMember(actionToken, organizationId, memberUserId
         ? { userId: memberUserId, role: memberRole }
         : {
             role: memberRole,
             fullName: memberName,
             phone: memberPhone,
             iin: memberIin,
-          });
+          }));
       setMemberOrgId('');
       setMemberUserId('');
       setMemberRole('inspector');
       setMemberName('');
       setMemberPhone('');
       setMemberIin('');
-      await refresh();
+      await refresh(session.token);
     });
   }
 
@@ -1159,16 +1161,16 @@ export default function AdminDashboard() {
       return;
     }
     await runAction('Номер контрольного органа добавлен', async () => {
-      await addOrganizationMember(token, controlOrgId, {
+      const session = await withRefreshedSession(token, refreshSession, (actionToken) => addOrganizationMember(actionToken, controlOrgId, {
         role: controlUserRole,
         fullName: controlUserName,
         phone: controlUserPhone,
-      });
+      }));
       setControlOrgId('');
       setControlUserName('');
       setControlUserPhone('');
       setControlUserRole('government');
-      await refresh();
+      await refresh(session.token);
     });
   }
 
@@ -1350,8 +1352,9 @@ export default function AdminDashboard() {
       return;
     }
     await runAction('Участник добавлен', async () => {
-      await addOrganizationMember(token, selectedOrganization.id, input);
-      await Promise.all([refresh(), reloadSelectedOrganization(selectedOrganization.id)]);
+      const organizationId = selectedOrganization.id;
+      const session = await withRefreshedSession(token, refreshSession, (actionToken) => addOrganizationMember(actionToken, organizationId, input));
+      await Promise.all([refresh(session.token), reloadSelectedOrganization(organizationId, session.token)]);
     });
   }
 

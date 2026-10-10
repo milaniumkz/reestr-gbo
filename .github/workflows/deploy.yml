@@ -19,6 +19,7 @@ on:
         options:
           - deploy
           - deploy-services
+          - deploy-admin
           - diagnose-members
           - status
           - logs
@@ -117,6 +118,7 @@ jobs:
           set -o pipefail
           case "${{ github.event.inputs.operation }}" in
             diagnose-members) bash ops/diagnose-members.sh ;;
+            deploy-admin) DEPLOY_COMPONENTS=admin bash ops/deploy-production.sh "$(git rev-parse HEAD)" ;;
             deploy-services) DEPLOY_COMPONENTS=services bash ops/deploy-production.sh "$(git rev-parse HEAD)" ;;
             inventory-inspection-data) bash ops/purge-inspection-data.sh inventory ;;
             purge-inspection-data) bash ops/purge-inspection-data.sh apply ;;
