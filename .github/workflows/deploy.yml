@@ -27,7 +27,6 @@ on:
 
 permissions:
   contents: read
-  statuses: write
 
 concurrency:
   group: production-deploy
@@ -95,6 +94,9 @@ jobs:
           echo 'APK: https://89-207-255-42.sslip.io/downloads/ersi-gbo.apk' >> "$GITHUB_STEP_SUMMARY"
 
   operate:
+    permissions:
+      contents: read
+      statuses: write
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.operation != 'deploy'
     runs-on: ubuntu-latest
     environment: production
@@ -132,7 +134,7 @@ jobs:
           for line in open(os.environ['RUNNER_TEMP']+'/operation.log'):
               try:
                   row=json.loads(line.strip())
-                  if isinstance(row,dict): rows.append(row)
+                  if isinstance(row,dict) and ('organizations' in row or 'inspectionOrganizations' in row): rows.append(row)
               except ValueError: pass
           if not rows: raise SystemExit('Missing operation counts')
           first,last=rows[0],rows[-1]
