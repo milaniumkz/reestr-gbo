@@ -43,6 +43,11 @@ const {AuthService}=require('./dist/src/auth/auth.service');
   for(let index=0;index<inspections.length;index++){
    const item=inspections[index];
    const author=authors.find(u=>u.id===item.createdById);
+   const lines=require('fs').readFileSync('/var/log/nginx/access.log','utf8').split('\n').filter(line=>line.includes('/api/v1/inspections/'+item.id));
+   const counts={};
+   for(const line of lines){const match=line.match(/"(GET|POST|PATCH) [^ ]+\/([a-z-]+)(?:\?[^ ]*)? HTTP\/[^" ]+" (\d{3})/);if(match){const key=match[1]+' '+match[2]+' '+match[3];counts[key]=(counts[key]||0)+1;}}
+   console.log(JSON.stringify({orgId:'inspector-http-'+index,name:JSON.stringify(counts),members:lines.length,additions:0,distinctAdditions:0,lastAddition:null}));
+
    const readiness=await inspectionsService.readiness(item.id,{sub:author.id,phone:author.phone,roles:['inspection_org']});
    console.log(JSON.stringify({orgId:'inspector-inspection-'+index,name:`status=${item.status}; missing=${readiness.missing.join(',')||'none'}`,members:readiness.ready?1:0,additions:readiness.photoTypes.length,distinctAdditions:0,lastAddition:item.createdAt}));
   }
