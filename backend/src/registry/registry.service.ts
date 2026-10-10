@@ -10,14 +10,16 @@ import { PrismaService } from "../prisma/prisma.service";
 export class RegistryService {
   constructor(private readonly prisma: PrismaService, private readonly storage: StorageService) {}
 
-  private withPhotoUrls<T extends { certificates: Array<{ inspection: { photos: Array<{ objectKey: string }> } }> }>(vehicle: T) {
+  private withPhotoUrls<T extends { certificates: Array<{ inspection: { photos: Array<{ objectKey: string; type: string }> } }> }>(vehicle: T, observer = false) {
     return {
       ...vehicle,
       certificates: vehicle.certificates.map(certificate => ({
         ...certificate,
         inspection: {
           ...certificate.inspection,
-          photos: certificate.inspection.photos.map(photo => ({
+          photos: certificate.inspection.photos
+            .filter(photo => !observer || ["certificate_document", "tech_passport"].includes(photo.type))
+            .map(photo => ({
             ...photo,
             viewUrl: this.storage.objectUrl(photo.objectKey).url,
           })),
@@ -134,7 +136,7 @@ export class RegistryService {
       }),
       this.prisma.vehicle.count({ where }),
     ]);
-    return listResponse(vehicles.map(vehicle => this.withPhotoUrls(vehicle)), total, page, limit ?? "20");
+    return listResponse(vehicles.map(vehicle => this.withPhotoUrls(vehicle, !hasGlobalAccess(user) && !user?.roles.includes("inspection_org"))), total, page, limit ?? "20");
   }
 
   async publicCertificateChecks(
@@ -272,7 +274,7 @@ export class RegistryService {
       return { found: false, item: null };
     }
     await this.savePublicCheck(plateNumber, plate, vin3, true, vehicle, meta);
-    return { found: true, item: this.withPhotoUrls(vehicle) };
+    return { found: true, item: this.withPhotoUrls(vehicle, true) };
   }
 
   private async savePublicCheck(

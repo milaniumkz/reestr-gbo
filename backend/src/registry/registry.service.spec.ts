@@ -125,19 +125,38 @@ describe('RegistryService.publicCertificateChecks', () => {
 
 describe('RegistryService attachment viewing', () => {
   const vehicle = { id: 'vehicle_1', certificates: [{ id: 'cert_1', number: 'CERT-1', inspection: {
-    organization: { name: 'IO' }, photos: [{ id: 'photo_1', objectKey: 'inspection/vehicle.jpg', type: 'vehicle_photo' }],
+    organization: { name: 'IO' }, photos: [
+      { id: 'photo_1', objectKey: 'inspection/certificate.jpg', type: 'certificate_document' },
+      { id: 'photo_2', objectKey: 'inspection/passport.jpg', type: 'tech_passport' },
+      { id: 'photo_3', objectKey: 'inspection/vehicle.jpg', type: 'vehicle_photo' },
+      { id: 'photo_4', objectKey: 'inspection/report.pdf', type: 'gas_inspection_report' },
+      { id: 'photo_5', objectKey: 'inspection/unknown.jpg', type: 'future_private_type' },
+    ],
   } }] };
   const storage = { objectUrl: jest.fn((key: string) => ({ url: `https://files.example/ersi-gbo/${key}` })) };
   it('returns working photo URLs for observer public certificate lookup', async () => {
     const prisma = { vehicle: { findFirst: jest.fn(async () => vehicle) }, publicCertificateCheck: { create: jest.fn(async () => ({ id: 'check_1' })) } };
     const result = await new RegistryService(prisma as never, storage as never).publicCertificateCheck('123ABC', '456');
     expect(result.found).toBe(true);
-    expect(result.item?.certificates[0].inspection.photos[0]).toMatchObject({ id: 'photo_1', viewUrl: 'https://files.example/ersi-gbo/inspection/vehicle.jpg' });
+    expect(result.item?.certificates[0].inspection.photos[0]).toMatchObject({ id: 'photo_1', viewUrl: 'https://files.example/ersi-gbo/inspection/certificate.jpg' });
     expect(vehicle.certificates[0].inspection.photos[0]).not.toHaveProperty('viewUrl');
+    expect(result.item?.certificates[0].inspection.photos.map(p => p.type)).toEqual(['certificate_document', 'tech_passport']);
   });
   it('returns the same photo URLs in scoped registry search', async () => {
     const prisma = { vehicle: { findMany: jest.fn(async () => [vehicle]), count: jest.fn(async () => 1) } };
     const result = await new RegistryService(prisma as never, storage as never).search({ sub: 'admin', phone: 'test', roles: ['super_admin'] }, '123ABC');
-    expect(result.items[0].certificates[0].inspection.photos[0].viewUrl).toBe('https://files.example/ersi-gbo/inspection/vehicle.jpg');
+    expect(result.items[0].certificates[0].inspection.photos[0].viewUrl).toBe('https://files.example/ersi-gbo/inspection/certificate.jpg');
+    expect(result.items[0].certificates[0].inspection.photos).toHaveLength(5);
   });
+  it('limits authenticated observer search to certificate and technical passport', async () => {
+    const prisma = { organizationMember: { findMany: jest.fn(async () => []) }, vehicle: { findMany: jest.fn(async () => [vehicle]), count: jest.fn(async () => 1) } };
+    const result = await new RegistryService(prisma as never, storage as never).search({ sub: 'observer', phone: 'test', roles: ['vehicle_owner'] }, '123ABC');
+    expect(result.items[0].certificates[0].inspection.photos.map(p => p.type)).toEqual(['certificate_document', 'tech_passport']);
+  });
+  it.each(['nca', 'government', 'inspection_org'])('preserves all documents for %s', async (role) => {
+    const prisma = { organizationMember: { findMany: jest.fn(async () => [{organizationId:'org_1'}]) }, vehicle: { findMany: jest.fn(async () => [vehicle]), count: jest.fn(async () => 1) } };
+    const result = await new RegistryService(prisma as never, storage as never).search({ sub: 'staff', phone: 'test', roles: [role] }, '123ABC');
+    expect(result.items[0].certificates[0].inspection.photos).toHaveLength(5);
+  });
+
 });

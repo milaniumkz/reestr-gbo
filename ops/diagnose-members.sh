@@ -58,6 +58,11 @@ const {AuthService}=require('./dist/src/auth/auth.service');
   const certificates=await db.certificate.findMany({take:5,orderBy:{issuedAt:'desc'},include:{inspection:{include:{photos:true}}}});
   const mapped=registry.withPhotoUrls({certificates});
   const photoUrls=mapped.certificates.flatMap(c=>c.inspection.photos.map(p=>p.viewUrl));
+  const observerPhotos=registry.withPhotoUrls({certificates},true).certificates.flatMap(c=>c.inspection.photos);
+  const forbidden=observerPhotos.filter(p=>!['certificate_document','tech_passport'].includes(p.type)).length;
+  if(forbidden)throw Error('Observer attachment visibility is incorrect');
+  console.log(JSON.stringify({orgId:'registry-observer-photos',name:'Observer allowed attachments; forbidden; full staff count',members:observerPhotos.length,additions:forbidden,distinctAdditions:photoUrls.length,lastAddition:null}));
+
   let accessible=0;
   for(const url of photoUrls){const response=await fetch(new URL(url,'https://89-207-255-42.sslip.io'),{method:'HEAD',signal:AbortSignal.timeout(10000)});if(response.ok)accessible++;}
   console.log(JSON.stringify({orgId:'registry-photo-urls',name:'Registry attachments: links and HTTP availability',members:photoUrls.length,additions:accessible,distinctAdditions:certificates.length,lastAddition:null}));
