@@ -35,6 +35,17 @@ const {AuthService}=require('./dist/src/auth/auth.service');
   const links=targetUser?targetMembers.filter(m=>m.userId===targetUser.id):[];
   console.log(JSON.stringify({orgId:'target-login',name:`Target: user=${!!targetUser}; org=${targetOrg?.type}/${targetOrg?.status}; blocked=${targetUser?.isBlocked}`,members:links.length,additions:targetMembers.length,distinctAdditions:targetUser?targetMembers.filter(m=>m.user.fullName===targetUser.fullName||!!targetUser.iin&&m.user.iin===targetUser.iin).length:0,lastAddition:null}));
   console.log(JSON.stringify({orgId:'target-contact',name:'Target phone equals organization contact',members:targetUser&&targetOrg?.contactPhone===targetUser.phone?1:0,additions:links.filter(m=>m.role==='admin').length,distinctAdditions:links.filter(m=>m.role==='inspector').length,lastAddition:null}));
+  const {InspectionsService}=require('./dist/src/inspections/inspections.service');
+  const inspectionsService=new InspectionsService(db, {}, {});
+  const authors=allUsers.filter(u=>/имишев/i.test(u.fullName)&&/марат/i.test(u.fullName));
+  const inspections=await db.inspection.findMany({where:{createdById:{in:authors.map(u=>u.id)}},orderBy:{createdAt:'desc'},take:5});
+  console.log(JSON.stringify({orgId:'inspector-inspections',name:'Requested inspector latest inspections',members:authors.length,additions:inspections.length,distinctAdditions:0,lastAddition:null}));
+  for(let index=0;index<inspections.length;index++){
+   const item=inspections[index];
+   const author=authors.find(u=>u.id===item.createdById);
+   const readiness=await inspectionsService.readiness(item.id,{sub:author.id,phone:author.phone,roles:['inspection_org']});
+   console.log(JSON.stringify({orgId:'inspector-inspection-'+index,name:`status=${item.status}; missing=${readiness.missing.join(',')||'none'}`,members:readiness.ready?1:0,additions:readiness.photoTypes.length,distinctAdditions:0,lastAddition:item.createdAt}));
+  }
   const denied=await db.auditLog.findMany({where:{action:'auth.inspection_otp_denied',createdAt:{gt:new Date(Date.now()-7200000)}},select:{actorId:true}});
   const ids=new Set(members.map(m=>m.userId));
   console.log(JSON.stringify({orgId:'login-denied-members',name:'Denials matching current IO staff',members:denied.length,additions:denied.filter(a=>ids.has(a.actorId)).length,distinctAdditions:0,lastAddition:null}));
