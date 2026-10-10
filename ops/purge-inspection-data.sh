@@ -20,7 +20,12 @@ set -euo pipefail
 remote_dir="$1"
 trap 'systemctl start reestr-backend reestr-admin; rm -rf -- "$remote_dir"' EXIT
 systemctl stop reestr-backend reestr-admin
-APP_DIR=/opt/reestr/app bash /opt/reestr/app/ops/backup-reestr.sh
+backup_output="$(APP_DIR=/opt/reestr/app bash /opt/reestr/app/ops/backup-reestr.sh)"
+printf '%s\n' "$backup_output"
+backup_dir="${backup_output##*Backup completed: }"
+test -s "$backup_dir/postgres.dump"
+pg_restore --list "$backup_dir/postgres.dump" >/dev/null
+tar -tzf "$backup_dir/storage.tar.gz" >/dev/null
 set -a
 source /opt/reestr/app/backend/.env
 set +a
