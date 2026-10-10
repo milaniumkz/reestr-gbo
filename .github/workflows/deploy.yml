@@ -160,6 +160,9 @@ jobs:
           for line in open(os.environ['RUNNER_TEMP']+'/operation.log'):
               try: row=json.loads(line)
               except ValueError: continue
-              description=f"{row['name'][:65]}: members={row['members']}; adds={row['additions']}; distinct={row['distinctAdditions']}; last={str(row['lastAddition'])[:19]}"[:140]
+              if row.get('kind') == 'http':
+                  description=f"Member HTTP codes={row['codes']}; last={row['last']}"[:140]
+              else:
+                  description=f"{row['name'][:65]}: members={row['members']}; adds={row['additions']}; distinct={row['distinctAdditions']}; last={str(row['lastAddition'])[:19]}"[:140]
               subprocess.run(['gh','api',f"repos/{os.environ['GITHUB_REPOSITORY']}/statuses/{os.environ['GITHUB_SHA']}",'-f','state=success','-f',f"context=member-diagnostics/{row['orgId']}",'-f',f'description={description}','--silent'],check=True)
           PYCODE
