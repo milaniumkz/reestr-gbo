@@ -2,6 +2,10 @@
 set -euo pipefail
 
 COMMIT_SHA="${1:-unknown}"
+DEPLOY_COMPONENTS="${DEPLOY_COMPONENTS:-all}"
+case "$DEPLOY_COMPONENTS" in all|services) ;; *) exit 2;; esac
+BUILD_EXCLUDES=()
+if [[ "$DEPLOY_COMPONENTS" == services ]]; then BUILD_EXCLUDES=(--exclude "/build/"); fi
 DEPLOY_HOST="${DEPLOY_HOST:?DEPLOY_HOST is required}"
 DEPLOY_USER="${DEPLOY_USER:-root}"
 APP_DIR="${APP_DIR:-/opt/reestr/app}"
@@ -17,11 +21,14 @@ if [ -x /usr/local/bin/backup-reestr.sh ]; then
   /usr/local/bin/backup-reestr.sh
 elif [ -x ${APP_DIR}/ops/backup-reestr.sh ]; then
   ${APP_DIR}/ops/backup-reestr.sh
+else
+  echo Backup-script-missing >&2
+  exit 1
 fi
 mkdir -p '$REMOTE_RELEASE'
 "
 
-rsync -az --delete \
+rsync -az --delete "${BUILD_EXCLUDES[@]}" \
   --exclude '.git' \
   --exclude '.dart_tool' \
   --include 'build/' \
@@ -38,8 +45,12 @@ rsync -az --delete \
   --exclude 'tmp' \
   "$ROOT_DIR/" "$SERVER:$REMOTE_RELEASE/"
 
-ssh "$SERVER" "mkdir -p '$REMOTE_RELEASE/build/web'"
-rsync -az --delete "$ROOT_DIR/build/web/" "$SERVER:$REMOTE_RELEASE/build/web/"
+if [[ "$DEPLOY_COMPONENTS" == all ]]; then
+  ssh "$SERVER" "mkdir -p '$REMOTE_RELEASE/build/web'"
+  rsync -az --delete "$ROOT_DIR/build/web/" "$SERVER:$REMOTE_RELEASE/build/web/"
+else
+  ssh "$SERVER" "mkdir -p '$REMOTE_RELEASE/build/web'; cp -a '${APP_DIR}/build/web/.' '$REMOTE_RELEASE/build/web/'"
+fi
 
 ssh "$SERVER" "set -euo pipefail
 if [ -f '${APP_DIR}/backend/.env' ]; then
@@ -63,6 +74,7 @@ npm ci
 NEXT_PUBLIC_API_URL='${PUBLIC_ORIGIN}/api/v1' npm run build
 
 cd '$REMOTE_RELEASE'
+if [ '$DEPLOY_COMPONENTS' = all ]; then
 test -f build/web/main.dart.js
 test -s build/web/downloads/ersi-gbo.apk
 (cd build/web/downloads && sha256sum -c ersi-gbo.apk.sha256)
@@ -81,12 +93,15 @@ s = s.replace(\"main.dart.js?v=' + buildVersion\", f\"main.{bid}.dart.js?v=' + b
 s = s.replace(\"build.mainJsPath === 'main.dart.js'\", f\"build.mainJsPath === 'main.{bid}.dart.js'\")
 p.write_text(s)
 PY
+fi
 
 ln -sfn '$REMOTE_RELEASE' /opt/reestr/current
 rsync -a --delete '$REMOTE_RELEASE/backend/' '${APP_DIR}/backend/'
 rsync -a --delete '$REMOTE_RELEASE/admin/' '${APP_DIR}/admin/'
 rsync -a --delete '$REMOTE_RELEASE/ops/' '${APP_DIR}/ops/'
-rsync -a --delete '$REMOTE_RELEASE/build/web/' '${APP_DIR}/build/web/'
+if [ '$DEPLOY_COMPONENTS' = all ]; then
+  rsync -a --delete '$REMOTE_RELEASE/build/web/' '${APP_DIR}/build/web/'
+fi
 printf '%s\n' '$COMMIT_SHA' > '${APP_DIR}/VERSION'
 install -m 0644 '${APP_DIR}/ops/reestr-backend.service' /etc/systemd/system/reestr-backend.service
 install -m 0644 '${APP_DIR}/ops/reestr-admin.service' /etc/systemd/system/reestr-admin.service

@@ -139,13 +139,14 @@ export function XlsxImportsTable({
         {canManage && (
           <form className="wideForm" onSubmit={onUpload}>
             <select name="organizationBin" defaultValue="">
-              <option value="">ИО из файла</option>
+              <option value="">ИО по названию из файла</option>
               {organizations.map((org) => (
                 <option key={org.id} value={org.bin}>
                   {org.name} · {org.bin}
                 </option>
               ))}
             </select>
+            <span>Срок аккредитации берется из карточки ИО.</span>
             <input name="file" type="file" accept=".xlsx" required />
             <button type="submit">Загрузить XLSX</button>
           </form>

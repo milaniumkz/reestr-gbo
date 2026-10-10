@@ -18,6 +18,7 @@ on:
         type: choice
         options:
           - deploy
+          - deploy-services
           - status
           - logs
           - restart
@@ -114,6 +115,7 @@ jobs:
         run: |
           set -o pipefail
           case "${{ github.event.inputs.operation }}" in
+            deploy-services) DEPLOY_COMPONENTS=services bash ops/deploy-production.sh "$(git rev-parse HEAD)" ;;
             inventory-inspection-data) bash ops/purge-inspection-data.sh inventory ;;
             purge-inspection-data) bash ops/purge-inspection-data.sh apply ;;
             *) bash ops/remote-operation.sh "${{ github.event.inputs.operation }}" ;;

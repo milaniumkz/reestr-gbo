@@ -949,11 +949,22 @@ export class CertificatesService {
     user?: RequestUser,
     organizationBin?: string,
   ) {
+    // A selected card takes priority over the workbook and user membership.
+    const selectedBin = organizationBin?.trim();
+    if (selectedBin) {
+      const organization = await this.prisma.organization.findFirst({
+        where: { bin: selectedBin, type: "inspection_org" },
+      });
+      if (!organization) throw new BadRequestException("Выбранный ИО не найден. Выберите существующую карточку ИО.");
+      return organization;
+    }
+
     if (user?.sub) {
       const membership = await this.prisma.organizationMember.findFirst({
         where: {
           userId: user.sub,
           role: { in: ["admin", "inspector", "inspection_org", "operator", "super_admin"] },
+          organization: { type: "inspection_org" },
         },
         include: { organization: true },
         orderBy: { createdAt: "desc" },
@@ -961,16 +972,15 @@ export class CertificatesService {
       if (membership?.organization) return membership.organization;
     }
 
-    const bin = organizationBin?.trim() || this.importOrganizationBin(name);
-    return this.prisma.organization.upsert({
-      where: { bin },
-      update: { name, type: "inspection_org" },
-      create: {
-        bin,
-        name,
-        type: "inspection_org",
-      },
+    const organizations = await this.prisma.organization.findMany({
+      where: { type: "inspection_org" },
     });
+    const normalizedName = this.normalizeOrganizationName(name).toLocaleUpperCase("ru");
+    const matches = organizations.filter((organization) =>
+      this.normalizeOrganizationName(organization.name).toLocaleUpperCase("ru") === normalizedName,
+    );
+    if (matches.length === 1) return matches[0];
+    throw new BadRequestException("Выберите существующий ИО из списка. Срок аккредитации берется из его карточки, а не из XLSX.");
   }
 
   private async parseCertificateXlsx(

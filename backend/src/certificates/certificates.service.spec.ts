@@ -320,3 +320,28 @@ describe('Public certificate accreditation', () => {
     });
   });
 });
+
+describe('XLSX issuing organization card', () => {
+  const card = { id: 'org_card', name: 'ТОО Карточка', bin: '123', type: 'inspection_org', accreditationValidFrom: new Date('2026-01-01'), accreditationValidUntil: new Date('2028-01-01') };
+  function resolver(prisma: unknown) {
+    return new CertificatesService(prisma as never, storageMock()) as unknown as {
+      resolveImportOrganization: (name: string, user?: { sub: string; phone: string; roles: string[] }, bin?: string) => Promise<typeof card>;
+    };
+  }
+  it('uses the selected card and its dates even when the workbook name differs', async () => {
+    const prisma = { organization: { findFirst: jest.fn(async () => card), upsert: jest.fn() }, organizationMember: { findFirst: jest.fn() } };
+    expect(await resolver(prisma).resolveImportOrganization('Other workbook IO', { sub: 'operator', phone: 'test', roles: ['operator'] }, '123')).toEqual(card);
+    expect(prisma.organizationMember.findFirst).not.toHaveBeenCalled();
+    expect(prisma.organization.upsert).not.toHaveBeenCalled();
+  });
+  it('matches a workbook name to an existing card without modifying accreditation', async () => {
+    const prisma = { organization: { findMany: jest.fn(async () => [card]), upsert: jest.fn() } };
+    expect(await resolver(prisma).resolveImportOrganization('ТОО «Карточка»')).toEqual(card);
+    expect(prisma.organization.upsert).not.toHaveBeenCalled();
+  });
+  it('asks for an existing card when no unambiguous IO exists', async () => {
+    const prisma = { organization: { findMany: jest.fn(async () => []), upsert: jest.fn() } };
+    await expect(resolver(prisma).resolveImportOrganization('Unknown IO')).rejects.toThrow('Выберите существующий ИО');
+    expect(prisma.organization.upsert).not.toHaveBeenCalled();
+  });
+});
