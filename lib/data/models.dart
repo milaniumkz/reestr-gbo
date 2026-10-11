@@ -75,6 +75,8 @@ class RegistryVehicle {
     this.cylinderVolume = '',
     this.reducerName = '',
     this.controlUnitName = '',
+    this.cylinderFuelType = '',
+    this.cylinderInspectedAt = '',
     this.cylinderProducedAt = '',
     this.cylinderValidUntil = '',
     this.organizationName = '',
@@ -114,6 +116,8 @@ class RegistryVehicle {
   final String cylinderVolume;
   final String reducerName;
   final String controlUnitName;
+  final String cylinderFuelType;
+  final String cylinderInspectedAt;
   final String cylinderProducedAt;
   final String cylinderValidUntil;
   final String organizationName;
@@ -171,6 +175,8 @@ class RegistryVehicle {
       cylinderVolume: cylinder['volumeLiters']?.toString() ?? '',
       reducerName: cylinder['reducerName']?.toString() ?? '',
       controlUnitName: cylinder['controlUnitName']?.toString() ?? '',
+      cylinderFuelType: cylinder['fuelType']?.toString() ?? '',
+      cylinderInspectedAt: cylinder['inspectedAt']?.toString().split('T').first ?? '',
       cylinderProducedAt:
           cylinder['producedAt']?.toString().split('T').first ?? '',
       cylinderValidUntil:
@@ -240,6 +246,8 @@ class RegistryVehicle {
       cylinderVolume: cylinder['volumeLiters']?.toString() ?? '',
       reducerName: cylinder['reducerName']?.toString() ?? '',
       controlUnitName: cylinder['controlUnitName']?.toString() ?? '',
+      cylinderFuelType: cylinder['fuelType']?.toString() ?? '',
+      cylinderInspectedAt: cylinder['inspectedAt']?.toString().split('T').first ?? '',
       cylinderProducedAt:
           cylinder['producedAt']?.toString().split('T').first ?? '',
       cylinderValidUntil:
@@ -485,6 +493,8 @@ class InspectionSummary {
     this.cylinderVolume = '',
     this.reducerName = '',
     this.controlUnitName = '',
+    this.cylinderFuelType = '',
+    this.cylinderInspectedAt = '',
     this.cylinderProducedAt = '',
     this.cylinderValidUntil = '',
     this.inspectionAddress = '',
@@ -531,6 +541,8 @@ class InspectionSummary {
   final String cylinderVolume;
   final String reducerName;
   final String controlUnitName;
+  final String cylinderFuelType;
+  final String cylinderInspectedAt;
   final String cylinderProducedAt;
   final String cylinderValidUntil;
   final String inspectionAddress;
@@ -616,6 +628,8 @@ class InspectionSummary {
       cylinderVolume: cylinder['volumeLiters']?.toString() ?? '',
       reducerName: cylinder['reducerName']?.toString() ?? '',
       controlUnitName: cylinder['controlUnitName']?.toString() ?? '',
+      cylinderFuelType: cylinder['fuelType']?.toString() ?? '',
+      cylinderInspectedAt: cylinder['inspectedAt']?.toString().split('T').first ?? '',
       cylinderProducedAt:
           cylinder['producedAt']?.toString().split('T').first ?? '',
       cylinderValidUntil:

@@ -171,6 +171,8 @@ model VehicleOwner {
 }
 
 model GasCylinder {
+  fuelType        String?
+  inspectedAt     DateTime?
   id              String    @id @default(uuid())
   vehicleId       String
   serialNumber    String

@@ -1361,8 +1361,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       if (vehicleVin.trim().isEmpty) 'VIN',
       if (cylinderNumber.trim().isEmpty) 'номер баллона',
       if (cylinderVolume.trim().isEmpty) 'объем баллона',
-      if (draftInspectionId == null &&
-          !const ['СНГ', 'КПГ'].contains(cylinderFuel.trim()))
+      if (!const ['СНГ', 'КПГ'].contains(cylinderFuel.trim()))
         'вид топлива',
       if (reducerName.trim().isEmpty) 'название редуктора',
       if (controlUnitName.trim().isEmpty)
@@ -1376,16 +1375,6 @@ class _ErsiDemoState extends State<ErsiDemo> {
     final certificateNumber = _normalizeCertificateNumber(
       inspectionCertificateNumber,
     );
-    if (draftInspectionId != null && draftVehicleId != null) {
-      final detail = await repositories.inspections.updateData(
-        inspectionId: draftInspectionId!,
-        vehicleId: draftVehicleId!,
-        certificateNumber: certificateNumber,
-      );
-      selectedInspection = detail;
-      await _loadMyInspections();
-      return draftInspectionId!;
-    }
     final makeModelParts = vehicleMakeModel.trim().split(RegExp(r'\s+'));
     final make = makeModelParts.isEmpty || makeModelParts.first.isEmpty
         ? 'Не указано'
@@ -1400,9 +1389,9 @@ class _ErsiDemoState extends State<ErsiDemo> {
       model: model,
       year: null,
       ownerPhone:
-          '+7000${vehicleVin.trim().hashCode.abs().toString().padLeft(9, '0').substring(0, 9)}',
+          ownerPhone.trim().isNotEmpty ? ownerPhone.trim() : '+7000${vehicleVin.trim().hashCode.abs().toString().padLeft(9, '0').substring(0, 9)}',
       ownerName: ownerName.trim().isEmpty ? 'Владелец ТС' : ownerName.trim(),
-      ownerIin: '',
+      ownerIin: ownerId.trim(),
       ownerAddress: ownerAddress.trim(),
       cylinderSerial: cylinderNumber.trim(),
       cylinderManufacturer: cylinderMaker.trim().isEmpty
@@ -1410,6 +1399,8 @@ class _ErsiDemoState extends State<ErsiDemo> {
           : cylinderMaker.trim(),
       volumeLiters: int.tryParse(cylinderVolume.trim()) ?? 0,
       producedYear: cylinderYear.trim(),
+      fuelType: cylinderFuel.trim(),
+      inspectionDate: _dateOnly(inspectionIssuedAt),
       reducerName: reducerName.trim(),
       controlUnitName: controlUnitName.trim(),
     );
@@ -1868,7 +1859,9 @@ class _ErsiDemoState extends State<ErsiDemo> {
         ownerName = detail.ownerName;
         ownerPhone = detail.ownerPhone;
         ownerAddress = detail.ownerAddress;
-        inspectionIssuedAt = detail.certificateIssuedAt.isNotEmpty
+        inspectionIssuedAt = detail.cylinderInspectedAt.isNotEmpty
+            ? detail.cylinderInspectedAt
+            : detail.certificateIssuedAt.isNotEmpty
             ? detail.certificateIssuedAt
             : detail.createdAt.isNotEmpty
             ? detail.createdAt
@@ -1882,6 +1875,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         cylinderVolume = detail.cylinderVolume;
         reducerName = detail.reducerName;
         controlUnitName = detail.controlUnitName;
+        cylinderFuel = detail.cylinderFuelType;
         cylinderYear = detail.cylinderProducedAt.split('-').first;
         cylinderPhotoUploaded = fileTypes.contains('cylinder_label');
         vehiclePhotoUploaded = fileTypes.contains('vehicle_photo');
@@ -3805,6 +3799,7 @@ class _Certificate extends StatelessWidget {
             const SizedBox(height: 10),
             _CertificateDetailsCard(
               rows: [
+                (Icons.local_fire_department_rounded, 'ТИП ГАЗА', item.cylinderFuelType.isEmpty ? 'Не указан' : item.cylinderFuelType),
                 (
                   Icons.horizontal_rule_rounded,
                   'БАЛЛОН',
@@ -4290,6 +4285,7 @@ class _InspectionDetailScreen extends StatelessWidget {
             const SizedBox(height: 10),
             _CertificateDetailsCard(
               rows: [
+                (Icons.local_fire_department_rounded, 'ТИП ГАЗА', item.cylinderFuelType.isEmpty ? 'Не указан' : item.cylinderFuelType),
                 (
                   Icons.horizontal_rule_rounded,
                   'БАЛЛОН',

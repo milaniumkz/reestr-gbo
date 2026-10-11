@@ -37,6 +37,8 @@ export class VehiclesController {
       volumeLiters: number;
       reducerName?: string;
       controlUnitName?: string;
+      fuelType?: string;
+      inspectedAt?: string;
       producedAt?: string;
       validUntil: string;
     };

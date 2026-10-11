@@ -1,3 +1,4 @@
+import { inspectionPeriod } from '../common/inspection-period';
 import {
   BadRequestException,
   Injectable,
@@ -280,12 +281,14 @@ export class CertificatesService {
 
     const inspection = await this.prisma.inspection.findUnique({
       where: { id: inspectionId },
-      include: { vehicle: true },
+      include: { vehicle: { include: { cylinders: true } } },
     });
     if (!inspection) throw new NotFoundException("Inspection not found");
 
-    const validUntil = new Date();
-    validUntil.setFullYear(validUntil.getFullYear() + 2);
+    const cylinder = inspection.vehicle.cylinders?.[0];
+    const validUntil = cylinder?.fuelType
+      ? inspectionPeriod(cylinder.fuelType, cylinder.inspectedAt ?? inspection.createdAt).validUntil
+      : new Date(new Date().setFullYear(new Date().getFullYear() + 2));
 
     const number =
       inspection.certificateNumber?.trim() || (await this.nextNumber());
@@ -302,6 +305,7 @@ export class CertificatesService {
         number,
         vehicleId: inspection.vehicleId,
         inspectionId,
+        issuedAt: cylinder?.inspectedAt ?? inspection.createdAt,
         validUntil,
         qrPayload: `${number}:${inspection.vehicle.vin}`,
       },

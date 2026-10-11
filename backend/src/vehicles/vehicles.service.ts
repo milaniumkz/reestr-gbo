@@ -1,3 +1,4 @@
+import { inspectionPeriod } from '../common/inspection-period';
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { RequestUser } from "../common/current-user";
@@ -65,10 +66,15 @@ export class VehiclesService {
       volumeLiters: number;
       reducerName?: string;
       controlUnitName?: string;
+      fuelType?: string;
+      inspectedAt?: string;
       producedAt?: string;
       validUntil: string;
     };
   }, user?: RequestUser) {
+    const period = input.cylinder.fuelType
+      ? inspectionPeriod(input.cylinder.fuelType, input.cylinder.inspectedAt ?? new Date())
+      : undefined;
     const ownerUser = await this.prisma.user.upsert({
       where: { phone: input.owner.phone },
       update: {
@@ -153,7 +159,7 @@ export class VehiclesService {
               producedAt: input.cylinder.producedAt
                 ? new Date(input.cylinder.producedAt)
                 : undefined,
-              validUntil: new Date(input.cylinder.validUntil),
+              ...(period ?? { validUntil: new Date(input.cylinder.validUntil) }),
             },
           });
         } else {
@@ -167,7 +173,7 @@ export class VehiclesService {
               producedAt: input.cylinder.producedAt
                 ? new Date(input.cylinder.producedAt)
                 : undefined,
-              validUntil: new Date(input.cylinder.validUntil),
+              ...(period ?? { validUntil: new Date(input.cylinder.validUntil) }),
             },
           });
         }
