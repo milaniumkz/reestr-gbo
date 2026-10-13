@@ -204,6 +204,7 @@ model Inspection {
   submittedAt       DateTime?
   qualityDocumentUploadedAt DateTime?
   qualityConfirmedAt DateTime?
+  requireApplicantPhotos Boolean @default(false)
   qualityReviewerId String?
   qualityReviewStartedAt DateTime?
   qualityConfirmedById String?

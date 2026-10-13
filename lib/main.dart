@@ -35,7 +35,10 @@ const designWidth = 430.0;
 const designHeight = 932.0;
 const pagePadding = 22.0;
 const cardRadius = 18.0;
+const protectedInspectionDocuments = <String>{'gas_work_record', 'cylinder_work_record', 'gas_inspection_report', 'cylinder_inspection_report'};
 const inspectionPackageDocuments = <String, String>{
+  'applicant_application': 'Заявка заявителя',
+  'applicant_questionnaire': 'Анкета оценки заявителя',
   'gas_work_record': 'Рабочая запись ГБО (подписи)',
   'cylinder_work_record': 'Рабочая запись баллона (подписи)',
   'gas_inspection_report': 'Отчет инспекции ГБО (подпись и печать)',
@@ -628,7 +631,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         setState(() {
           myInspections = items;
           if (!silent) apiState = 'Инспекции загружены';
-          if (_isQualityControl && _qualityQueueTimer == null) _qualityQueueTimer = Timer.periodic(const Duration(seconds: 15), (_) { if (mounted && _isQualityControl && [14,24,25,26,27,28].contains(screen)) unawaited(_loadMyInspections(silent: true)); });
+          if (_isQualityControl && _qualityQueueTimer == null) { _qualityQueueTimer = Timer.periodic(const Duration(seconds: 15), (_) { if (mounted && _isQualityControl && [14,24,25,26,27,28].contains(screen)) { unawaited(_loadMyInspections(silent: true)); } }); }
         });
       }
     } catch (_) {
@@ -1107,7 +1110,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
           final inspection = await repositories.inspections.detail(
             importResult.inspectionId,
           );
-          await _continueInspectionDraft(inspection);
+          await _continueInspectionDraft(inspection, forceDataStep: inspection.status == 'rejected');
         } catch (_) {
           if (!mounted) return;
           setState(
@@ -1346,7 +1349,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
   }
 
   Future<void> _pickInspectionDocument(String type, String label, {bool camera = false}) async {
-    if (_isQualityControl) {
+    if (_isQualityControl && protectedInspectionDocuments.contains(type)) {
       setState(() => apiState = 'Рабочие записи и отчёты доступны только для просмотра');
       return;
     }
@@ -1363,7 +1366,8 @@ class _ErsiDemoState extends State<ErsiDemo> {
         if (mounted) setState(() => apiState = 'Документ не выбран');
         return;
       }
-      final bytes = file.bytes;
+      final selectedFile = file;
+      final bytes = selectedFile.bytes;
       if (bytes.isEmpty) {
         if (mounted) setState(() => apiState = 'Файл пустой');
         return;
@@ -1375,11 +1379,11 @@ class _ErsiDemoState extends State<ErsiDemo> {
         if (position != null) nextDocumentPositions[type] = position;
         setState(() {
           if (position != null) lastKnownInspectionPosition = position;
-          packageDocumentNames = {...packageDocumentNames, type: file.name};
+          packageDocumentNames = {...packageDocumentNames, type: selectedFile.name};
           packageDocumentBytes = {...packageDocumentBytes, type: bytes};
           packageDocumentPositions = nextDocumentPositions;
           packageDocumentUploaded = {...packageDocumentUploaded, type: false};
-          documentFileName = file.name;
+          documentFileName = selectedFile.name;
           apiState = position == null
               ? 'Документ выбран. Координаты будут взяты из данных ИО, если браузер их не отдаст.'
               : 'Документ выбран: $label';
@@ -1880,7 +1884,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
 
   Future<void> _openInspectionDetail(InspectionSummary inspection) async {
     if (!_isQualityControl && (inspection.status == 'draft' || inspection.status == 'rejected')) {
-      await _continueInspectionDraft(inspection);
+      await _continueInspectionDraft(inspection, forceDataStep: inspection.status == 'rejected');
       return;
     }
     setState(() => apiState = 'Загрузка инспекции');
@@ -2281,6 +2285,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         names: packageDocumentNames,
         uploaded: packageDocumentUploaded,
         readOnly: _isQualityControl,
+        requireApplicantPhotos: !_editingQualityInspection || selectedInspection?.requireApplicantPhotos == true,
         onCamera: (type, label) => _pickInspectionDocument(type, label, camera: true),
         onUpload: _pickInspectionDocument,
         onNext: () => go(23),
@@ -5726,6 +5731,7 @@ class _DocumentScanStep extends StatelessWidget {
     required this.onUpload,
     required this.onCamera,
     this.readOnly = false,
+    this.requireApplicantPhotos = true,
     required this.onNext,
   });
   final Map<String, String> names;
@@ -5733,16 +5739,15 @@ class _DocumentScanStep extends StatelessWidget {
   final void Function(String type, String label) onUpload;
   final void Function(String type, String label) onCamera;
   final bool readOnly;
+  final bool requireApplicantPhotos;
   final VoidCallback onNext;
 
   @override
   Widget build(BuildContext context) {
-    final allSelected = inspectionPackageDocuments.keys.every(
-      names.containsKey,
-    );
+    final allSelected = inspectionPackageDocuments.keys.where((type) => requireApplicantPhotos || protectedInspectionDocuments.contains(type)).every(names.containsKey);
     return _AppScreen(
       title: 'Пакет документов',
-      subtitle: '4 обязательных файла',
+      subtitle: requireApplicantPhotos ? '6 обязательных файлов' : 'Документы инспекции',
       activeNav: 1,
       leadingBack: true,
       paymentNav: true,
@@ -5765,10 +5770,10 @@ class _DocumentScanStep extends StatelessWidget {
                   : Icons.upload_file_rounded,
               title: entry.value,
               subtitle: names[entry.key] ?? 'PDF, JPG, PNG',
-              status: readOnly ? 'Зафиксировано' : uploaded[entry.key] == true ? 'Загружено' : names.containsKey(entry.key) ? 'Выбрано' : 'Выбрать',
-              onTap: readOnly ? null : () => onUpload(entry.key, entry.value),
+              status: readOnly && protectedInspectionDocuments.contains(entry.key) ? 'Зафиксировано' : uploaded[entry.key] == true ? 'Загружено' : names.containsKey(entry.key) ? 'Выбрано' : 'Выбрать',
+              onTap: readOnly && protectedInspectionDocuments.contains(entry.key) ? null : () => onUpload(entry.key, entry.value),
             ),
-            if (!readOnly) Row(children: [
+            if (!readOnly || !protectedInspectionDocuments.contains(entry.key)) Row(children: [
               Expanded(child: _PrimaryButton(text: 'Файл', icon: Icons.upload_file_rounded, onTap: () => onUpload(entry.key, entry.value))),
               const SizedBox(width: 8),
               Expanded(child: _PrimaryButton(text: 'Камера', icon: Icons.camera_alt_rounded, onTap: () => onCamera(entry.key, entry.value))),

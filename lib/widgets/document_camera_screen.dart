@@ -25,7 +25,7 @@ class _DocumentCameraScreenState extends State<DocumentCameraScreen> with Widget
     try {
       final cameras = await availableCameras();
       if (!mounted) return;
-      if (cameras.isEmpty) throw StateError('Камера не найдена');
+      if (cameras.isEmpty) { throw StateError('Камера не найдена'); }
       final camera = cameras.firstWhere((c) => c.lensDirection == CameraLensDirection.back, orElse: () => cameras.first);
       final controller = CameraController(camera, ResolutionPreset.high, enableAudio: false);
       _controller = controller;
@@ -56,7 +56,7 @@ class _DocumentCameraScreenState extends State<DocumentCameraScreen> with Widget
       final file = PickedLocalFile(name: photo.name, bytes: await photo.readAsBytes());
       if (mounted) Navigator.of(context).pop(file);
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Не удалось сделать фото. Попробуйте ещё раз.')));
+      if (mounted) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Не удалось сделать фото. Попробуйте ещё раз.'))); }
     } finally { if (mounted) setState(() => _busy = false); }
   }
   @override

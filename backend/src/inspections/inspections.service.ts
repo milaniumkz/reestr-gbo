@@ -186,6 +186,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
         lng,
         address,
         createdById: user?.sub,
+        requireApplicantPhotos: true,
       },
     });
     await this.prisma.auditLog.create({
@@ -266,6 +267,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       where: { id, status: existing.status, ...(["quality_approved","rejected"].includes(status) && existing.status === "submitted" ? {qualityReviewerId:user?.sub} : {}), ...(status === "quality_approved" ? { qualityDocumentUploadedAt: existing.qualityDocumentUploadedAt } : {}) },
       data: {
         status,
+        requireApplicantPhotos: status === "submitted" ? true : undefined,
         qualityDocumentUploadedAt: ["submitted", "rejected", "draft"].includes(status) ? null : undefined,
         qualityReviewerId: ["submitted","rejected","draft"].includes(status) ? null : undefined,
         qualityReviewStartedAt: ["submitted","rejected","draft"].includes(status) ? null : undefined,
@@ -472,6 +474,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       "cylinder_label",
       "vehicle_photo",
       "tech_passport",
+      ...(["draft", "rejected"].includes(inspection.status) || inspection.requireApplicantPhotos ? ["applicant_application", "applicant_questionnaire"] : []),
       "gas_work_record",
       "cylinder_work_record",
       "gas_inspection_report",
@@ -558,7 +561,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
     if (type === "certificate_document") {
       await this.claimQualityReview(user,id);
       if (inspection.status !== "submitted") throw new BadRequestException("Свидетельство загружается на этапе контроля качества");
-    } else if (inspection.status === "submitted" && ["cylinder_label", "vehicle_photo", "tech_passport"].includes(type)) {
+    } else if (inspection.status === "submitted" && ["cylinder_label", "vehicle_photo", "tech_passport", "applicant_application", "applicant_questionnaire"].includes(type)) {
       await this.claimQualityReview(user,id);
     } else if (!["draft", "rejected"].includes(inspection.status)) {
       throw new BadRequestException("Документы инспектора зафиксированы. Верните инспекцию на исправление");

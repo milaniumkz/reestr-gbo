@@ -6,7 +6,7 @@ import 'local_file.dart';
 
 Future<PickedLocalFile?> captureDocumentPhoto({double frameAspectRatio = 0.71}) async {
   final devices = html.window.navigator.mediaDevices;
-  if (devices == null) throw StateError('Камера недоступна. Откройте веб-версию по HTTPS.');
+  if (devices == null) { throw StateError('Камера недоступна. Откройте веб-версию по HTTPS.'); }
   final stream = await devices.getUserMedia({
     'audio': false,
     'video': {'facingMode': {'ideal': 'environment'}, 'width': {'ideal': 1800}},
@@ -55,7 +55,7 @@ Future<PickedLocalFile?> captureDocumentPhoto({double frameAspectRatio = 0.71}) 
     final ready = video.onLoadedMetadata.first;
     video.srcObject = stream;
     final canStart = await Future.any<bool>([ready.timeout(const Duration(seconds: 15)).then((_) => true), result.future.then((_) => false)]);
-    if (!canStart || result.isCompleted) return await result.future;
+    if (!canStart || result.isCompleted) { return await result.future; }
     await video.play();
     capture.disabled = false;
     return await result.future.timeout(const Duration(minutes: 5), onTimeout: () => null);

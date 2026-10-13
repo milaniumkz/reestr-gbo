@@ -207,7 +207,7 @@ describe('Inspection quality control workflow', () => {
       qualityReviewStartedAt: null as Date | null,
       qualityReviewer: null as {id:string;fullName:string}|null,
       vehicleId:'vehicle_1',
-      photos: ['cylinder_label','vehicle_photo','tech_passport','gas_work_record','cylinder_work_record','gas_inspection_report','cylinder_inspection_report'].map(type => ({ id:type, type, objectKey:type })),
+      photos: ['applicant_application','applicant_questionnaire','cylinder_label','vehicle_photo','tech_passport','gas_work_record','cylinder_work_record','gas_inspection_report','cylinder_inspection_report'].map(type => ({ id:type, type, objectKey:type })),
       vehicle: { cylinders:[{}], owners:[{}] },
     };
     const prisma = {

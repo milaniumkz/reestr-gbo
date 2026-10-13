@@ -510,6 +510,7 @@ class InspectionSummary {
     this.qualityDocumentUploaded = false,
     this.qualityConfirmedAt = '',
     this.qualityConfirmedByName = '',
+    this.requireApplicantPhotos = false,
     this.qualityReviewerId = '',
     this.qualityReviewerName = '',
     this.qualityReviewStartedAt = '',
@@ -561,6 +562,7 @@ class InspectionSummary {
   final bool qualityDocumentUploaded;
   final String qualityConfirmedAt;
   final String qualityConfirmedByName;
+  final bool requireApplicantPhotos;
   final String qualityReviewerId;
   final String qualityReviewerName;
   final String qualityReviewStartedAt;
@@ -655,6 +657,7 @@ class InspectionSummary {
       qualityDocumentUploaded: json['qualityDocumentUploadedAt'] != null,
       qualityConfirmedAt: json['qualityConfirmedAt']?.toString() ?? '',
       qualityConfirmedByName: qualityConfirmedBy['fullName']?.toString() ?? '',
+      requireApplicantPhotos: json['requireApplicantPhotos'] == true,
       qualityReviewerId: json['qualityReviewerId']?.toString() ?? '',
       qualityReviewerName: qualityReviewer['fullName']?.toString() ?? '',
       qualityReviewStartedAt: json['qualityReviewStartedAt']?.toString() ?? '',
