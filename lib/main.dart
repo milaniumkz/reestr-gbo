@@ -2280,7 +2280,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       15 => _OwnerStep(
         reviewFiles:
             selectedInspection?.files
-                .where((file) => ['tech_passport'].contains(file.type))
+                .where((file) => ['applicant_application', 'tech_passport'].contains(file.type))
                 .toList() ??
             const [],
         inspectionDate: inspectionIssuedAt,
@@ -4486,10 +4486,11 @@ class _InspectionDetailScreen extends StatelessWidget {
             const SizedBox(height: 10),
             _QualityDataWithPhotos(
               enabled: qualityLayout,
+              photoColumns: const ['applicant_application', 'tech_passport'],
               files: files
                   .where(
                     (file) =>
-                        ['vehicle_photo', 'tech_passport'].contains(file.type),
+                        ['applicant_application', 'tech_passport'].contains(file.type),
                   )
                   .toList(),
               child: _CertificateDetailsCard(
@@ -4518,7 +4519,7 @@ class _InspectionDetailScreen extends StatelessWidget {
                   ),
                   (
                     Icons.home_rounded,
-                    'МЕСТО ЖИТЕЛЬСТВА',
+                    'АДРЕС ВЛАДЕЛЬЦА ТРАНСПОРТА',
                     item.ownerAddress.isEmpty
                         ? 'Не указано'
                         : item.ownerAddress,
@@ -4615,7 +4616,7 @@ class _InspectionDetailScreen extends StatelessWidget {
                     !qualityLayout ||
                     ![
                       'certificate_document',
-                      'vehicle_photo',
+                      'applicant_application',
                       'tech_passport',
                       'cylinder_label',
                     ].contains(file.type),
@@ -4636,13 +4637,46 @@ class _QualityDataWithPhotos extends StatelessWidget {
     required this.enabled,
     required this.files,
     required this.child,
+    this.photoColumns = const [],
   });
+  final List<String> photoColumns;
   final bool enabled;
   final List<InspectionFileInfo> files;
   final Widget child;
   @override
   Widget build(BuildContext context) {
-    if (!enabled || files.isEmpty) return child;
+    if (!enabled) return child;
+    if (photoColumns.isNotEmpty) {
+      final columns = <Widget>[
+        child,
+        for (final type in photoColumns)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (!files.any((file) => file.type == type))
+                _InfoBox(title: inspectionRequiredLabels[type] ?? type, text: 'Фото не загружено'),
+              for (final file in files.where((file) => file.type == type))
+                Padding(padding: const EdgeInsets.only(bottom: 12), child: _InspectionFileCard(file: file)),
+            ],
+          ),
+      ];
+      return LayoutBuilder(builder: (context, constraints) {
+        final width = constraints.maxWidth < 900 ? 900.0 : constraints.maxWidth;
+        final row = SizedBox(width: width, child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var index = 0; index < columns.length; index++) ...[
+              if (index > 0) const SizedBox(width: 16),
+              Expanded(child: columns[index]),
+            ],
+          ],
+        ));
+        return constraints.maxWidth < 900
+            ? SingleChildScrollView(scrollDirection: Axis.horizontal, child: row)
+            : row;
+      });
+    }
+    if (files.isEmpty) return child;
     final photos = Column(
       children: [
         for (final file in files)
@@ -5614,6 +5648,7 @@ class _OwnerStep extends StatelessWidget {
       paymentNav: true,
       child: _QualityDataWithPhotos(
         enabled: editingQuality,
+        photoColumns: const ['applicant_application', 'tech_passport'],
         files: reviewFiles,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -5640,7 +5675,7 @@ class _OwnerStep extends StatelessWidget {
               onChanged: onOwnerName,
             ),
             _Input(
-              label: 'Адрес проживания клиента',
+              label: 'Адрес владельца транспорта',
               value: ownerAddress,
               hint: 'Введите адрес проживания',
               onChanged: onOwnerAddress,
