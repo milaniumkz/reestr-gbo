@@ -648,6 +648,10 @@ export function removeUserRole(token: string, id: string, role: string) {
   return del<{ role: string }>(`/users/${id}/roles/${role}`, token);
 }
 
+export function deleteInspection(token: string, id: string) {
+  return del<{ ok: boolean }>(`/inspections/${id}`, token);
+}
+
 export function setInspectionStatus(token: string, id: string, status: string) {
   return patch<Inspection>(`/inspections/${id}/status`, { status }, token);
 }

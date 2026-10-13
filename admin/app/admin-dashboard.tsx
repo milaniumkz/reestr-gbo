@@ -31,6 +31,7 @@ import {
   deleteEquipment,
   deleteLegalDocument,
   deleteOrganization,
+  deleteInspection,
   deleteNotification,
   getInspectionReadiness,
   getDashboardData,
@@ -302,6 +303,7 @@ export default function AdminDashboard() {
     submitted?: Inspection[];
     approved?: Inspection[];
   } | null>(null);
+  const [deletingInspectionId, setDeletingInspectionId] = useState<string | null>(null);
   const [selectedInspection, setSelectedInspection] = useState<Inspection | null>(null);
   const [selectedInspectionAudit, setSelectedInspectionAudit] = useState<AuditRow[]>([]);
   const [selectedImportJob, setSelectedImportJob] = useState<CertificateImportJob | null>(null);
@@ -1471,6 +1473,22 @@ export default function AdminDashboard() {
     });
   }
 
+  async function removeInspection(row: Inspection) {
+    if (!token || !user?.roles.includes('super_admin') || deletingInspectionId) return;
+    const number = row.certificate?.number ?? row.certificateNumber ?? row.id;
+    if (!window.confirm(`Удалить инспекцию № ${number} (${row.vehicle?.plateNumber ?? row.vehicle?.vin ?? row.id})?\n\nИнспекция и связанное с ней свидетельство будут удалены из реестра. Отменить удаление нельзя.`)) return;
+    setDeletingInspectionId(row.id);
+    try {
+      await runAction('Инспекция удалена', async () => {
+        await deleteInspection(token, row.id);
+        if (selectedInspection?.id === row.id) closeDetails();
+        await refresh();
+      });
+    } finally {
+      setDeletingInspectionId(null);
+    }
+  }
+
   async function changeInspectionStatus(row: Inspection, status: string) {
     if (!token) return;
     await runAction('Статус инспекции обновлен', async () => {
@@ -1975,6 +1993,9 @@ export default function AdminDashboard() {
             inspections={filtered.inspections}
             organizations={organizations}
             canManage={canManage}
+            canDelete={Boolean(user?.roles.includes('super_admin'))}
+            deletingId={deletingInspectionId}
+            onDelete={removeInspection}
             statusFilter={inspectionStatusFilter}
             organizationFilter={inspectionOrganizationFilter}
             dateFrom={inspectionDateFrom}

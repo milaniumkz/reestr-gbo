@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  NotFoundException,
   OnModuleDestroy,
   OnModuleInit,
 } from "@nestjs/common";
@@ -193,6 +194,30 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       },
     });
     return inspection;
+  }
+
+  async remove(user: RequestUser | undefined, id: string) {
+    if (!user?.roles.includes("super_admin")) {
+      throw new ForbiddenException("Удаление инспекций доступно только главному администратору");
+    }
+    return this.prisma.$transaction(async (tx) => {
+      const inspection = await tx.inspection.findUnique({
+        where: { id }, include: { certificate: true },
+      });
+      if (!inspection) throw new NotFoundException("Инспекция не найдена");
+      await tx.auditLog.create({ data: {
+        actorId: user.sub, action: "inspection.delete", entity: "inspection", entityId: id,
+        metadata: { organizationId: inspection.organizationId, vehicleId: inspection.vehicleId,
+          status: inspection.status, certificateNumber: inspection.certificate?.number ?? inspection.certificateNumber,
+          certificateId: inspection.certificate?.id ?? null },
+      } });
+      if (inspection.certificate) {
+        await tx.certificateImportJob.updateMany({ where: { certificateId: inspection.certificate.id }, data: { certificateId: null } });
+        await tx.certificate.delete({ where: { id: inspection.certificate.id } });
+      }
+      await tx.inspection.delete({ where: { id } });
+      return { ok: true };
+    });
   }
 
   async setStatus(user: RequestUser | undefined, id: string, status: string, confirmed?: boolean) {

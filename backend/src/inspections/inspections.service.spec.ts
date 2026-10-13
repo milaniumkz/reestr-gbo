@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { describe, expect, it, jest } from '@jest/globals';
 import { InspectionsService } from './inspections.service';
 
@@ -275,4 +275,54 @@ describe('Inspection quality control workflow', () => {
     await expect(f.service.uploadPhoto('inspection_1','gas_work_record',{originalname:'doc.pdf',buffer:Buffer.from('document')},f.user('inspector'))).rejects.toThrow('зафиксированы');
     expect(f.storage.putObject).not.toHaveBeenCalled();
   });
+});
+
+
+describe('InspectionsService.remove', () => {
+  const admin = { sub: 'root', phone: 'test', roles: ['super_admin'] };
+  function fixture(certificate: {id:string;number:string} | null = {id:'cert_1',number:'10022'}) {
+    const tx = {
+      inspection: { findUnique: jest.fn(async () => ({id:'inspection_1', organizationId:'org_1',vehicleId:'vehicle_1',status:'approved',certificateNumber:'10022',certificate})), delete: jest.fn(async () => ({})) },
+      certificate: { delete: jest.fn(async () => ({})) },
+      certificateImportJob: { updateMany: jest.fn(async () => ({count:1})) },
+      auditLog: { create: jest.fn(async () => ({})) },
+    };
+    const transaction = jest.fn(async (callback:any) => callback(tx));
+    return {tx,transaction,service:new InspectionsService({$transaction:transaction} as never,{} as never,{} as never)};
+  }
+  it.each(['inspection_org','operator','nca','government'])('denies deletion for %s before any write', async role => {
+    const {service,transaction}=fixture();
+    await expect(service.remove({sub:'staff',phone:'test',roles:[role]},'inspection_1')).rejects.toBeInstanceOf(ForbiddenException);
+    expect(transaction).not.toHaveBeenCalled();
+  });
+  it('deletes the linked certificate before the inspection and keeps an audit record', async () => {
+    const {service,tx}=fixture();
+    await expect(service.remove(admin,'inspection_1')).resolves.toEqual({ok:true});
+    expect(tx.certificateImportJob.updateMany).toHaveBeenCalledWith({where:{certificateId:'cert_1'},data:{certificateId:null}});
+    expect(tx.certificate.delete).toHaveBeenCalledWith({where:{id:'cert_1'}});
+    expect(tx.inspection.delete).toHaveBeenCalledWith({where:{id:'inspection_1'}});
+    expect(tx.certificate.delete.mock.invocationCallOrder[0]).toBeLessThan(tx.inspection.delete.mock.invocationCallOrder[0]);
+    expect(tx.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({actorId:'root',action:'inspection.delete',metadata:expect.objectContaining({vehicleId:'vehicle_1',certificateNumber:'10022'})})}));
+  });
+  it('deletes a draft without deleting a certificate', async () => {
+    const {service,tx}=fixture(null);
+    await service.remove(admin,'inspection_1');
+    expect(tx.certificate.delete).not.toHaveBeenCalled();
+    expect(tx.certificateImportJob.updateMany).not.toHaveBeenCalled();
+    expect(tx.inspection.delete).toHaveBeenCalledTimes(1);
+  });
+  it('does not delete anything when the inspection is missing', async () => {
+    const {service,tx}=fixture();
+    tx.inspection.findUnique.mockResolvedValueOnce(null as never);
+    await expect(service.remove(admin,'missing')).rejects.toBeInstanceOf(NotFoundException);
+    expect(tx.auditLog.create).not.toHaveBeenCalled();
+    expect(tx.inspection.delete).not.toHaveBeenCalled();
+  });
+  it('does not delete the inspection if deleting its certificate fails', async () => {
+    const {service,tx}=fixture();
+    tx.certificate.delete.mockRejectedValueOnce(new Error('database failure'));
+    await expect(service.remove(admin,'inspection_1')).rejects.toThrow('database failure');
+    expect(tx.inspection.delete).not.toHaveBeenCalled();
+  });
+
 });

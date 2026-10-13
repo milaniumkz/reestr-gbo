@@ -7,6 +7,9 @@ type InspectionsTableProps = {
   inspections: Inspection[];
   organizations: Organization[];
   canManage: boolean;
+  canDelete: boolean;
+  deletingId: string | null;
+  onDelete: (row: Inspection) => void;
   statusFilter: string;
   organizationFilter: string;
   dateFrom: string;
@@ -27,6 +30,9 @@ export function InspectionsTable({
   inspections,
   organizations,
   canManage,
+  canDelete,
+  deletingId,
+  onDelete,
   statusFilter,
   organizationFilter,
   dateFrom,
@@ -146,6 +152,11 @@ export function InspectionsTable({
                   <button className="smallButton" type="button" onClick={() => onCheck(row)}>
                     Готовность
                   </button>
+                  {canDelete && (
+                    <button className="smallButton dangerButton" type="button" disabled={deletingId !== null} onClick={() => onDelete(row)}>
+                      {deletingId === row.id ? 'Удаление…' : 'Удалить'}
+                    </button>
+                  )}
                   {canManage && (
                     <select
                       aria-label={`Статус инспекции ${row.id}`}
