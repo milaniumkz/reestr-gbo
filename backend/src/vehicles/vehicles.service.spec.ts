@@ -2,6 +2,11 @@ import { describe, expect, it, jest } from '@jest/globals';
 import { VehiclesService } from './vehicles.service';
 
 describe('Inspection vehicle owner data', () => {
+  it.each([undefined, '', 'не указан'])('rejects an absent or invalid gas type before saving any data: %s', async fuelType => {
+    const prisma = {vehicle:{upsert:jest.fn()}};
+    await expect(new VehiclesService(prisma as never).create({vin:'VIN',plateNumber:'123',make:'Toyota',model:'Camry',owner:{phone:'',fullName:'Владелец'},cylinder:{serialNumber:'CYL',manufacturer:'Atiker',volumeLiters:54,fuelType,validUntil:'2028-10-13'}})).rejects.toThrow('Укажите тип газа');
+    expect(prisma.vehicle.upsert).not.toHaveBeenCalled();
+  });
   it.each([false, true])('saves owner data without creating or changing accounts (existing owner: %s)', async existing => {
     const prisma = {
       user: {upsert:jest.fn(),create:jest.fn(),update:jest.fn()},
@@ -11,7 +16,7 @@ describe('Inspection vehicle owner data', () => {
       gasCylinder: {findFirst:jest.fn(async()=>null),create:jest.fn(async()=>({}))},
       auditLog: {create:jest.fn(async()=>({}))},
     };
-    await new VehiclesService(prisma as never).create({vin:'VIN',plateNumber:'123',make:'Toyota',model:'Camry',owner:{phone:'8 (701) 111-22-33',fullName:'Владелец',address:'Адрес'},cylinder:{serialNumber:'CYL',manufacturer:'Atiker',volumeLiters:54,validUntil:'2028-10-13'}});
+    await new VehiclesService(prisma as never).create({vin:'VIN',plateNumber:'123',make:'Toyota',model:'Camry',owner:{phone:'8 (701) 111-22-33',fullName:'Владелец',address:'Адрес'},cylinder:{serialNumber:'CYL',manufacturer:'Atiker',volumeLiters:54,fuelType:'СНГ',validUntil:'2028-10-13'}});
     const write = existing ? prisma.vehicleOwner.update : prisma.vehicleOwner.create;
     expect(write).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({phone:'+77011112233',fullName:'Владелец',address:'Адрес'})}));
     expect(prisma.user.upsert).not.toHaveBeenCalled();

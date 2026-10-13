@@ -209,7 +209,7 @@ describe('Inspection quality control workflow', () => {
       vehicleId:'vehicle_1',
       photos: ['applicant_application','applicant_questionnaire','cylinder_label','vehicle_photo','tech_passport','gas_work_record','cylinder_work_record','gas_inspection_report','cylinder_inspection_report'].map(type => ({ id:type, type, objectKey:type })),
       requireApplicantPhotos: false,
-      vehicle: { cylinders:[{id:'cylinder_1'}], owners:[{id:'owner_1',userId:'owner_user',user:{phone:'+77001234567'}}] },
+      vehicle: { cylinders:[{id:'cylinder_1',fuelType:'СНГ'}], owners:[{id:'owner_1',userId:'owner_user',user:{phone:'+77001234567'}}] },
     };
     const prisma = {
       inspection: {
@@ -247,6 +247,12 @@ describe('Inspection quality control workflow', () => {
     const user=(id:string)=>({sub:id,phone:'test',roles:['inspection_org']});
     return {state,prisma,storage,certificates,service,user};
   }
+  it('prevents submission when the saved cylinder has no gas type',async()=>{
+    const f=fixture();f.state.vehicle.cylinders[0].fuelType='';
+    expect((await f.service.readiness('inspection_1',f.user('inspector'))).missing).toContain('fuel_type');
+    await expect(f.service.setStatus(f.user('inspector'),'inspection_1','submitted')).rejects.toThrow('Не хватает данных');
+    expect(f.prisma.inspection.update).not.toHaveBeenCalled();
+  });
   const corrected = {
     certificateNumber:'TEST-1',inspectionDate:'2026-10-13',
     owner:{fullName:'Исправленный владелец',address:'Астана',phone:'+77001234567',iin:'123456789012'},

@@ -56,6 +56,7 @@ const inspectionRequiredLabels = <String, String>{
   ...inspectionPackageDocuments,
   'certificate_document': 'Свидетельство (рус./каз.)',
   'gas_cylinder': 'данные баллона',
+  'fuel_type': 'тип газа (СНГ или КПГ)',
   'vehicle_owner': 'данные владельца',
 };
 const lawExtractTitle = 'Приказ №600 от 18 ноября 2021 года';
@@ -1465,7 +1466,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       if (vehicleVin.trim().isEmpty) 'VIN',
       if (cylinderNumber.trim().isEmpty) 'номер баллона',
       if (cylinderVolume.trim().isEmpty) 'объем баллона',
-      if (!const ['СНГ', 'КПГ'].contains(cylinderFuel.trim())) 'вид топлива',
+      if (!const ['СНГ', 'КПГ'].contains(cylinderFuel.trim())) 'тип газа (СНГ или КПГ)',
       if (reducerName.trim().isEmpty) 'название редуктора',
       if (controlUnitName.trim().isEmpty)
         'название электронного блока управления',
@@ -1669,7 +1670,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       go(16);
       return;
     }
-    if (message.contains('баллон') ||
+    if (message.contains('тип газа') || message.contains('баллон') ||
         message.contains('редуктор') ||
         message.contains('электронного блока')) {
       go(17);
@@ -1857,6 +1858,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
 
   Future<void> _goCylinderNext() async {
     final missing = <String>[
+      if (!const ['СНГ', 'КПГ'].contains(cylinderFuel.trim())) 'тип газа (СНГ или КПГ)',
       if (cylinderNumber.trim().isEmpty) 'номер баллона',
       if (cylinderVolume.trim().isEmpty) 'объем баллона',
       if (reducerName.trim().isEmpty) 'название редуктора',
@@ -5816,7 +5818,7 @@ class _CylinderStep extends StatelessWidget {
                   const Padding(
                     padding: EdgeInsets.only(left: 4, bottom: 8),
                     child: Text(
-                      'Вид топлива',
+                      'Тип газа (обязательно)',
                       style: TextStyle(
                         color: muted,
                         fontSize: 12,

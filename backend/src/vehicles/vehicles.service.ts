@@ -80,9 +80,7 @@ export class VehiclesService {
         throw new ForbiddenException('Контроль качества исправляет данные только через карточку инспекции');
       }
     }
-    const period = input.cylinder.fuelType
-      ? inspectionPeriod(input.cylinder.fuelType, input.cylinder.inspectedAt ?? new Date())
-      : undefined;
+    const period = inspectionPeriod(input.cylinder.fuelType ?? "", input.cylinder.inspectedAt ?? new Date());
     const ownerPhone = normalizeOwnerPhone(input.owner.phone);
     return this.prisma.vehicle
       .upsert({
