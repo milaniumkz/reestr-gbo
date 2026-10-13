@@ -10,6 +10,7 @@ type InspectionsTableProps = {
   canDelete: boolean;
   deletingId: string | null;
   onDelete: (row: Inspection) => void;
+  onReleaseReview: (row: Inspection) => void;
   statusFilter: string;
   organizationFilter: string;
   dateFrom: string;
@@ -33,6 +34,7 @@ export function InspectionsTable({
   canDelete,
   deletingId,
   onDelete,
+  onReleaseReview,
   statusFilter,
   organizationFilter,
   dateFrom,
@@ -97,7 +99,7 @@ export function InspectionsTable({
                 <td>{row.vehicle?.vin ?? '-'}</td>
                 <td>{row.vehicle?.plateNumber ?? '-'}</td>
                 <td>{row.organization?.name ?? '-'}<div className="muted">{accreditationPeriod(row.organization)}</div></td>
-                <td><span className="pill">{statusLabel(row.status)}</span></td>
+                <td><span className="pill">{statusLabel(row.status)}</span>{row.status === 'submitted' && row.qualityReviewer && <div className="muted">На проверке: {row.qualityReviewer.fullName}</div>}</td>
                 <td>{row.photos?.length ?? 0}</td>
                 <td>
                   {row.vehicle?.owners?.[0]?.fullName ?? '-'}
@@ -152,6 +154,7 @@ export function InspectionsTable({
                   <button className="smallButton" type="button" onClick={() => onCheck(row)}>
                     Готовность
                   </button>
+                  {canDelete && row.status === 'submitted' && row.qualityReviewerId && <button className="smallButton" type="button" onClick={() => onReleaseReview(row)}>Освободить проверку</button>}
                   {canDelete && (
                     <button className="smallButton dangerButton" type="button" disabled={deletingId !== null} onClick={() => onDelete(row)}>
                       {deletingId === row.id ? 'Удаление…' : 'Удалить'}

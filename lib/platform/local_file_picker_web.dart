@@ -6,13 +6,19 @@ import 'dart:html' as html;
 import 'dart:typed_data';
 
 import 'local_file.dart';
+import 'document_camera_web.dart';
 
-Future<PickedLocalFile?> pickLocalFile(List<String> extensions) async {
+Future<PickedLocalFile?> pickLocalFile(List<String> extensions, {bool camera = false, double frameAspectRatio = 0.71}) async {
+  if (camera) return captureDocumentPhoto(frameAspectRatio: frameAspectRatio);
   final input = html.FileUploadInputElement()
-    ..accept = extensions.map((item) => '.$item').join(',')
+    ..accept = camera ? 'image/*' : extensions.map((item) => '.$item').join(',')
     ..multiple = false
     ..style.display = 'none';
+  if (camera) input.setAttribute('capture', 'environment');
   final completer = Completer<PickedLocalFile?>();
+  final cancel = input.on['cancel'].listen((_) {
+    if (!completer.isCompleted) completer.complete(null);
+  });
   html.document.body?.append(input);
   input.onChange.first.then((_) async {
     try {
@@ -38,6 +44,7 @@ Future<PickedLocalFile?> pickLocalFile(List<String> extensions) async {
       onTimeout: () => null,
     );
   } finally {
+    await cancel.cancel();
     input.remove();
   }
 }

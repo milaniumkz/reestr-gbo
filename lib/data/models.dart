@@ -510,6 +510,9 @@ class InspectionSummary {
     this.qualityDocumentUploaded = false,
     this.qualityConfirmedAt = '',
     this.qualityConfirmedByName = '',
+    this.qualityReviewerId = '',
+    this.qualityReviewerName = '',
+    this.qualityReviewStartedAt = '',
     this.approvedAt = '',
     this.files = const [],
   });
@@ -558,6 +561,10 @@ class InspectionSummary {
   final bool qualityDocumentUploaded;
   final String qualityConfirmedAt;
   final String qualityConfirmedByName;
+  final String qualityReviewerId;
+  final String qualityReviewerName;
+  final String qualityReviewStartedAt;
+  bool isReviewAssignedTo(String userId) => userId.isNotEmpty && qualityReviewerId == userId;
   final String approvedAt;
   final List<InspectionFileInfo> files;
 
@@ -580,6 +587,7 @@ class InspectionSummary {
     final approvedBy = json['approvedBy'] is Map<String, dynamic>
         ? json['approvedBy'] as Map<String, dynamic>
         : const <String, dynamic>{};
+    final qualityReviewer = json['qualityReviewer'] is Map<String, dynamic> ? json['qualityReviewer'] as Map<String, dynamic> : const <String,dynamic>{};
     final qualityConfirmedBy =
         json['qualityConfirmedBy'] is Map<String, dynamic>
         ? json['qualityConfirmedBy'] as Map<String, dynamic>
@@ -647,6 +655,9 @@ class InspectionSummary {
       qualityDocumentUploaded: json['qualityDocumentUploadedAt'] != null,
       qualityConfirmedAt: json['qualityConfirmedAt']?.toString() ?? '',
       qualityConfirmedByName: qualityConfirmedBy['fullName']?.toString() ?? '',
+      qualityReviewerId: json['qualityReviewerId']?.toString() ?? '',
+      qualityReviewerName: qualityReviewer['fullName']?.toString() ?? '',
+      qualityReviewStartedAt: json['qualityReviewStartedAt']?.toString() ?? '',
       approvedAt: json['approvedAt']?.toString() ?? '',
       files: photos
           .whereType<Map<String, dynamic>>()

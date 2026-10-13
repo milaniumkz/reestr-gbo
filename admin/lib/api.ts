@@ -217,6 +217,9 @@ export type Inspection = {
   qualityDocumentUploadedAt?: string;
   qualityConfirmedAt?: string;
   qualityConfirmedById?: string;
+  qualityReviewerId?: string;
+  qualityReviewStartedAt?: string;
+  qualityReviewer?: {id: string; fullName: string};
   approvedAt?: string;
 };
 
@@ -646,6 +649,10 @@ export function addUserRole(token: string, id: string, role: string) {
 
 export function removeUserRole(token: string, id: string, role: string) {
   return del<{ role: string }>(`/users/${id}/roles/${role}`, token);
+}
+
+export function releaseInspectionReview(token: string, id: string) {
+  return post<{ok: boolean}>(`/inspections/${id}/quality-review/release`, {}, token);
 }
 
 export function deleteInspection(token: string, id: string) {

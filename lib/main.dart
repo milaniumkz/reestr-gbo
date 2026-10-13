@@ -16,6 +16,7 @@ import 'data/models.dart';
 import 'data/repositories.dart';
 import 'platform/browser_geolocation.dart';
 import 'platform/local_file_picker.dart';
+import 'widgets/document_camera_screen.dart';
 
 void main() => runApp(const ErsiGboApp());
 
@@ -527,12 +528,16 @@ class _ErsiDemoState extends State<ErsiDemo> {
   bool sendingOtp = false;
   bool bootstrapping = true;
   String language = 'Русский';
+  Timer? _qualityQueueTimer;
 
   @override
   void initState() {
     super.initState();
     _loadInitialData();
   }
+
+  @override
+  void dispose() { _qualityQueueTimer?.cancel(); super.dispose(); }
 
   Future<void> _loadInitialData() async {
     try {
@@ -623,6 +628,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         setState(() {
           myInspections = items;
           if (!silent) apiState = 'Инспекции загружены';
+          if (_isQualityControl && _qualityQueueTimer == null) _qualityQueueTimer = Timer.periodic(const Duration(seconds: 15), (_) { if (mounted && _isQualityControl && [14,24,25,26,27,28].contains(screen)) unawaited(_loadMyInspections(silent: true)); });
         });
       }
     } catch (_) {
@@ -652,6 +658,12 @@ class _ErsiDemoState extends State<ErsiDemo> {
     }
     return null;
   }
+
+  bool get _ownsQualityReview => _isQualityControl && selectedInspection?.status == 'submitted' && selectedInspection?.isReviewAssignedTo(currentUser?.id ?? '') == true;
+
+  bool get _editingQualityInspection => _ownsQualityReview &&
+      selectedInspection?.status == 'submitted' &&
+      draftInspectionId == selectedInspection?.id;
 
   Future<Position> _bestInspectionPosition() async {
     final live = await _tryCurrentPosition();
@@ -699,6 +711,20 @@ class _ErsiDemoState extends State<ErsiDemo> {
               member.userId == userId && member.role == 'quality_control',
         ) ??
         false;
+  }
+
+  Future<void> _releaseQualityReview() async {
+    final item = selectedInspection;
+    if (item == null || !_ownsQualityReview || qualityBusy) return;
+    setState(() => qualityBusy = true);
+    try {
+      await repositories.inspections.releaseQualityReview(item.id);
+      await _loadMyInspections(silent: true);
+      if (!mounted) return;
+      setState(() { selectedInspection = null; draftInspectionId = null; draftVehicleId = null; apiState = 'Инспекция возвращена в доступные'; });
+      go(14);
+    } catch (error) { if (mounted) setState(() => apiState = error.toString()); }
+    finally { if (mounted) setState(() => qualityBusy = false); }
   }
 
   Future<void> _uploadQualityCertificate() async {
@@ -1248,7 +1274,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
           'png',
           'heic',
           'webp',
-        ]);
+        ], camera: true, frameAspectRatio: kind == 'tech_passport' ? 1.6 : 0.71);
         final pickedBytes = file?.bytes;
         if (file == null || pickedBytes == null || pickedBytes.isEmpty) {
           if (mounted) setState(() => apiState = 'Фото не выбрано');
@@ -1256,6 +1282,12 @@ class _ErsiDemoState extends State<ErsiDemo> {
         }
         filename = file.name;
         bytes = pickedBytes;
+      } else if (kind == 'tech_passport') {
+        if (!mounted) return;
+        final file = await Navigator.of(context).push<PickedLocalFile>(MaterialPageRoute(builder: (_) => const DocumentCameraScreen(title: 'Фото техпаспорта', frameAspectRatio: 1.6)));
+        if (file == null) return;
+        filename = file.name;
+        bytes = file.bytes;
       } else {
         final photo = await ImagePicker().pickImage(
           source: ImageSource.camera,
@@ -1313,11 +1345,20 @@ class _ErsiDemoState extends State<ErsiDemo> {
     return 'Ошибка загрузки фото';
   }
 
-  Future<void> _pickInspectionDocument(String type, String label) async {
+  Future<void> _pickInspectionDocument(String type, String label, {bool camera = false}) async {
+    if (_isQualityControl) {
+      setState(() => apiState = 'Рабочие записи и отчёты доступны только для просмотра');
+      return;
+    }
     try {
-      final file = kIsWeb
-          ? await pickLocalFile(const ['pdf', 'jpg', 'jpeg', 'png'])
-          : await _pickPluginFile(const ['pdf', 'jpg', 'jpeg', 'png']);
+      PickedLocalFile? file;
+      if (camera && !kIsWeb) {
+        file = await Navigator.of(context).push<PickedLocalFile>(MaterialPageRoute(builder: (_) => DocumentCameraScreen(title: label)));
+      } else {
+        file = kIsWeb
+            ? await pickLocalFile(const ['pdf', 'jpg', 'jpeg', 'png'], camera: camera)
+            : await _pickPluginFile(const ['pdf', 'jpg', 'jpeg', 'png']);
+      }
       if (file == null) {
         if (mounted) setState(() => apiState = 'Документ не выбран');
         return;
@@ -1347,7 +1388,9 @@ class _ErsiDemoState extends State<ErsiDemo> {
     } catch (error) {
       final message = error is StateError
           ? error.message
-          : 'Document upload error';
+          : (error is PlatformException && error.code.toLowerCase().contains('denied')) || error.toString().contains('NotAllowedError')
+          ? 'Разрешите доступ к камере в настройках приложения'
+          : 'Не удалось выбрать или сфотографировать документ';
       if (mounted) setState(() => apiState = message);
     }
   }
@@ -1369,6 +1412,18 @@ class _ErsiDemoState extends State<ErsiDemo> {
     ];
     if (missing.isNotEmpty) {
       throw StateError('Заполните: ${missing.join(', ')}');
+    }
+    if (_editingQualityInspection) {
+      final parts = vehicleMakeModel.trim().split(RegExp(r'\s+'));
+      final detail = await repositories.inspections.updateQualityData(draftInspectionId!, {
+        'certificateNumber': _normalizeCertificateNumber(inspectionCertificateNumber),
+        'inspectionDate': _dateOnly(inspectionIssuedAt),
+        'owner': {'fullName': ownerName.trim(), 'iin': ownerId.trim(), 'phone': ownerPhone.trim(), 'address': ownerAddress.trim()},
+        'vehicle': {'vin': vehicleVin.trim().toUpperCase(), 'plateNumber': vehiclePlate.trim().toUpperCase(), 'make': parts.first, 'model': parts.skip(1).join(' '), 'year': int.tryParse(vehicleYear.trim())},
+        'cylinder': {'serialNumber': cylinderNumber.trim(), 'manufacturer': cylinderMaker.trim(), 'volumeLiters': int.tryParse(cylinderVolume.trim()) ?? 0, 'fuelType': cylinderFuel, 'reducerName': reducerName.trim(), 'controlUnitName': controlUnitName.trim(), if (int.tryParse(cylinderYear.trim()) != null) 'producedAt': '${cylinderYear.trim()}-01-01'},
+      });
+      selectedInspection = detail;
+      return detail.id;
     }
     final organizationId = await _inspectionOrganizationId();
     final position = await _bestInspectionPosition();
@@ -1430,6 +1485,23 @@ class _ErsiDemoState extends State<ErsiDemo> {
 
   Future<void> _submitInspection() async {
     try {
+      if (_editingQualityInspection) {
+        final id = await _ensureInspectionDraft();
+        await _uploadPendingInspectionFiles(id);
+        final detail = await repositories.inspections.detail(id);
+        if (!mounted) return;
+        setState(() {
+          selectedInspection = detail;
+          qualityConfirmed = false;
+          draftInspectionId = null;
+          draftVehicleId = null;
+          apiState = 'Исправления сохранены';
+        });
+        await _loadMyInspections();
+        go(40);
+        return;
+      }
+
       final missingLocal = <String>[
         if (!cylinderPhotoUploaded && cylinderPhotoBytes == null)
           'фото бирки баллона',
@@ -1665,7 +1737,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
     setState(() => apiState = 'Проверка номера свидетельства');
     try {
       final available = await repositories.inspections
-          .isCertificateNumberAvailable(number);
+          .isCertificateNumberAvailable(number, inspectionId: draftInspectionId);
       if (!available) {
         if (mounted) {
           setState(
@@ -1807,18 +1879,24 @@ class _ErsiDemoState extends State<ErsiDemo> {
   void next() => go(screen + 1);
 
   Future<void> _openInspectionDetail(InspectionSummary inspection) async {
-    if (inspection.status == 'draft' || inspection.status == 'rejected') {
+    if (!_isQualityControl && (inspection.status == 'draft' || inspection.status == 'rejected')) {
       await _continueInspectionDraft(inspection);
       return;
     }
     setState(() => apiState = 'Загрузка инспекции');
     try {
+      String? claimError;
+      if (_isQualityControl && inspection.status == 'submitted') {
+        try { await repositories.inspections.claimQualityReview(inspection.id); }
+        on ApiException catch (error) { if (error.statusCode != 409) rethrow; claimError = error.message; }
+      }
       final detail = await repositories.inspections.detail(inspection.id);
+      if (_isQualityControl) await _loadMyInspections(silent: true);
       if (!mounted) return;
       setState(() {
         selectedInspection = detail;
         qualityConfirmed = false;
-        apiState = 'Инспекция загружена';
+        apiState = claimError ?? 'Инспекция загружена';
       });
       go(40);
     } catch (_) {
@@ -1851,6 +1929,14 @@ class _ErsiDemoState extends State<ErsiDemo> {
             file.type: inspectionRequiredLabels[file.type] ?? file.type,
       };
       setState(() {
+        cylinderPhotoBytes = null;
+        cylinderPhotoName = null;
+        vehiclePhotoBytes = null;
+        vehiclePhotoName = null;
+        techPassportPhotoBytes = null;
+        techPassportPhotoName = null;
+        packageDocumentBytes = {};
+        packageDocumentPositions = {};
         selectedInspection = detail;
         draftInspectionId = detail.id;
         draftVehicleId = detail.vehicleId.isEmpty ? null : detail.vehicleId;
@@ -2088,12 +2174,21 @@ class _ErsiDemoState extends State<ErsiDemo> {
         organization: _currentInspectionOrganization,
         isManager: _isInspectionManager,
         isQualityControl: _isQualityControl,
+        reviewerId: currentUser?.id ?? '',
         onReload: _loadMyInspections,
         onNewInspection: _startNewInspection,
         onImportXlsx: _pickImportXlsx,
         onOpenInspection: _openInspectionDetail,
       ),
       15 => _OwnerStep(
+        reviewFiles: selectedInspection?.files.where((file) => ['tech_passport'].contains(file.type)).toList() ?? const [],
+        inspectionDate: inspectionIssuedAt,
+        ownerPhone: ownerPhone,
+        ownerIin: ownerId,
+        editingQuality: _editingQualityInspection,
+        onInspectionDate: (value) => setState(() => inspectionIssuedAt = value),
+        onOwnerPhone: (value) => setState(() => ownerPhone = value),
+        onOwnerIin: (value) => setState(() => ownerId = value),
         certificateNumber: inspectionCertificateNumber,
         ownerName: ownerName,
         ownerAddress: ownerAddress,
@@ -2108,6 +2203,10 @@ class _ErsiDemoState extends State<ErsiDemo> {
         onNext: _goOwnerNext,
       ),
       16 => _VehicleStep(
+        reviewFiles: selectedInspection?.files.where((file) => ['tech_passport','vehicle_photo'].contains(file.type)).toList() ?? const [],
+        year: vehicleYear,
+        editingQuality: _editingQualityInspection,
+        onYear: (value) => setState(() => vehicleYear = value),
         plate: vehiclePlate,
         vin: vehicleVin,
         makeModel: vehicleMakeModel,
@@ -2117,6 +2216,8 @@ class _ErsiDemoState extends State<ErsiDemo> {
         onNext: _goVehicleNext,
       ),
       17 => _CylinderStep(
+        reviewFiles: selectedInspection?.files.where((file) => ['cylinder_label'].contains(file.type)).toList() ?? const [],
+        editingQuality: _editingQualityInspection,
         number: cylinderNumber,
         maker: cylinderMaker,
         volume: cylinderVolume,
@@ -2179,16 +2280,19 @@ class _ErsiDemoState extends State<ErsiDemo> {
       22 => _DocumentScanStep(
         names: packageDocumentNames,
         uploaded: packageDocumentUploaded,
+        readOnly: _isQualityControl,
+        onCamera: (type, label) => _pickInspectionDocument(type, label, camera: true),
         onUpload: _pickInspectionDocument,
         onNext: () => go(23),
       ),
-      23 => _ReviewStep(onSubmit: _submitInspection),
+      23 => _ReviewStep(onSubmit: _submitInspection, editingQuality: _editingQualityInspection),
       24 => _InspectorHome(
         go: go,
         inspections: myInspections,
         organization: _currentInspectionOrganization,
         isManager: _isInspectionManager,
         isQualityControl: _isQualityControl,
+        reviewerId: currentUser?.id ?? '',
         onReload: _loadMyInspections,
         onNewInspection: _startNewInspection,
         onImportXlsx: _pickImportXlsx,
@@ -2200,6 +2304,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         organization: _currentInspectionOrganization,
         isManager: _isInspectionManager,
         isQualityControl: _isQualityControl,
+        reviewerId: currentUser?.id ?? '',
         onReload: _loadMyInspections,
         onNewInspection: _startNewInspection,
         onImportXlsx: _pickImportXlsx,
@@ -2211,6 +2316,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         organization: _currentInspectionOrganization,
         isManager: _isInspectionManager,
         isQualityControl: _isQualityControl,
+        reviewerId: currentUser?.id ?? '',
         onReload: _loadMyInspections,
         onNewInspection: _startNewInspection,
         onImportXlsx: _pickImportXlsx,
@@ -2222,6 +2328,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         organization: _currentInspectionOrganization,
         isManager: _isInspectionManager,
         isQualityControl: _isQualityControl,
+        reviewerId: currentUser?.id ?? '',
         onReload: _loadMyInspections,
         onNewInspection: _startNewInspection,
         onImportXlsx: _pickImportXlsx,
@@ -2293,13 +2400,14 @@ class _ErsiDemoState extends State<ErsiDemo> {
         canApprove:
             _isInspectionManager &&
             selectedInspection?.status == 'quality_approved',
-        canEdit: false,
+        canEdit: _ownsQualityReview,
+        isQualityControl: _isQualityControl,
+        onReleaseQuality: _releaseQualityReview,
         canReturn:
-            (_isQualityControl && selectedInspection?.status == 'submitted') ||
+            (_ownsQualityReview) ||
             (_isInspectionManager &&
                 selectedInspection?.status == 'quality_approved'),
-        canQualityReview:
-            _isQualityControl && selectedInspection?.status == 'submitted',
+        canQualityReview: _ownsQualityReview,
         qualityConfirmed: qualityConfirmed,
         qualityBusy: qualityBusy,
         onUploadQuality: _uploadQualityCertificate,
@@ -2313,7 +2421,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
             : () => _continueInspectionDraft(
                 selectedInspection!,
                 forceDataStep: true,
-                lockProtectedPhotos: true,
+                lockProtectedPhotos: false,
               ),
         onReturnForCorrection: selectedInspection == null
             ? null
@@ -4036,6 +4144,8 @@ class _CertificateDetailsCard extends StatelessWidget {
 class _InspectionDetailScreen extends StatelessWidget {
   const _InspectionDetailScreen({
     required this.inspection,
+    this.isQualityControl = false,
+    this.onReleaseQuality,
     required this.canApprove,
     required this.canEdit,
     required this.canReturn,
@@ -4049,6 +4159,8 @@ class _InspectionDetailScreen extends StatelessWidget {
     required this.onEdit,
     required this.onReturnForCorrection,
   });
+  final bool isQualityControl;
+  final VoidCallback? onReleaseQuality;
   final InspectionSummary? inspection;
   final bool canApprove;
   final bool canEdit;
@@ -4080,6 +4192,7 @@ class _InspectionDetailScreen extends StatelessWidget {
       );
     }
     final files = item.files;
+    final qualityLayout = isQualityControl;
     return _Watermark(
       child: _AppScreen(
         title: item.certificateNumber.isEmpty
@@ -4103,6 +4216,7 @@ class _InspectionDetailScreen extends StatelessWidget {
                   : 'Свидетельство',
               onTap: null,
             ),
+            if (item.status == 'submitted' && item.qualityReviewerId.isNotEmpty) _InfoBox(title: 'На проверке', text: '${item.qualityReviewerName.isEmpty ? 'Сотрудник контроля качества' : item.qualityReviewerName} · ${_shortDateTime(item.qualityReviewStartedAt)}'),
             if (canQualityReview) ...[
               const SizedBox(height: 12),
               const Text('Контроль качества', style: _section),
@@ -4145,6 +4259,7 @@ class _InspectionDetailScreen extends StatelessWidget {
                 onTap: onApprove!,
               ),
             ],
+            if (canQualityReview && onReleaseQuality != null) _PrimaryButton(text: 'Вернуть в доступные', icon: Icons.assignment_return_rounded, onTap: qualityBusy ? null : onReleaseQuality),
             if (canEdit && onEdit != null) ...[
               const SizedBox(height: 12),
               _PrimaryButton(
@@ -4200,7 +4315,7 @@ class _InspectionDetailScreen extends StatelessWidget {
             const SizedBox(height: 16),
             const Text('Данные свидетельства', style: _section),
             const SizedBox(height: 10),
-            _CertificateDetailsCard(
+            _QualityDataWithPhotos(enabled: qualityLayout, files: files.where((file) => ['certificate_document'].contains(file.type)).toList(), child: _CertificateDetailsCard(
               rows: [
                 (
                   Icons.description_rounded,
@@ -4224,11 +4339,11 @@ class _InspectionDetailScreen extends StatelessWidget {
                       : '${item.organizationName} · ${item.accreditationLabel}',
                 ),
               ],
-            ),
+            )),
             const SizedBox(height: 16),
             const Text('Автомобиль и владелец', style: _section),
             const SizedBox(height: 10),
-            _CertificateDetailsCard(
+            _QualityDataWithPhotos(enabled: qualityLayout, files: files.where((file) => ['vehicle_photo','tech_passport'].contains(file.type)).toList(), child: _CertificateDetailsCard(
               rows: [
                 (
                   Icons.directions_car_rounded,
@@ -4258,7 +4373,7 @@ class _InspectionDetailScreen extends StatelessWidget {
                   item.ownerAddress.isEmpty ? 'Не указано' : item.ownerAddress,
                 ),
               ],
-            ),
+            )),
             const SizedBox(height: 16),
             const Text('Место проведения инспекции', style: _section),
             const SizedBox(height: 10),
@@ -4283,7 +4398,7 @@ class _InspectionDetailScreen extends StatelessWidget {
             const SizedBox(height: 16),
             const Text('ГБО и баллон', style: _section),
             const SizedBox(height: 10),
-            _CertificateDetailsCard(
+            _QualityDataWithPhotos(enabled: qualityLayout, files: files.where((file) => ['cylinder_label'].contains(file.type)).toList(), child: _CertificateDetailsCard(
               rows: [
                 (Icons.local_fire_department_rounded, 'ТИП ГАЗА', item.cylinderFuelType.isEmpty ? 'Не указан' : item.cylinderFuelType),
                 (
@@ -4321,7 +4436,7 @@ class _InspectionDetailScreen extends StatelessWidget {
                       : item.controlUnitName,
                 ),
               ],
-            ),
+            )),
             const SizedBox(height: 16),
             const Text('Фото и документы', style: _section),
             const SizedBox(height: 10),
@@ -4331,7 +4446,7 @@ class _InspectionDetailScreen extends StatelessWidget {
                 text: 'После загрузки фото и документов они появятся здесь.',
               )
             else
-              for (final file in files)
+              for (final file in files.where((file) => !qualityLayout || !['certificate_document','vehicle_photo','tech_passport','cylinder_label'].contains(file.type)))
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: _InspectionFileCard(file: file),
@@ -4340,6 +4455,21 @@ class _InspectionDetailScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _QualityDataWithPhotos extends StatelessWidget {
+  const _QualityDataWithPhotos({required this.enabled, required this.files, required this.child});
+  final bool enabled;
+  final List<InspectionFileInfo> files;
+  final Widget child;
+  @override
+  Widget build(BuildContext context) {
+    if (!enabled || files.isEmpty) return child;
+    final photos = Column(children: [for (final file in files) Padding(padding: const EdgeInsets.only(bottom: 12), child: _InspectionFileCard(file: file))]);
+    return LayoutBuilder(builder: (context, constraints) => constraints.maxWidth >= 700
+      ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: child), const SizedBox(width: 16), Expanded(child: photos)])
+      : Column(children: [child, const SizedBox(height: 12), photos]));
   }
 }
 
@@ -4415,7 +4545,7 @@ class _InspectionFileCard extends StatelessWidget {
                     children: [
                       Image.network(
                         url,
-                        fit: BoxFit.cover,
+                        fit: BoxFit.contain,
                         errorBuilder: (context, error, stackTrace) => Container(
                           color: mint,
                           alignment: Alignment.center,
@@ -4510,7 +4640,7 @@ class _CertificateDocumentCard extends StatelessWidget {
                     children: [
                       Image.network(
                         url,
-                        fit: BoxFit.cover,
+                        fit: BoxFit.contain,
                         errorBuilder: (context, error, stackTrace) => Container(
                           color: mint,
                           alignment: Alignment.center,
@@ -5046,6 +5176,7 @@ class _InspectorHome extends StatelessWidget {
     required this.organization,
     required this.isManager,
     required this.isQualityControl,
+    this.reviewerId = '',
     required this.onReload,
     required this.onNewInspection,
     required this.onImportXlsx,
@@ -5056,6 +5187,7 @@ class _InspectorHome extends StatelessWidget {
   final OrganizationSummary? organization;
   final bool isManager;
   final bool isQualityControl;
+  final String reviewerId;
   final VoidCallback onReload;
   final VoidCallback onNewInspection;
   final VoidCallback onImportXlsx;
@@ -5068,9 +5200,10 @@ class _InspectorHome extends StatelessWidget {
         .where(
           (item) =>
               item.status ==
-              (isQualityControl ? 'submitted' : 'quality_approved'),
+              (isQualityControl ? 'submitted' : 'quality_approved') && (!isQualityControl || item.qualityReviewerId.isEmpty),
         )
         .toList();
+    final mine = inspections.where((item) => isQualityControl && item.status == 'submitted' && item.isReviewAssignedTo(reviewerId)).toList();
     return _AppScreen(
       title: 'Инспекционный орган',
       subtitle: organization?.name.isNotEmpty == true
@@ -5087,7 +5220,7 @@ class _InspectorHome extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _GreenHero(
+          if (!isQualityControl) _GreenHero(
             title: 'Инспекции ГБО',
             subtitle: 'создание и фотофиксация свидетельств',
             button: 'Новая',
@@ -5102,7 +5235,7 @@ class _InspectorHome extends StatelessWidget {
               Expanded(
                 child: _StatCard(
                   pending.length.toString(),
-                  'на проверке',
+                  isQualityControl ? 'доступно' : 'на проверке',
                   warn,
                 ),
               ),
@@ -5114,7 +5247,7 @@ class _InspectorHome extends StatelessWidget {
               padding: const EdgeInsets.only(left: 4, bottom: 8),
               child: Text(
                 isQualityControl
-                    ? 'Контроль качества'
+                    ? 'Доступны для проверки'
                     : 'Ожидают утверждения руководителя',
                 style: _section,
               ),
@@ -5136,6 +5269,7 @@ class _InspectorHome extends StatelessWidget {
                 onTap: () => onOpenInspection(item),
               ),
           ],
+          if (!isQualityControl) ...[
           const SizedBox(height: 12),
           _PrimaryButton(
             text: 'Новая инспекция',
@@ -5148,6 +5282,11 @@ class _InspectorHome extends StatelessWidget {
             icon: Icons.upload_file_rounded,
             onTap: onImportXlsx,
           ),
+          ],
+          if (isQualityControl && mine.isNotEmpty) ...[
+            const Text('Мои проверки', style: _section),
+            for (final item in mine) _ListTileCard(icon: Icons.fact_check_rounded, title: item.vehiclePlate, subtitle: item.certificateNumber, status: 'На проверке у вас', onTap: () => onOpenInspection(item)),
+          ],
           const SizedBox(height: 12),
           Padding(
             padding: const EdgeInsets.only(left: 4, bottom: 8),
@@ -5183,7 +5322,7 @@ class _InspectorHome extends StatelessWidget {
                       ? item.createdByPhone
                       : item.createdByName,
                 ].where((value) => value.trim().isNotEmpty).join(' · '),
-                status: _inspectionStatusLabel(item.status),
+                status: item.status == 'submitted' && item.qualityReviewerId.isNotEmpty ? 'На проверке: ${item.qualityReviewerName.isEmpty ? 'сотрудник контроля качества' : item.qualityReviewerName}' : _inspectionStatusLabel(item.status),
                 onTap: () => onOpenInspection(item),
               ),
         ],
@@ -5215,7 +5354,15 @@ String _shortDateTime(String value) {
 
 class _OwnerStep extends StatelessWidget {
   const _OwnerStep({
+    this.reviewFiles = const [],
     required this.certificateNumber,
+    required this.inspectionDate,
+    required this.ownerPhone,
+    required this.ownerIin,
+    required this.editingQuality,
+    required this.onInspectionDate,
+    required this.onOwnerPhone,
+    required this.onOwnerIin,
     required this.ownerName,
     required this.ownerAddress,
     required this.ownerKind,
@@ -5225,6 +5372,13 @@ class _OwnerStep extends StatelessWidget {
     required this.onOwnerAddress,
     required this.onNext,
   });
+  final String inspectionDate;
+  final String ownerPhone;
+  final String ownerIin;
+  final bool editingQuality;
+  final ValueChanged<String> onInspectionDate;
+  final ValueChanged<String> onOwnerPhone;
+  final ValueChanged<String> onOwnerIin;
   final String certificateNumber;
   final String ownerName;
   final String ownerAddress;
@@ -5235,15 +5389,16 @@ class _OwnerStep extends StatelessWidget {
   final ValueChanged<String> onOwnerAddress;
   final Future<void> Function() onNext;
 
+  final List<InspectionFileInfo> reviewFiles;
   @override
   Widget build(BuildContext context) {
     return _AppScreen(
-      title: 'Новая инспекция',
+      title: editingQuality ? 'Исправление инспекции' : 'Новая инспекция',
       subtitle: 'Данные владельца',
       activeNav: 1,
       leadingBack: true,
       paymentNav: true,
-      child: Column(
+      child: _QualityDataWithPhotos(enabled: editingQuality, files: reviewFiles, child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _ProgressDots(step: 1),
@@ -5273,16 +5428,23 @@ class _OwnerStep extends StatelessWidget {
             hint: 'Введите адрес проживания',
             onChanged: onOwnerAddress,
           ),
+          _DateFilterInput(label: 'Дата инспекции', value: inspectionDate, onChanged: onInspectionDate),
+          if (editingQuality) ...[
+            _Input(label: 'Телефон владельца', value: ownerPhone, onChanged: onOwnerPhone, keyboardType: TextInputType.phone),
+            _Input(label: 'ИИН владельца', value: ownerIin, onChanged: onOwnerIin, keyboardType: TextInputType.number),
+          ],
           const SizedBox(height: 120),
           _PrimaryButton(text: 'Продолжить', onTap: () => unawaited(onNext())),
         ],
-      ),
+      )),
     );
   }
 }
 
 class _CylinderStep extends StatelessWidget {
   const _CylinderStep({
+    this.reviewFiles = const [],
+    this.editingQuality = false,
     required this.number,
     required this.maker,
     required this.volume,
@@ -5325,6 +5487,8 @@ class _CylinderStep extends StatelessWidget {
   final ValueChanged<String> onShape;
   final VoidCallback onNext;
 
+  final List<InspectionFileInfo> reviewFiles;
+  final bool editingQuality;
   @override
   Widget build(BuildContext context) {
     return _AppScreen(
@@ -5333,7 +5497,7 @@ class _CylinderStep extends StatelessWidget {
       activeNav: 1,
       leadingBack: true,
       paymentNav: true,
-      child: Column(
+      child: _QualityDataWithPhotos(enabled: editingQuality, files: reviewFiles, child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _ProgressDots(step: 3),
@@ -5412,14 +5576,18 @@ class _CylinderStep extends StatelessWidget {
           const SizedBox(height: 62),
           _PrimaryButton(text: 'Продолжить', onTap: onNext),
         ],
-      ),
+      )),
     );
   }
 }
 
 class _VehicleStep extends StatelessWidget {
   const _VehicleStep({
+    this.reviewFiles = const [],
     required this.plate,
+    required this.year,
+    required this.editingQuality,
+    required this.onYear,
     required this.vin,
     required this.makeModel,
     required this.onPlate,
@@ -5427,6 +5595,9 @@ class _VehicleStep extends StatelessWidget {
     required this.onMakeModel,
     required this.onNext,
   });
+  final String year;
+  final bool editingQuality;
+  final ValueChanged<String> onYear;
   final String plate;
   final String vin;
   final String makeModel;
@@ -5435,6 +5606,7 @@ class _VehicleStep extends StatelessWidget {
   final ValueChanged<String> onMakeModel;
   final VoidCallback onNext;
 
+  final List<InspectionFileInfo> reviewFiles;
   @override
   Widget build(BuildContext context) {
     return _AppScreen(
@@ -5443,7 +5615,7 @@ class _VehicleStep extends StatelessWidget {
       activeNav: 1,
       leadingBack: true,
       paymentNav: true,
-      child: Column(
+      child: _QualityDataWithPhotos(enabled: editingQuality, files: reviewFiles, child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _ProgressDots(step: 2),
@@ -5467,10 +5639,11 @@ class _VehicleStep extends StatelessWidget {
             hint: 'Введите марку и модель',
             onChanged: onMakeModel,
           ),
+          if (editingQuality) _Input(label: 'Год автомобиля', value: year, onChanged: onYear, keyboardType: TextInputType.number),
           const SizedBox(height: 84),
           _PrimaryButton(text: 'Продолжить', onTap: onNext),
         ],
-      ),
+      )),
     );
   }
 }
@@ -5551,11 +5724,15 @@ class _DocumentScanStep extends StatelessWidget {
     required this.names,
     required this.uploaded,
     required this.onUpload,
+    required this.onCamera,
+    this.readOnly = false,
     required this.onNext,
   });
   final Map<String, String> names;
   final Map<String, bool> uploaded;
   final void Function(String type, String label) onUpload;
+  final void Function(String type, String label) onCamera;
+  final bool readOnly;
   final VoidCallback onNext;
 
   @override
@@ -5576,19 +5753,28 @@ class _DocumentScanStep extends StatelessWidget {
           const _InfoBox(
             title: 'Загрузите полный комплект',
             text:
-                'Публичная проверка покажет только свидетельство. Контрольный орган увидит весь пакет без функции печати.',
+                'Наблюдатель увидит свидетельство и техпаспорт. Контрольный орган увидит весь пакет.',
           ),
           const SizedBox(height: 10),
+          if (readOnly) const _InfoBox(title: 'Документы инспектора защищены', text: 'Рабочие записи и отчёты инспекции можно просматривать, но нельзя заменять.'),
           for (final entry in inspectionPackageDocuments.entries)
+            Column(children: [
             _ListTileCard(
               icon: names.containsKey(entry.key)
                   ? Icons.check_circle_rounded
                   : Icons.upload_file_rounded,
               title: entry.value,
               subtitle: names[entry.key] ?? 'PDF, JPG, PNG',
-              status: names.containsKey(entry.key) ? 'Выбрано' : 'Выбрать',
-              onTap: () => onUpload(entry.key, entry.value),
+              status: readOnly ? 'Зафиксировано' : uploaded[entry.key] == true ? 'Загружено' : names.containsKey(entry.key) ? 'Выбрано' : 'Выбрать',
+              onTap: readOnly ? null : () => onUpload(entry.key, entry.value),
             ),
+            if (!readOnly) Row(children: [
+              Expanded(child: _PrimaryButton(text: 'Файл', icon: Icons.upload_file_rounded, onTap: () => onUpload(entry.key, entry.value))),
+              const SizedBox(width: 8),
+              Expanded(child: _PrimaryButton(text: 'Камера', icon: Icons.camera_alt_rounded, onTap: () => onCamera(entry.key, entry.value))),
+            ]),
+            const SizedBox(height: 12),
+            ]),
           if (allSelected) ...[
             const SizedBox(height: 12),
             _PrimaryButton(
@@ -5651,7 +5837,8 @@ class _ValidityStep extends StatelessWidget {
 }
 
 class _ReviewStep extends StatelessWidget {
-  const _ReviewStep({required this.onSubmit});
+  const _ReviewStep({required this.onSubmit, this.editingQuality = false});
+  final bool editingQuality;
   final VoidCallback onSubmit;
 
   @override
@@ -5666,7 +5853,7 @@ class _ReviewStep extends StatelessWidget {
     ];
     return _AppScreen(
       title: 'Проверка данных',
-      subtitle: 'Перед отправкой в контроль качества',
+      subtitle: editingQuality ? 'Исправления контроля качества' : 'Перед отправкой в контроль качества',
       activeNav: 1,
       child: Column(
         children: [
@@ -5680,7 +5867,7 @@ class _ReviewStep extends StatelessWidget {
               status: 'Готово',
             ),
           _PrimaryButton(
-            text: 'Отправить в контроль качества',
+            text: editingQuality ? 'Сохранить исправления' : 'Отправить в контроль качества',
             icon: Icons.send_rounded,
             onTap: onSubmit,
           ),
@@ -8887,7 +9074,7 @@ class _PhotoBox extends StatelessWidget {
                 children: [
                   Image.memory(
                     Uint8List.fromList(imageBytes!),
-                    fit: BoxFit.cover,
+                    fit: BoxFit.contain,
                     gaplessPlayback: true,
                   ),
                   Positioned(

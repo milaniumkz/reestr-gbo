@@ -1,5 +1,8 @@
+import { QualityReviewData } from './quality-review-data';
+import { inspectionPeriod } from '../common/inspection-period';
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -110,7 +113,8 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
           photos: true,
           createdBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
           submittedBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
-          qualityConfirmedBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
+          qualityReviewer: { select: { id: true, fullName: true } },
+        qualityConfirmedBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
           approvedBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
         },
         orderBy: { createdAt: "desc" },
@@ -233,7 +237,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       if (!readiness.ready) throw new BadRequestException({ message: "Не хватает данных инспекции", missing: readiness.missing });
     }
     if (status === "quality_approved") {
-      await this.assertQualityControl(existing.organizationId, user);
+      await this.claimQualityReview(user,id);
       if (existing.status !== "submitted") throw new BadRequestException("Инспекция должна находиться в контроле качества");
       if (confirmed !== true) throw new BadRequestException("Поставьте галочку Подтверждаю");
       if (!existing.qualityDocumentUploadedAt) throw new BadRequestException("Контроль качества должен загрузить свидетельство после отправки инспекции");
@@ -249,7 +253,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       if (!readiness.ready) throw new BadRequestException({ message: "Inspection is not ready for approval", missing: readiness.missing });
     }
     if (status === "rejected") {
-      if (existing.status === "submitted") await this.assertQualityControl(existing.organizationId, user);
+      if (existing.status === "submitted") await this.claimQualityReview(user,id);
       else if (existing.status === "quality_approved") await this.assertOrganizationManager(existing.organizationId, user);
       else throw new BadRequestException("На исправление можно вернуть только инспекцию на проверке");
     }
@@ -259,10 +263,12 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
 
     const now = new Date();
     const inspection = await this.prisma.inspection.update({
-      where: { id, status: existing.status, ...(status === "quality_approved" ? { qualityDocumentUploadedAt: existing.qualityDocumentUploadedAt } : {}) },
+      where: { id, status: existing.status, ...(["quality_approved","rejected"].includes(status) && existing.status === "submitted" ? {qualityReviewerId:user?.sub} : {}), ...(status === "quality_approved" ? { qualityDocumentUploadedAt: existing.qualityDocumentUploadedAt } : {}) },
       data: {
         status,
         qualityDocumentUploadedAt: ["submitted", "rejected", "draft"].includes(status) ? null : undefined,
+        qualityReviewerId: ["submitted","rejected","draft"].includes(status) ? null : undefined,
+        qualityReviewStartedAt: ["submitted","rejected","draft"].includes(status) ? null : undefined,
         qualityConfirmedAt: status === "quality_approved" ? now : ["submitted", "rejected", "draft"].includes(status) ? null : undefined,
         qualityConfirmedById: status === "quality_approved" ? user?.sub : ["submitted", "rejected", "draft"].includes(status) ? null : undefined,
         submittedAt: status === "submitted" ? now : undefined,
@@ -278,6 +284,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
         photos: true,
         createdBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
         submittedBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
+        qualityReviewer: { select: { id: true, fullName: true } },
         qualityConfirmedBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
         approvedBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
       },
@@ -300,6 +307,93 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
 
     const certificate = await this.certificates.issueForInspection(id);
     return { ...inspection, certificate };
+  }
+
+  async claimQualityReview(user: RequestUser | undefined, id: string) {
+    const inspection = await this.assertInspectionAccess(id,user);
+    await this.assertQualityControl(inspection.organizationId,user);
+    return this.prisma.$transaction(async tx => {
+      const result = await tx.inspection.updateMany({
+        where:{id,status:"submitted",qualityReviewerId:null},
+        data:{qualityReviewerId:user!.sub,qualityReviewStartedAt:new Date()},
+      });
+      const current = await tx.inspection.findUnique({where:{id},include:{qualityReviewer:{select:{id:true,fullName:true}}}});
+      if (!current || current.status !== "submitted") throw new BadRequestException("Инспекция уже не находится в контроле качества");
+      if (current.qualityReviewerId !== user!.sub) {
+        throw new ConflictException(`Инспекцию уже проверяет ${current.qualityReviewer?.fullName || 'другой сотрудник контроля качества'}`);
+      }
+      if (result.count) await tx.auditLog.create({data:{actorId:user!.sub,action:"inspection.quality.review.claim",entity:"inspection",entityId:id}});
+      return {ok:true,qualityReviewerId:current.qualityReviewerId,qualityReviewer:current.qualityReviewer,qualityReviewStartedAt:current.qualityReviewStartedAt};
+    });
+  }
+
+  async releaseQualityReview(user: RequestUser | undefined, id: string) {
+    const inspection = await this.assertInspectionAccess(id,user);
+    const supervisor = user?.roles.includes("super_admin");
+    if (!supervisor) await this.assertQualityControl(inspection.organizationId,user);
+    return this.prisma.$transaction(async tx => {
+      const result = await tx.inspection.updateMany({where:{id,status:"submitted",qualityReviewerId:supervisor ? {not:null} : user!.sub},data:{qualityReviewerId:null,qualityReviewStartedAt:null}});
+      if (!result.count) throw new ConflictException("Можно освободить только свою проверку на этапе контроля качества");
+      await tx.auditLog.create({data:{actorId:user!.sub,action:"inspection.quality.review.release",entity:"inspection",entityId:id}});
+      return {ok:true};
+    });
+  }
+
+  async updateQualityData(user: RequestUser | undefined, id: string, input: QualityReviewData) {
+    const inspection = await this.assertInspectionAccess(id,user);
+    await this.claimQualityReview(user,id);
+    if (inspection.status !== "submitted") throw new BadRequestException("Исправления доступны только на этапе контроля качества");
+    const text = (value: unknown, label: string) => {
+      if (typeof value !== "string" || !value.trim()) throw new BadRequestException(`Заполните: ${label}`);
+      return value.trim();
+    };
+    const certificateNumber = this.normalizeCertificateNumber(text(input.certificateNumber,"номер свидетельства"));
+    const ownerName = text(input.owner?.fullName,"ФИО владельца");
+    const ownerAddress = text(input.owner?.address,"адрес владельца");
+    const vin = text(input.vehicle?.vin,"VIN").toUpperCase();
+    const plateNumber = text(input.vehicle?.plateNumber,"госномер").toUpperCase();
+    const serialNumber = text(input.cylinder?.serialNumber,"номер баллона");
+    const reducerName = text(input.cylinder?.reducerName,"редуктор");
+    const controlUnitName = text(input.cylinder?.controlUnitName,"ЭБУ");
+    if (!Number.isInteger(input.cylinder.volumeLiters) || input.cylinder.volumeLiters <= 0) throw new BadRequestException("Укажите положительный объем баллона");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.inspectionDate ?? "")) throw new BadRequestException("Укажите дату инспекции");
+    const period = inspectionPeriod(text(input.cylinder.fuelType,"тип газа"),input.inspectionDate);
+    if (period.inspectedAt.toISOString().slice(0,10) !== input.inspectionDate) throw new BadRequestException("Некорректная дата инспекции");
+    const producedAt = input.cylinder.producedAt ? new Date(input.cylinder.producedAt) : undefined;
+    if (producedAt && Number.isNaN(producedAt.getTime())) throw new BadRequestException("Некорректная дата выпуска баллона");
+    const year = input.vehicle.year;
+    if (year != null && (!Number.isInteger(year) || year < 1900 || year > 2100)) throw new BadRequestException("Некорректный год автомобиля");
+    await this.prisma.$transaction(async tx => {
+      const current = await tx.inspection.findUnique({where:{id},include:{vehicle:{include:{owners:{include:{user:true}},cylinders:true}}}});
+      if (!current || current.status !== "submitted") throw new BadRequestException("Этап инспекции изменился. Обновите карточку");
+      const used = await tx.inspection.findUnique({where:{certificateNumber}});
+      const certificate = await tx.certificate.findUnique({where:{number:certificateNumber}});
+      if ((used && used.id !== id) || certificate) throw new BadRequestException("Этот номер свидетельства уже используется");
+      const manufacturer = input.cylinder.manufacturer?.trim() || "Не указан";
+      const duplicate = await tx.gasCylinder.findFirst({where:{serialNumber,manufacturer,vehicleId:{not:current.vehicleId}}});
+      if (duplicate) throw new BadRequestException("Этот баллон уже привязан к другому автомобилю");
+      await tx.inspection.update({where:{id,status:"submitted",qualityReviewerId:user!.sub},data:{certificateNumber,qualityConfirmedAt:null,qualityConfirmedById:null}});
+      await tx.vehicle.update({where:{id:current.vehicleId},data:{vin,plateNumber,normalizedPlate:plateNumber.replace(/[^0-9a-zA-Zа-яА-Я]/g,"").toUpperCase(),vinLast3:vin.slice(-3),make:input.vehicle.make?.trim() || "Не указано",model:input.vehicle.model?.trim() || "Не указано",year:year ?? null}});
+      const owner = current.vehicle.owners[0];
+      if (!owner) throw new BadRequestException("Владелец автомобиля не найден");
+      let ownerUserId = owner.userId;
+      const phone = input.owner.phone?.trim();
+      if (phone && phone !== owner.user.phone) {
+        const digits = phone.replace(/\D/g,"");
+        if (digits.length < 10 || digits.length > 15) throw new BadRequestException("Проверьте телефон владельца");
+        const canonical = digits.length === 11 && digits.startsWith("8") ? `+7${digits.slice(1)}` : digits.length === 10 ? `+7${digits}` : `+${digits}`;
+        const existingUser = await tx.user.findUnique({where:{phone:canonical}});
+        const ownerUser = existingUser ?? await tx.user.create({data:{phone:canonical,fullName:ownerName,iin:input.owner.iin?.trim() || null,roles:{create:[{role:"vehicle_owner"}]}}});
+        ownerUserId = ownerUser.id;
+      }
+      await tx.vehicleOwner.update({where:{id:owner.id},data:{userId:ownerUserId,fullName:ownerName,address:ownerAddress,iin:input.owner.iin?.trim() || null}});
+      const cylinder = current.vehicle.cylinders[0];
+      const data = {serialNumber,manufacturer,volumeLiters:input.cylinder.volumeLiters,reducerName,controlUnitName,producedAt,...period};
+      if (cylinder) await tx.gasCylinder.update({where:{id:cylinder.id},data});
+      else await tx.gasCylinder.create({data:{...data,vehicleId:current.vehicleId}});
+      await tx.auditLog.create({data:{actorId:user!.sub,action:"inspection.quality.data.update",entity:"inspection",entityId:id,metadata:{certificateNumber,previousCertificateNumber:current.certificateNumber,fields:["owner","vehicle","cylinder","certificateNumber","inspectionDate"]}}});
+    });
+    return this.detail(id,user);
   }
 
   async updateData(
@@ -396,7 +490,8 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  async certificateNumberAvailability(number: string) {
+  async certificateNumberAvailability(number: string, inspectionId?: string, user?: RequestUser) {
+    if (inspectionId) await this.assertInspectionAccess(inspectionId,user);
     const certificateNumber = this.normalizeCertificateNumber(number);
     if (!certificateNumber) {
       throw new BadRequestException("Введите номер свидетельства");
@@ -407,7 +502,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       }),
       this.prisma.inspection.findUnique({ where: { certificateNumber } }),
     ]);
-    return { available: !certificate && !inspection };
+    return { available: !certificate && (!inspection || inspection.id === inspectionId) };
   }
 
   async detail(id: string, user?: RequestUser) {
@@ -421,6 +516,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
         vehicle: { include: { owners: true, cylinders: true } },
         createdBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
         submittedBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
+        qualityReviewer: { select: { id: true, fullName: true } },
         qualityConfirmedBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
         approvedBy: { select: { id: true, phone: true, fullName: true, lastLoginAt: true } },
       },
@@ -455,9 +551,15 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
     location: { lat?: number | string; lng?: number | string } = {},
   ) {
     const inspection = await this.assertInspectionAccess(id, user);
+    if (["gas_work_record","cylinder_work_record","gas_inspection_report","cylinder_inspection_report"].includes(type)) {
+      const qualityMember = await this.prisma.organizationMember.findFirst({where:{organizationId:inspection.organizationId,userId:user?.sub,role:"quality_control"}});
+      if (qualityMember) throw new ForbiddenException("Контроль качества не может изменять рабочие записи и отчеты инспекции");
+    }
     if (type === "certificate_document") {
-      await this.assertQualityControl(inspection.organizationId, user);
+      await this.claimQualityReview(user,id);
       if (inspection.status !== "submitted") throw new BadRequestException("Свидетельство загружается на этапе контроля качества");
+    } else if (inspection.status === "submitted" && ["cylinder_label", "vehicle_photo", "tech_passport"].includes(type)) {
+      await this.claimQualityReview(user,id);
     } else if (!["draft", "rejected"].includes(inspection.status)) {
       throw new BadRequestException("Документы инспектора зафиксированы. Верните инспекцию на исправление");
     }
@@ -481,9 +583,15 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
         lat,
         lng,
       };
-    const photo = type === "certificate_document"
+    const photo = inspection.status === "submitted" && type !== "certificate_document"
+      ? await this.prisma.$transaction(async tx => {
+          await tx.inspection.update({where:{id,status:"submitted",qualityReviewerId:user!.sub},data:{updatedAt:new Date()}});
+          await tx.inspectionPhoto.deleteMany({where:{inspectionId:id,type}});
+          return tx.inspectionPhoto.create({data:photoData});
+        })
+      : type === "certificate_document"
       ? await this.prisma.$transaction(async (tx) => {
-          await tx.inspection.update({ where: { id, status: "submitted" }, data: { qualityDocumentUploadedAt: new Date() } });
+          await tx.inspection.update({ where: { id, status: "submitted", qualityReviewerId: user!.sub }, data: { qualityDocumentUploadedAt: new Date() } });
           return tx.inspectionPhoto.create({ data: photoData });
         })
       : await this.prisma.inspectionPhoto.create({ data: photoData });

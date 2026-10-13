@@ -1,3 +1,4 @@
+import { QualityReviewData } from './quality-review-data';
 import {
   Body,
   Controller,
@@ -79,6 +80,24 @@ export class InspectionsController {
     return this.inspections.setStatus(user, id, status, confirmed);
   }
 
+  @Post(":id/quality-review/claim")
+  @Roles("inspection_org")
+  claimQualityReview(@CurrentUser() user: RequestUser, @Param("id") id: string) {
+    return this.inspections.claimQualityReview(user,id);
+  }
+
+  @Post(":id/quality-review/release")
+  @Roles("inspection_org", "super_admin")
+  releaseQualityReview(@CurrentUser() user: RequestUser, @Param("id") id: string) {
+    return this.inspections.releaseQualityReview(user,id);
+  }
+
+  @Patch(":id/review-data")
+  @Roles("inspection_org")
+  updateQualityData(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() body: QualityReviewData) {
+    return this.inspections.updateQualityData(user, id, body);
+  }
+
   @Patch(":id/data")
   @Roles("inspection_org", "operator", "super_admin")
   updateData(
@@ -101,8 +120,8 @@ export class InspectionsController {
 
   @Get("certificate-number/:number/availability")
   @Roles("inspection_org", "operator", "super_admin")
-  certificateNumberAvailability(@Param("number") number: string) {
-    return this.inspections.certificateNumberAvailability(number);
+  certificateNumberAvailability(@CurrentUser() user: RequestUser, @Param("number") number: string, @Query("inspectionId") inspectionId?: string) {
+    return this.inspections.certificateNumberAvailability(number, inspectionId, user);
   }
 
   @Get(":id")

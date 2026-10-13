@@ -32,6 +32,7 @@ import {
   deleteLegalDocument,
   deleteOrganization,
   deleteInspection,
+  releaseInspectionReview,
   deleteNotification,
   getInspectionReadiness,
   getDashboardData,
@@ -1473,6 +1474,12 @@ export default function AdminDashboard() {
     });
   }
 
+  async function releaseQualityReview(row: Inspection) {
+    if (!token || !user?.roles.includes('super_admin')) return;
+    if (!window.confirm(`Вернуть инспекцию ${row.certificateNumber ?? row.id} в доступные проверки? Сейчас её проверяет ${row.qualityReviewer?.fullName ?? 'сотрудник контроля качества'}.`)) return;
+    await runAction('Проверка освобождена', async () => { await releaseInspectionReview(token, row.id); await refresh(); });
+  }
+
   async function removeInspection(row: Inspection) {
     if (!token || !user?.roles.includes('super_admin') || deletingInspectionId) return;
     const number = row.certificate?.number ?? row.certificateNumber ?? row.id;
@@ -1996,6 +2003,7 @@ export default function AdminDashboard() {
             canDelete={Boolean(user?.roles.includes('super_admin'))}
             deletingId={deletingInspectionId}
             onDelete={removeInspection}
+            onReleaseReview={releaseQualityReview}
             statusFilter={inspectionStatusFilter}
             organizationFilter={inspectionOrganizationFilter}
             dateFrom={inspectionDateFrom}

@@ -203,24 +203,34 @@ describe('Inspection quality control workflow', () => {
       qualityDocumentUploadedAt: null as Date | null,
       qualityConfirmedAt: null as Date | null,
       qualityConfirmedById: null as string | null,
+      qualityReviewerId: null as string | null,
+      qualityReviewStartedAt: null as Date | null,
+      qualityReviewer: null as {id:string;fullName:string}|null,
+      vehicleId:'vehicle_1',
       photos: ['cylinder_label','vehicle_photo','tech_passport','gas_work_record','cylinder_work_record','gas_inspection_report','cylinder_inspection_report'].map(type => ({ id:type, type, objectKey:type })),
       vehicle: { cylinders:[{}], owners:[{}] },
     };
     const prisma = {
       inspection: {
+        updateMany: jest.fn(async ({where,data}: {where:{id:string;status:string;qualityReviewerId:string|null};data:Record<string,unknown>}) => {
+          if (where.id !== state.id || where.status !== state.status || where.qualityReviewerId !== state.qualityReviewerId) return {count:0};
+          Object.assign(state,data);
+          state.qualityReviewer = state.qualityReviewerId ? {id:state.qualityReviewerId,fullName:`Контролёр ${state.qualityReviewerId}`} : null;
+          return {count:1};
+        }),
         findUnique: jest.fn(async () => state),
         update: jest.fn(async ({ data }: { data: Record<string, unknown> }) => {
           Object.assign(state,Object.fromEntries(Object.entries(data).filter(([,v])=>v!==undefined)));
           return {...state};
         }),
       },
-      inspectionPhoto: { create: jest.fn(async ({ data }: { data: { type:string; objectKey:string } }) => {
+      inspectionPhoto: { deleteMany: jest.fn(async ({where}:{where:{inspectionId:string;type:string}}) => { const before=state.photos.length; state.photos=state.photos.filter(p=>p.type!==where.type); return {count:before-state.photos.length}; }), create: jest.fn(async ({ data }: { data: { type:string; objectKey:string } }) => {
         const photo={id:'certificate-photo',...data}; state.photos.push(photo); return photo;
       }) },
       organizationMember: {
         findMany: jest.fn(async () => [{ organizationId:'org_1' }]),
         findFirst: jest.fn(async ({ where }: { where: { userId:string; role:string } }) =>
-          (where.userId==='qc' && where.role==='quality_control') || (where.userId==='leader' && where.role==='admin') ? {id:'membership'} : null),
+          (['qc','qc2'].includes(where.userId) && where.role==='quality_control') || (where.userId==='leader' && where.role==='admin') ? {id:'membership'} : null),
       },
       auditLog: { create: jest.fn(async () => ({})) },
       $transaction: jest.fn(async (action: (tx: unknown) => Promise<unknown>) => action(prisma)),
@@ -231,6 +241,37 @@ describe('Inspection quality control workflow', () => {
     const user=(id:string)=>({sub:id,phone:'test',roles:['inspection_org']});
     return {state,prisma,storage,certificates,service,user};
   }
+  it('lets only one quality employee claim an inspection and exposes who opened it', async () => {
+    const f=fixture();f.state.status='submitted';
+    const results=await Promise.allSettled([f.service.claimQualityReview(f.user('qc'),'inspection_1'),f.service.claimQualityReview(f.user('qc2'),'inspection_1')]);
+    expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);
+    expect(f.state.qualityReviewerId).toBe('qc');
+    await expect(f.service.claimQualityReview(f.user('qc2'),'inspection_1')).rejects.toThrow('Контролёр qc');
+    await expect(f.service.claimQualityReview(f.user('qc'),'inspection_1')).resolves.toMatchObject({qualityReviewerId:'qc'});
+    expect(f.state.qualityReviewStartedAt).toBeInstanceOf(Date);
+  });
+  it('allows the owner to release a task, after which another employee can take it', async () => {
+    const f=fixture();f.state.status='submitted';
+    await f.service.claimQualityReview(f.user('qc'),'inspection_1');
+    await expect(f.service.releaseQualityReview(f.user('qc2'),'inspection_1')).rejects.toThrow('только свою');
+    await f.service.releaseQualityReview(f.user('qc'),'inspection_1');
+    expect(f.state.qualityReviewerId).toBeNull();
+    await f.service.claimQualityReview(f.user('qc2'),'inspection_1');
+    expect(f.state.qualityReviewerId).toBe('qc2');
+  });
+  it.each(['gas_work_record','cylinder_work_record','gas_inspection_report','cylinder_inspection_report'])('keeps %s immutable for quality staff',async type => {
+    const f=fixture();f.state.status='submitted';
+    await expect(f.service.uploadPhoto('inspection_1',type,{originalname:'doc.jpg',buffer:Buffer.from('photo')},f.user('qc'))).rejects.toThrow('не может изменять');
+    expect(f.storage.putObject).not.toHaveBeenCalled();
+  });
+  it('replaces a passport photo without changing protected work records and reports',async()=>{
+    const f=fixture();f.state.status='submitted';
+    const originals=f.state.photos.filter(p=>p.type.endsWith('record')||p.type.endsWith('report')).map(p=>p.objectKey);
+    await f.service.uploadPhoto('inspection_1','tech_passport',{originalname:'passport.jpg',buffer:Buffer.from('photo')},f.user('qc'));
+    expect(f.state.photos.filter(p=>p.type==='tech_passport')).toHaveLength(1);
+    expect(f.state.photos.filter(p=>p.type.endsWith('record')||p.type.endsWith('report')).map(p=>p.objectKey)).toEqual(originals);
+    await expect(f.service.uploadPhoto('inspection_1','tech_passport',{originalname:'passport.jpg',buffer:Buffer.from('photo')},f.user('qc2'))).rejects.toThrow('уже проверяет');
+  });
   it('requires inspector -> uploaded certificate + confirmation -> leader -> registry',async()=>{
     const f=fixture();
     expect((await f.service.readiness('inspection_1',f.user('inspector'))).ready).toBe(true);

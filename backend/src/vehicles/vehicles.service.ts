@@ -1,5 +1,6 @@
+import { hasGlobalAccess } from '../common/access-scope';
 import { inspectionPeriod } from '../common/inspection-period';
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { RequestUser } from "../common/current-user";
 import { listResponse, paginationMeta } from "../common/pagination";
@@ -72,6 +73,12 @@ export class VehiclesService {
       validUntil: string;
     };
   }, user?: RequestUser) {
+    if (user?.sub && !hasGlobalAccess(user)) {
+      const memberships = await this.prisma.organizationMember.findMany({where:{userId:user.sub},select:{role:true}});
+      if (memberships.some(m => m.role === 'quality_control') && !memberships.some(m => ['inspector','admin','inspection_org'].includes(m.role))) {
+        throw new ForbiddenException('Контроль качества исправляет данные только через карточку инспекции');
+      }
+    }
     const period = input.cylinder.fuelType
       ? inspectionPeriod(input.cylinder.fuelType, input.cylinder.inspectedAt ?? new Date())
       : undefined;

@@ -46,6 +46,8 @@ export function InspectionDetailPanel({
         <Info label="Создал свидетельство" value={inspection.createdBy ? `${inspection.createdBy.fullName} · ${inspection.createdBy.phone}` : '-'} />
         <Info label="Отправил на проверку" value={inspection.submittedBy ? `${inspection.submittedBy.fullName} · ${inspection.submittedBy.phone}` : '-'} />
         <Info label="Утвердил и отправил в реестр" value={inspection.approvedBy ? `${inspection.approvedBy.fullName} · ${inspection.approvedBy.phone}` : '-'} />
+        <Info label="Проверку открыл" value={inspection.qualityReviewer?.fullName ?? '-'} />
+        <Info label="Начало проверки" value={inspection.qualityReviewStartedAt ? new Date(inspection.qualityReviewStartedAt).toLocaleString('ru-RU') : '-'} />
         <Info label="Подтвердил контроль качества" value={inspection.qualityConfirmedBy ? `${inspection.qualityConfirmedBy.fullName} · ${inspection.qualityConfirmedBy.phone}` : '-'} />
         <Info label="Создано" value={new Date(inspection.createdAt).toLocaleString('ru-RU')} />
         <Info label="Отправлено на проверку" value={inspection.submittedAt ? new Date(inspection.submittedAt).toLocaleString('ru-RU') : '-'} />

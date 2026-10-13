@@ -470,10 +470,10 @@ class InspectionRepository {
     return response['id']?.toString() ?? '';
   }
 
-  Future<bool> isCertificateNumberAvailable(String number) async {
+  Future<bool> isCertificateNumberAvailable(String number, {String? inspectionId}) async {
     if (AppEnvironment.isDemo) return true;
     final response = await _api.getJson(
-      '/inspections/certificate-number/${Uri.encodeComponent(number)}/availability',
+      '/inspections/certificate-number/${Uri.encodeComponent(number)}/availability${inspectionId == null ? '' : '?inspectionId=${Uri.encodeQueryComponent(inspectionId)}'}',
     );
     return response['available'] == true;
   }
@@ -502,6 +502,13 @@ class InspectionRepository {
       'confirmed': ?confirmed,
     });
     return InspectionSummary.fromJson(response);
+  }
+
+  Future<void> claimQualityReview(String id) async { await _api.postJson('/inspections/$id/quality-review/claim', {}); }
+  Future<void> releaseQualityReview(String id) async { await _api.postJson('/inspections/$id/quality-review/release', {}); }
+
+  Future<InspectionSummary> updateQualityData(String id, Map<String, dynamic> data) async {
+    return InspectionSummary.fromJson(await _api.patchJson('/inspections/$id/review-data', data));
   }
 
   Future<InspectionSummary> updateData({
