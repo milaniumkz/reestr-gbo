@@ -1,0 +1,65 @@
+name: Prepare Flutter feature
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  validate:
+    if: startsWith(github.ref, 'refs/heads/feature/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.41.1"
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: dart format lib test
+      - name: Analyze with reviewable diagnostics
+        shell: bash
+        run: |
+          set +e
+          flutter analyze --machine > "$RUNNER_TEMP/flutter-analyze.txt" 2>&1
+          result=$?
+          cat "$RUNNER_TEMP/flutter-analyze.txt"
+          python3 - <<'PYCODE'
+          import os
+          for line in open(os.environ['RUNNER_TEMP']+'/flutter-analyze.txt'):
+              parts=line.strip().split('|',7)
+              if len(parts)==8 and parts[0] in ('ERROR','WARNING','INFO'):
+                  path=os.path.relpath(parts[3])
+                  message=parts[7].replace('%','%25').replace('\n','%0A').replace('\r','%0D')
+                  print(f"::error file={path},line={parts[4]},col={parts[5]}::{message}")
+          PYCODE
+          exit "$result"
+      - name: Test with reviewable diagnostics
+        shell: bash
+        run: |
+          set +e
+          flutter test --reporter=json > "$RUNNER_TEMP/flutter-test.json" 2>&1
+          result=$?
+          cat "$RUNNER_TEMP/flutter-test.json"
+          python3 - <<'PYCODE'
+          import json,os
+          for line in open(os.environ['RUNNER_TEMP']+'/flutter-test.json'):
+              try: item=json.loads(line)
+              except ValueError: continue
+              if item.get('type')=='error':
+                  message=str(item.get('error','Flutter test failed')).replace('%','%25').replace('\n','%0A').replace('\r','%0D')
+                  print(f"::error::{message}")
+          PYCODE
+          exit "$result"
+      - run: flutter build web --release --pwa-strategy=none --dart-define=API_BASE_URL=https://89-207-255-42.sslip.io/api/v1 --dart-define=APP_MODE=production
+      - name: Save validated dependency lock and formatting on the feature branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pubspec.lock lib test
+          if ! git diff --cached --quiet; then
+            git commit -m "Lock camera dependencies and format validated Flutter feature [skip ci]"
+            git push origin "HEAD:$GITHUB_REF_NAME"
+          fi
