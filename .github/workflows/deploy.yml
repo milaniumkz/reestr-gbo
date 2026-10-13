@@ -60,6 +60,26 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+      - name: Configure official Maven repositories for included Gradle builds
+        if: github.event.inputs.operation != 'deploy-web'
+        run: |
+          mkdir -p ~/.gradle/init.d
+          cat > ~/.gradle/init.d/official-repositories.gradle <<'GRADLE'
+          beforeSettings { settings ->
+            settings.pluginManagement.repositories {
+              google()
+              mavenCentral()
+              gradlePluginPortal()
+            }
+          }
+          allprojects {
+            buildscript.repositories {
+              google()
+              mavenCentral()
+              gradlePluginPortal()
+            }
+          }
+          GRADLE
       - name: Build Android APK for the production API
         if: github.event.inputs.operation != 'deploy-web'
         run: |
