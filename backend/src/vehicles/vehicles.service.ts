@@ -1,3 +1,4 @@
+import { ownerPhone as normalizeOwnerPhone } from '../common/owner-phone';
 import { hasGlobalAccess } from '../common/access-scope';
 import { inspectionPeriod } from '../common/inspection-period';
 import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
@@ -82,20 +83,7 @@ export class VehiclesService {
     const period = input.cylinder.fuelType
       ? inspectionPeriod(input.cylinder.fuelType, input.cylinder.inspectedAt ?? new Date())
       : undefined;
-    const ownerUser = await this.prisma.user.upsert({
-      where: { phone: input.owner.phone },
-      update: {
-        fullName: input.owner.fullName,
-        iin: input.owner.iin,
-      },
-      create: {
-        phone: input.owner.phone,
-        fullName: input.owner.fullName,
-        iin: input.owner.iin,
-        roles: { create: [{ role: "vehicle_owner" }] },
-      },
-    });
-
+    const ownerPhone = normalizeOwnerPhone(input.owner.phone);
     return this.prisma.vehicle
       .upsert({
         where: { vin: input.vin },
@@ -125,12 +113,14 @@ export class VehiclesService {
         );
 
         const existingOwner = await this.prisma.vehicleOwner.findFirst({
-          where: { vehicleId: vehicle.id, userId: ownerUser.id },
+          where: { vehicleId: vehicle.id },
         });
         if (existingOwner) {
           await this.prisma.vehicleOwner.update({
             where: { id: existingOwner.id },
             data: {
+              userId: null,
+              phone: ownerPhone,
               fullName: input.owner.fullName,
               iin: input.owner.iin,
               address: input.owner.address,
@@ -140,7 +130,8 @@ export class VehiclesService {
           await this.prisma.vehicleOwner.create({
             data: {
               vehicleId: vehicle.id,
-              userId: ownerUser.id,
+              userId: null,
+              phone: ownerPhone,
               fullName: input.owner.fullName,
               iin: input.owner.iin,
               address: input.owner.address,
@@ -194,7 +185,7 @@ export class VehiclesService {
             metadata: {
               vin: vehicle.vin,
               plateNumber: vehicle.plateNumber,
-              ownerUserId: ownerUser.id,
+              ownerPhone: input.owner.phone,
               cylinderSerial: input.cylinder.serialNumber,
             },
           },

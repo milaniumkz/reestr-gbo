@@ -1,3 +1,4 @@
+import { ownerPhone as normalizeOwnerPhone } from '../common/owner-phone';
 import { QualityReviewData } from './quality-review-data';
 import { inspectionPeriod } from '../common/inspection-period';
 import {
@@ -378,17 +379,8 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       await tx.vehicle.update({where:{id:current.vehicleId},data:{vin,plateNumber,normalizedPlate:plateNumber.replace(/[^0-9a-zA-Zа-яА-Я]/g,"").toUpperCase(),vinLast3:vin.slice(-3),make:input.vehicle.make?.trim() || "Не указано",model:input.vehicle.model?.trim() || "Не указано",year:year ?? null}});
       const owner = current.vehicle.owners[0];
       if (!owner) throw new BadRequestException("Владелец автомобиля не найден");
-      let ownerUserId = owner.userId;
-      const phone = input.owner.phone?.trim();
-      if (phone && phone !== owner.user.phone) {
-        const digits = phone.replace(/\D/g,"");
-        if (digits.length < 10 || digits.length > 15) throw new BadRequestException("Проверьте телефон владельца");
-        const canonical = digits.length === 11 && digits.startsWith("8") ? `+7${digits.slice(1)}` : digits.length === 10 ? `+7${digits}` : `+${digits}`;
-        const existingUser = await tx.user.findUnique({where:{phone:canonical}});
-        const ownerUser = existingUser ?? await tx.user.create({data:{phone:canonical,fullName:ownerName,iin:input.owner.iin?.trim() || null,roles:{create:[{role:"vehicle_owner"}]}}});
-        ownerUserId = ownerUser.id;
-      }
-      await tx.vehicleOwner.update({where:{id:owner.id},data:{userId:ownerUserId,fullName:ownerName,address:ownerAddress,iin:input.owner.iin?.trim() || null}});
+      const phone = input.owner.phone === undefined ? owner.phone : normalizeOwnerPhone(input.owner.phone);
+      await tx.vehicleOwner.update({where:{id:owner.id},data:{userId:null,phone,fullName:ownerName,address:ownerAddress,iin:input.owner.iin?.trim() || null}});
       const cylinder = current.vehicle.cylinders[0];
       const data = {serialNumber,manufacturer,volumeLiters:input.cylinder.volumeLiters,reducerName,controlUnitName,producedAt,...period};
       if (cylinder) await tx.gasCylinder.update({where:{id:cylinder.id},data});

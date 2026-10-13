@@ -163,12 +163,13 @@ model Vehicle {
 model VehicleOwner {
   id        String  @id @default(uuid())
   vehicleId String
-  userId    String
+  userId    String?
+  phone     String?
   iin       String?
   fullName  String
   address   String?
   vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 }
 
 model GasCylinder {

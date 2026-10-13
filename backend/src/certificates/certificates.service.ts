@@ -1,3 +1,4 @@
+import { ownerPhone as normalizeOwnerPhone } from '../common/owner-phone';
 import { inspectionPeriod } from '../common/inspection-period';
 import {
   BadRequestException,
@@ -507,27 +508,7 @@ export class CertificatesService {
         }
       }
 
-      const ownerPhone =
-        parsed.ownerPhone ||
-        `owner:${parsed.certificateNumber || parsed.vin || fileHash}`;
-      const ownerUser = await this.prisma.user.upsert({
-        where: { phone: ownerPhone },
-        update: {
-          fullName: parsed.ownerName,
-        },
-        create: {
-          phone: ownerPhone,
-          fullName: parsed.ownerName,
-          roles: { create: [{ role: "vehicle_owner" }] },
-        },
-      });
-
-      await this.prisma.userRole.upsert({
-        where: { userId_role: { userId: ownerUser.id, role: "vehicle_owner" } },
-        update: {},
-        create: { userId: ownerUser.id, role: "vehicle_owner" },
-      });
-
+      const ownerPhone = normalizeOwnerPhone(parsed.ownerPhone);
       const vehicle = await this.prisma.vehicle.upsert({
         where: { vin: parsed.vin },
         update: {
@@ -548,18 +529,18 @@ export class CertificatesService {
       });
 
       const existingOwner = await this.prisma.vehicleOwner.findFirst({
-        where: { vehicleId: vehicle.id, userId: ownerUser.id },
+        where: { vehicleId: vehicle.id },
       });
       if (existingOwner) {
         await this.prisma.vehicleOwner.update({
           where: { id: existingOwner.id },
-          data: { fullName: parsed.ownerName, address: parsed.ownerAddress },
+          data: { userId: null, phone: ownerPhone, fullName: parsed.ownerName, address: parsed.ownerAddress },
         });
       } else {
         await this.prisma.vehicleOwner.create({
           data: {
             vehicleId: vehicle.id,
-            userId: ownerUser.id,
+            phone: ownerPhone,
             fullName: parsed.ownerName,
             address: parsed.ownerAddress,
           },

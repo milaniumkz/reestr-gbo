@@ -55,6 +55,7 @@ describe('RegistryService.search', () => {
     expect(where.AND[0].OR).toEqual([
       { certificates: { some: { inspection: { organizationId: { in: [] } } } } },
       { owners: { some: { userId: 'owner_1' } } },
+      { owners: { some: { phone: '+77000000000' } } },
     ]);
     expect(where.OR).toHaveLength(5);
     expect(prisma.vehicle.count).toHaveBeenCalledWith({ where });

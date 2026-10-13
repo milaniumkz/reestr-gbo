@@ -265,6 +265,13 @@ describe('Inspection quality control workflow', () => {
     await expect(f.service.updateQualityData(f.user('qc2'),'inspection_1',corrected)).rejects.toThrow('уже проверяет');
     expect(f.prisma.vehicle.update).toHaveBeenCalledTimes(1);
   });
+  it('changes the owner phone without creating a user account or granting a role',async()=>{
+    const f=fixture();f.state.status='submitted';
+    await f.service.updateQualityData(f.user('qc'),'inspection_1',{...corrected,owner:{...corrected.owner,phone:'8 (701) 111-22-33'}});
+    expect(f.prisma.vehicleOwner.update).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({phone:'+77011112233',userId:null})}));
+    expect(f.prisma.user.create).not.toHaveBeenCalled();
+    expect(f.prisma.user.findUnique).not.toHaveBeenCalled();
+  });
   it('does not allow inspectors or completed reviews to use quality editing',async()=>{
     const f=fixture();f.state.status='submitted';
     await expect(f.service.updateQualityData(f.user('inspector'),'inspection_1',corrected)).rejects.toThrow('Только контроль качества');

@@ -108,7 +108,7 @@ export class RegistryService {
               ? [{ certificates: { some: { inspection: { organizationId: { in: organizationIds } } } } }]
               : []),
             ...(user?.roles.includes("vehicle_owner")
-              ? [{ owners: { some: { userId: user.sub } } }]
+              ? [{ owners: { some: { userId: user.sub } } }, ...(user.phone ? [{owners:{some:{phone:user.phone}}}] : [])]
               : []),
           ],
         },
