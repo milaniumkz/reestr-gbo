@@ -42,6 +42,8 @@ const fileTypeLabels: Record<string, string> = {
   cylinder_label: 'Фото бирки баллона',
   vehicle_photo: 'Фото автомобиля',
   tech_passport: 'Техпаспорт',
+  applicant_application: 'Заявка заявителя',
+  applicant_questionnaire: 'Анкета оценки заявителя',
   gas_work_record: 'Рабочая запись ГБО',
   cylinder_work_record: 'Рабочая запись баллона',
   gas_inspection_report: 'Отчет инспекции ГБО',

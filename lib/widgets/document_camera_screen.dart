@@ -33,9 +33,9 @@ class _DocumentCameraScreenState extends State<DocumentCameraScreen> with Widget
       if (!mounted) { await controller.dispose(); return; }
       setState(() => _error = null);
     } catch (error) {
-      if (mounted) setState(() => _error = error is CameraException && error.code.contains('Denied')
+      if (mounted) { setState(() => _error = error is CameraException && error.code.contains('Denied')
           ? 'Разрешите доступ к камере в настройках приложения'
-          : 'Не удалось открыть камеру. Вернитесь и выберите файл.');
+          : 'Не удалось открыть камеру. Вернитесь и выберите файл.'); }
     } finally { _initializing = false; }
   }
   @override

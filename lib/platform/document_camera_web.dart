@@ -47,7 +47,7 @@ Future<PickedLocalFile?> captureDocumentPhoto({double frameAspectRatio = 0.71}) 
       final canvas = html.CanvasElement(width: width, height: height);
       canvas.context2D.drawImageScaled(video, 0, 0, width, height);
       final data = canvas.toDataUrl('image/jpeg', 0.82);
-      if (!result.isCompleted) result.complete(PickedLocalFile(name: 'document-${DateTime.now().millisecondsSinceEpoch}.jpg', bytes: base64Decode(data.split(',').last)));
+      if (!result.isCompleted) { result.complete(PickedLocalFile(name: 'document-${DateTime.now().millisecondsSinceEpoch}.jpg', bytes: base64Decode(data.split(',').last))); }
     } catch (error, trace) { if (!result.isCompleted) result.completeError(error, trace); }
   });
   try {

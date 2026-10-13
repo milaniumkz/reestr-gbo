@@ -208,7 +208,8 @@ describe('Inspection quality control workflow', () => {
       qualityReviewer: null as {id:string;fullName:string}|null,
       vehicleId:'vehicle_1',
       photos: ['applicant_application','applicant_questionnaire','cylinder_label','vehicle_photo','tech_passport','gas_work_record','cylinder_work_record','gas_inspection_report','cylinder_inspection_report'].map(type => ({ id:type, type, objectKey:type })),
-      vehicle: { cylinders:[{}], owners:[{}] },
+      requireApplicantPhotos: false,
+      vehicle: { cylinders:[{id:'cylinder_1'}], owners:[{id:'owner_1',userId:'owner_user',user:{phone:'+77001234567'}}] },
     };
     const prisma = {
       inspection: {
@@ -224,6 +225,11 @@ describe('Inspection quality control workflow', () => {
           return {...state};
         }),
       },
+      certificate: {findUnique:jest.fn(async()=>null)},
+      vehicle: {findUnique:jest.fn(async()=>({id:'vehicle_1'})), update:jest.fn(async()=>({}))},
+      vehicleOwner: {update:jest.fn(async()=>({}))},
+      gasCylinder: {findFirst:jest.fn(async()=>null),update:jest.fn(async()=>({}))},
+      user: {findUnique:jest.fn(async()=>({id:'existing_user'})),create:jest.fn(async()=>({id:'new_user'}))},
       inspectionPhoto: { deleteMany: jest.fn(async ({where}:{where:{inspectionId:string;type:string}}) => { const before=state.photos.length; state.photos=state.photos.filter(p=>p.type!==where.type); return {count:before-state.photos.length}; }), create: jest.fn(async ({ data }: { data: { type:string; objectKey:string } }) => {
         const photo={id:'certificate-photo',...data}; state.photos.push(photo); return photo;
       }) },
@@ -235,12 +241,56 @@ describe('Inspection quality control workflow', () => {
       auditLog: { create: jest.fn(async () => ({})) },
       $transaction: jest.fn(async (action: (tx: unknown) => Promise<unknown>) => action(prisma)),
     };
-    const storage={putObject:jest.fn(async()=>({}))};
+    const storage={putObject:jest.fn(async()=>({})),objectUrl:jest.fn((key:string)=>({url:`https://example.test/${key}`}))};
     const certificates={issueForInspection:jest.fn(async()=>({id:'certificate_1'}))};
     const service=new InspectionsService(prisma as never,storage as never,certificates as never);
     const user=(id:string)=>({sub:id,phone:'test',roles:['inspection_org']});
     return {state,prisma,storage,certificates,service,user};
   }
+  const corrected = {
+    certificateNumber:'TEST-1',inspectionDate:'2026-10-13',
+    owner:{fullName:'Исправленный владелец',address:'Астана',phone:'+77001234567',iin:'123456789012'},
+    vehicle:{vin:'VIN000000123',plateNumber:'123 ABC 01',make:'Toyota',model:'Camry',year:2020},
+    cylinder:{serialNumber:'CYL-1',manufacturer:'Atiker',volumeLiters:54,fuelType:'СНГ',reducerName:'Alaska',controlUnitName:'Atiker'},
+  };
+  it('allows assigned quality control to correct business data while keeping original reports',async()=>{
+    const f=fixture();f.state.status='submitted';
+    const originals=f.state.photos.map(p=>({...p}));
+    await f.service.updateQualityData(f.user('qc'),'inspection_1',corrected);
+    expect(f.prisma.vehicle.update).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({vin:'VIN000000123',normalizedPlate:'123ABC01'})}));
+    expect(f.prisma.vehicleOwner.update).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({fullName:'Исправленный владелец'})}));
+    expect(f.prisma.gasCylinder.update).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({validUntil:new Date('2028-10-13T00:00:00.000Z')})}));
+    expect(f.state.photos).toEqual(originals);
+    expect(f.prisma.user.create).not.toHaveBeenCalled();
+    await expect(f.service.updateQualityData(f.user('qc2'),'inspection_1',corrected)).rejects.toThrow('уже проверяет');
+    expect(f.prisma.vehicle.update).toHaveBeenCalledTimes(1);
+  });
+  it('does not allow inspectors or completed reviews to use quality editing',async()=>{
+    const f=fixture();f.state.status='submitted';
+    await expect(f.service.updateQualityData(f.user('inspector'),'inspection_1',corrected)).rejects.toThrow('Только контроль качества');
+    f.state.status='quality_approved';
+    await expect(f.service.updateQualityData(f.user('qc'),'inspection_1',corrected)).rejects.toThrow();
+    expect(f.prisma.vehicle.update).not.toHaveBeenCalled();
+  });
+  it('requires the two applicant photos for submission but preserves existing quality tasks',async()=>{
+    const f=fixture();f.state.photos=f.state.photos.filter(p=>!p.type.startsWith('applicant_'));
+    expect((await f.service.readiness('inspection_1',f.user('inspector'))).missing).toEqual(['applicant_application','applicant_questionnaire']);
+    f.state.status='submitted';f.state.photos.push({id:'cert',type:'certificate_document',objectKey:'cert'});
+    expect((await f.service.readiness('inspection_1',f.user('qc'))).ready).toBe(true);
+    f.state.requireApplicantPhotos=true;
+    expect((await f.service.readiness('inspection_1',f.user('qc'))).ready).toBe(false);
+  });
+  it('returns a quality task to inspector editing without losing documents or reserving its own number',async()=>{
+    const f=fixture();f.state.status='submitted';
+    await f.service.claimQualityReview(f.user('qc'),'inspection_1');
+    await f.service.setStatus(f.user('qc'),'inspection_1','rejected');
+    expect(f.state.qualityReviewerId).toBeNull();
+    expect(await f.service.certificateNumberAvailability('TEST-1','inspection_1',f.user('inspector'))).toEqual({available:true});
+    await f.service.updateData(f.user('inspector'),'inspection_1',{vehicleId:'vehicle_1',certificateNumber:'TEST-1'});
+    await f.service.uploadPhoto('inspection_1','gas_work_record',{originalname:'fixed.jpg',buffer:Buffer.from('photo')},f.user('inspector'));
+    await f.service.setStatus(f.user('inspector'),'inspection_1','submitted');
+    expect(f.state.status).toBe('submitted');expect(f.state.requireApplicantPhotos).toBe(true);
+  });
   it('lets only one quality employee claim an inspection and exposes who opened it', async () => {
     const f=fixture();f.state.status='submitted';
     const results=await Promise.allSettled([f.service.claimQualityReview(f.user('qc'),'inspection_1'),f.service.claimQualityReview(f.user('qc2'),'inspection_1')]);
