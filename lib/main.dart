@@ -1868,7 +1868,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       return;
     }
     setState(() => apiState = '');
-    go(18);
+    go(cylinderPhotoUploaded || cylinderPhotoBytes != null ? 19 : 18);
   }
 
   void _startNewInspection() {
@@ -1914,7 +1914,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       packageDocumentUploaded = const {};
       protectedInspectionPhotosLocked = false;
     });
-    go(15);
+    go(18);
   }
 
   String get _roleCode {
@@ -2352,7 +2352,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         onNext: _goCylinderNext,
       ),
       18 => _PhotoStep(
-        step: 4,
+        step: 1,
         title: 'Фото бирки баллона',
         caption: 'Поместите бирку в рамку',
         photoName: cylinderPhotoName,
@@ -2360,7 +2360,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         uploaded: cylinderPhotoUploaded,
         locked: protectedInspectionPhotosLocked && cylinderPhotoUploaded,
         onCamera: () => _captureInspectionPhoto('cylinder'),
-        onNext: () => go(19),
+        onNext: () => go(15),
       ),
       19 => _PhotoStep(
         step: 5,
@@ -5653,7 +5653,7 @@ class _OwnerStep extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _ProgressDots(step: 1),
+            _ProgressDots(step: 2),
             const SizedBox(height: 12),
             _Pills(
               values: const ['Физлицо', 'Компания'],
@@ -5895,7 +5895,7 @@ class _VehicleStep extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _ProgressDots(step: 2),
+            _ProgressDots(step: 4),
             const SizedBox(height: 26),
             _Input(
               label: 'Государственный номер',
