@@ -176,7 +176,8 @@ class RegistryVehicle {
       reducerName: cylinder['reducerName']?.toString() ?? '',
       controlUnitName: cylinder['controlUnitName']?.toString() ?? '',
       cylinderFuelType: cylinder['fuelType']?.toString() ?? '',
-      cylinderInspectedAt: cylinder['inspectedAt']?.toString().split('T').first ?? '',
+      cylinderInspectedAt:
+          cylinder['inspectedAt']?.toString().split('T').first ?? '',
       cylinderProducedAt:
           cylinder['producedAt']?.toString().split('T').first ?? '',
       cylinderValidUntil:
@@ -247,7 +248,8 @@ class RegistryVehicle {
       reducerName: cylinder['reducerName']?.toString() ?? '',
       controlUnitName: cylinder['controlUnitName']?.toString() ?? '',
       cylinderFuelType: cylinder['fuelType']?.toString() ?? '',
-      cylinderInspectedAt: cylinder['inspectedAt']?.toString().split('T').first ?? '',
+      cylinderInspectedAt:
+          cylinder['inspectedAt']?.toString().split('T').first ?? '',
       cylinderProducedAt:
           cylinder['producedAt']?.toString().split('T').first ?? '',
       cylinderValidUntil:
@@ -566,7 +568,8 @@ class InspectionSummary {
   final String qualityReviewerId;
   final String qualityReviewerName;
   final String qualityReviewStartedAt;
-  bool isReviewAssignedTo(String userId) => userId.isNotEmpty && qualityReviewerId == userId;
+  bool isReviewAssignedTo(String userId) =>
+      userId.isNotEmpty && qualityReviewerId == userId;
   final String approvedAt;
   final List<InspectionFileInfo> files;
 
@@ -589,7 +592,9 @@ class InspectionSummary {
     final approvedBy = json['approvedBy'] is Map<String, dynamic>
         ? json['approvedBy'] as Map<String, dynamic>
         : const <String, dynamic>{};
-    final qualityReviewer = json['qualityReviewer'] is Map<String, dynamic> ? json['qualityReviewer'] as Map<String, dynamic> : const <String,dynamic>{};
+    final qualityReviewer = json['qualityReviewer'] is Map<String, dynamic>
+        ? json['qualityReviewer'] as Map<String, dynamic>
+        : const <String, dynamic>{};
     final qualityConfirmedBy =
         json['qualityConfirmedBy'] is Map<String, dynamic>
         ? json['qualityConfirmedBy'] as Map<String, dynamic>
@@ -639,7 +644,8 @@ class InspectionSummary {
       reducerName: cylinder['reducerName']?.toString() ?? '',
       controlUnitName: cylinder['controlUnitName']?.toString() ?? '',
       cylinderFuelType: cylinder['fuelType']?.toString() ?? '',
-      cylinderInspectedAt: cylinder['inspectedAt']?.toString().split('T').first ?? '',
+      cylinderInspectedAt:
+          cylinder['inspectedAt']?.toString().split('T').first ?? '',
       cylinderProducedAt:
           cylinder['producedAt']?.toString().split('T').first ?? '',
       cylinderValidUntil:

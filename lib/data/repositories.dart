@@ -424,7 +424,11 @@ class InspectionRepository {
     final produced = int.tryParse(producedYear);
     final targetYear = inspectedAt.year + (fuelType == 'СНГ' ? 2 : 3);
     final lastDay = DateTime(targetYear, inspectedAt.month + 1, 0).day;
-    final validUntil = DateTime(targetYear, inspectedAt.month, inspectedAt.day > lastDay ? lastDay : inspectedAt.day);
+    final validUntil = DateTime(
+      targetYear,
+      inspectedAt.month,
+      inspectedAt.day > lastDay ? lastDay : inspectedAt.day,
+    );
     final response = await _api.postJson('/vehicles', {
       'vin': vin,
       'plateNumber': plateNumber,
@@ -470,7 +474,10 @@ class InspectionRepository {
     return response['id']?.toString() ?? '';
   }
 
-  Future<bool> isCertificateNumberAvailable(String number, {String? inspectionId}) async {
+  Future<bool> isCertificateNumberAvailable(
+    String number, {
+    String? inspectionId,
+  }) async {
     if (AppEnvironment.isDemo) return true;
     final response = await _api.getJson(
       '/inspections/certificate-number/${Uri.encodeComponent(number)}/availability${inspectionId == null ? '' : '?inspectionId=${Uri.encodeQueryComponent(inspectionId)}'}',
@@ -504,11 +511,21 @@ class InspectionRepository {
     return InspectionSummary.fromJson(response);
   }
 
-  Future<void> claimQualityReview(String id) async { await _api.postJson('/inspections/$id/quality-review/claim', {}); }
-  Future<void> releaseQualityReview(String id) async { await _api.postJson('/inspections/$id/quality-review/release', {}); }
+  Future<void> claimQualityReview(String id) async {
+    await _api.postJson('/inspections/$id/quality-review/claim', {});
+  }
 
-  Future<InspectionSummary> updateQualityData(String id, Map<String, dynamic> data) async {
-    return InspectionSummary.fromJson(await _api.patchJson('/inspections/$id/review-data', data));
+  Future<void> releaseQualityReview(String id) async {
+    await _api.postJson('/inspections/$id/quality-review/release', {});
+  }
+
+  Future<InspectionSummary> updateQualityData(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
+    return InspectionSummary.fromJson(
+      await _api.patchJson('/inspections/$id/review-data', data),
+    );
   }
 
   Future<InspectionSummary> updateData({

@@ -8,7 +8,11 @@ import 'dart:typed_data';
 import 'local_file.dart';
 import 'document_camera_web.dart';
 
-Future<PickedLocalFile?> pickLocalFile(List<String> extensions, {bool camera = false, double frameAspectRatio = 0.71}) async {
+Future<PickedLocalFile?> pickLocalFile(
+  List<String> extensions, {
+  bool camera = false,
+  double frameAspectRatio = 0.71,
+}) async {
   if (camera) return captureDocumentPhoto(frameAspectRatio: frameAspectRatio);
   final input = html.FileUploadInputElement()
     ..accept = camera ? 'image/*' : extensions.map((item) => '.$item').join(',')

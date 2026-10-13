@@ -35,7 +35,12 @@ const designWidth = 430.0;
 const designHeight = 932.0;
 const pagePadding = 22.0;
 const cardRadius = 18.0;
-const protectedInspectionDocuments = <String>{'gas_work_record', 'cylinder_work_record', 'gas_inspection_report', 'cylinder_inspection_report'};
+const protectedInspectionDocuments = <String>{
+  'gas_work_record',
+  'cylinder_work_record',
+  'gas_inspection_report',
+  'cylinder_inspection_report',
+};
 const inspectionPackageDocuments = <String, String>{
   'applicant_application': 'Заявка заявителя',
   'applicant_questionnaire': 'Анкета оценки заявителя',
@@ -540,7 +545,10 @@ class _ErsiDemoState extends State<ErsiDemo> {
   }
 
   @override
-  void dispose() { _qualityQueueTimer?.cancel(); super.dispose(); }
+  void dispose() {
+    _qualityQueueTimer?.cancel();
+    super.dispose();
+  }
 
   Future<void> _loadInitialData() async {
     try {
@@ -631,7 +639,17 @@ class _ErsiDemoState extends State<ErsiDemo> {
         setState(() {
           myInspections = items;
           if (!silent) apiState = 'Инспекции загружены';
-          if (_isQualityControl && _qualityQueueTimer == null) { _qualityQueueTimer = Timer.periodic(const Duration(seconds: 15), (_) { if (mounted && _isQualityControl && [14,24,25,26,27,28].contains(screen)) { unawaited(_loadMyInspections(silent: true)); } }); }
+          if (_isQualityControl && _qualityQueueTimer == null) {
+            _qualityQueueTimer = Timer.periodic(const Duration(seconds: 15), (
+              _,
+            ) {
+              if (mounted &&
+                  _isQualityControl &&
+                  [14, 24, 25, 26, 27, 28].contains(screen)) {
+                unawaited(_loadMyInspections(silent: true));
+              }
+            });
+          }
         });
       }
     } catch (_) {
@@ -662,9 +680,13 @@ class _ErsiDemoState extends State<ErsiDemo> {
     return null;
   }
 
-  bool get _ownsQualityReview => _isQualityControl && selectedInspection?.status == 'submitted' && selectedInspection?.isReviewAssignedTo(currentUser?.id ?? '') == true;
+  bool get _ownsQualityReview =>
+      _isQualityControl &&
+      selectedInspection?.status == 'submitted' &&
+      selectedInspection?.isReviewAssignedTo(currentUser?.id ?? '') == true;
 
-  bool get _editingQualityInspection => _ownsQualityReview &&
+  bool get _editingQualityInspection =>
+      _ownsQualityReview &&
       selectedInspection?.status == 'submitted' &&
       draftInspectionId == selectedInspection?.id;
 
@@ -724,10 +746,18 @@ class _ErsiDemoState extends State<ErsiDemo> {
       await repositories.inspections.releaseQualityReview(item.id);
       await _loadMyInspections(silent: true);
       if (!mounted) return;
-      setState(() { selectedInspection = null; draftInspectionId = null; draftVehicleId = null; apiState = 'Инспекция возвращена в доступные'; });
+      setState(() {
+        selectedInspection = null;
+        draftInspectionId = null;
+        draftVehicleId = null;
+        apiState = 'Инспекция возвращена в доступные';
+      });
       go(14);
-    } catch (error) { if (mounted) setState(() => apiState = error.toString()); }
-    finally { if (mounted) setState(() => qualityBusy = false); }
+    } catch (error) {
+      if (mounted) setState(() => apiState = error.toString());
+    } finally {
+      if (mounted) setState(() => qualityBusy = false);
+    }
   }
 
   Future<void> _uploadQualityCertificate() async {
@@ -1110,7 +1140,10 @@ class _ErsiDemoState extends State<ErsiDemo> {
           final inspection = await repositories.inspections.detail(
             importResult.inspectionId,
           );
-          await _continueInspectionDraft(inspection, forceDataStep: inspection.status == 'rejected');
+          await _continueInspectionDraft(
+            inspection,
+            forceDataStep: inspection.status == 'rejected',
+          );
         } catch (_) {
           if (!mounted) return;
           setState(
@@ -1271,13 +1304,11 @@ class _ErsiDemoState extends State<ErsiDemo> {
       final String filename;
       final List<int> bytes;
       if (kIsWeb) {
-        final file = await pickLocalFile(const [
-          'jpg',
-          'jpeg',
-          'png',
-          'heic',
-          'webp',
-        ], camera: true, frameAspectRatio: kind == 'tech_passport' ? 1.6 : 0.71);
+        final file = await pickLocalFile(
+          const ['jpg', 'jpeg', 'png', 'heic', 'webp'],
+          camera: true,
+          frameAspectRatio: kind == 'tech_passport' ? 1.6 : 0.71,
+        );
         final pickedBytes = file?.bytes;
         if (file == null || pickedBytes == null || pickedBytes.isEmpty) {
           if (mounted) setState(() => apiState = 'Фото не выбрано');
@@ -1287,7 +1318,14 @@ class _ErsiDemoState extends State<ErsiDemo> {
         bytes = pickedBytes;
       } else if (kind == 'tech_passport') {
         if (!mounted) return;
-        final file = await Navigator.of(context).push<PickedLocalFile>(MaterialPageRoute(builder: (_) => const DocumentCameraScreen(title: 'Фото техпаспорта', frameAspectRatio: 1.6)));
+        final file = await Navigator.of(context).push<PickedLocalFile>(
+          MaterialPageRoute(
+            builder: (_) => const DocumentCameraScreen(
+              title: 'Фото техпаспорта',
+              frameAspectRatio: 1.6,
+            ),
+          ),
+        );
         if (file == null) return;
         filename = file.name;
         bytes = file.bytes;
@@ -1348,18 +1386,32 @@ class _ErsiDemoState extends State<ErsiDemo> {
     return 'Ошибка загрузки фото';
   }
 
-  Future<void> _pickInspectionDocument(String type, String label, {bool camera = false}) async {
+  Future<void> _pickInspectionDocument(
+    String type,
+    String label, {
+    bool camera = false,
+  }) async {
     if (_isQualityControl && protectedInspectionDocuments.contains(type)) {
-      setState(() => apiState = 'Рабочие записи и отчёты доступны только для просмотра');
+      setState(
+        () =>
+            apiState = 'Рабочие записи и отчёты доступны только для просмотра',
+      );
       return;
     }
     try {
       PickedLocalFile? file;
       if (camera && !kIsWeb) {
-        file = await Navigator.of(context).push<PickedLocalFile>(MaterialPageRoute(builder: (_) => DocumentCameraScreen(title: label)));
+        file = await Navigator.of(context).push<PickedLocalFile>(
+          MaterialPageRoute(builder: (_) => DocumentCameraScreen(title: label)),
+        );
       } else {
         file = kIsWeb
-            ? await pickLocalFile(const ['pdf', 'jpg', 'jpeg', 'png'], camera: camera)
+            ? await pickLocalFile(const [
+                'pdf',
+                'jpg',
+                'jpeg',
+                'png',
+              ], camera: camera)
             : await _pickPluginFile(const ['pdf', 'jpg', 'jpeg', 'png']);
       }
       if (file == null) {
@@ -1379,7 +1431,10 @@ class _ErsiDemoState extends State<ErsiDemo> {
         if (position != null) nextDocumentPositions[type] = position;
         setState(() {
           if (position != null) lastKnownInspectionPosition = position;
-          packageDocumentNames = {...packageDocumentNames, type: selectedFile.name};
+          packageDocumentNames = {
+            ...packageDocumentNames,
+            type: selectedFile.name,
+          };
           packageDocumentBytes = {...packageDocumentBytes, type: bytes};
           packageDocumentPositions = nextDocumentPositions;
           packageDocumentUploaded = {...packageDocumentUploaded, type: false};
@@ -1392,7 +1447,9 @@ class _ErsiDemoState extends State<ErsiDemo> {
     } catch (error) {
       final message = error is StateError
           ? error.message
-          : (error is PlatformException && error.code.toLowerCase().contains('denied')) || error.toString().contains('NotAllowedError')
+          : (error is PlatformException &&
+                    error.code.toLowerCase().contains('denied')) ||
+                error.toString().contains('NotAllowedError')
           ? 'Разрешите доступ к камере в настройках приложения'
           : 'Не удалось выбрать или сфотографировать документ';
       if (mounted) setState(() => apiState = message);
@@ -1408,8 +1465,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       if (vehicleVin.trim().isEmpty) 'VIN',
       if (cylinderNumber.trim().isEmpty) 'номер баллона',
       if (cylinderVolume.trim().isEmpty) 'объем баллона',
-      if (!const ['СНГ', 'КПГ'].contains(cylinderFuel.trim()))
-        'вид топлива',
+      if (!const ['СНГ', 'КПГ'].contains(cylinderFuel.trim())) 'вид топлива',
       if (reducerName.trim().isEmpty) 'название редуктора',
       if (controlUnitName.trim().isEmpty)
         'название электронного блока управления',
@@ -1419,13 +1475,38 @@ class _ErsiDemoState extends State<ErsiDemo> {
     }
     if (_editingQualityInspection) {
       final parts = vehicleMakeModel.trim().split(RegExp(r'\s+'));
-      final detail = await repositories.inspections.updateQualityData(draftInspectionId!, {
-        'certificateNumber': _normalizeCertificateNumber(inspectionCertificateNumber),
-        'inspectionDate': _dateOnly(inspectionIssuedAt),
-        'owner': {'fullName': ownerName.trim(), 'iin': ownerId.trim(), 'phone': ownerPhone.trim(), 'address': ownerAddress.trim()},
-        'vehicle': {'vin': vehicleVin.trim().toUpperCase(), 'plateNumber': vehiclePlate.trim().toUpperCase(), 'make': parts.first, 'model': parts.skip(1).join(' '), 'year': int.tryParse(vehicleYear.trim())},
-        'cylinder': {'serialNumber': cylinderNumber.trim(), 'manufacturer': cylinderMaker.trim(), 'volumeLiters': int.tryParse(cylinderVolume.trim()) ?? 0, 'fuelType': cylinderFuel, 'reducerName': reducerName.trim(), 'controlUnitName': controlUnitName.trim(), if (int.tryParse(cylinderYear.trim()) != null) 'producedAt': '${cylinderYear.trim()}-01-01'},
-      });
+      final detail = await repositories.inspections.updateQualityData(
+        draftInspectionId!,
+        {
+          'certificateNumber': _normalizeCertificateNumber(
+            inspectionCertificateNumber,
+          ),
+          'inspectionDate': _dateOnly(inspectionIssuedAt),
+          'owner': {
+            'fullName': ownerName.trim(),
+            'iin': ownerId.trim(),
+            'phone': ownerPhone.trim(),
+            'address': ownerAddress.trim(),
+          },
+          'vehicle': {
+            'vin': vehicleVin.trim().toUpperCase(),
+            'plateNumber': vehiclePlate.trim().toUpperCase(),
+            'make': parts.first,
+            'model': parts.skip(1).join(' '),
+            'year': int.tryParse(vehicleYear.trim()),
+          },
+          'cylinder': {
+            'serialNumber': cylinderNumber.trim(),
+            'manufacturer': cylinderMaker.trim(),
+            'volumeLiters': int.tryParse(cylinderVolume.trim()) ?? 0,
+            'fuelType': cylinderFuel,
+            'reducerName': reducerName.trim(),
+            'controlUnitName': controlUnitName.trim(),
+            if (int.tryParse(cylinderYear.trim()) != null)
+              'producedAt': '${cylinderYear.trim()}-01-01',
+          },
+        },
+      );
       selectedInspection = detail;
       return detail.id;
     }
@@ -1447,8 +1528,9 @@ class _ErsiDemoState extends State<ErsiDemo> {
       make: make,
       model: model,
       year: null,
-      ownerPhone:
-          ownerPhone.trim().isNotEmpty ? ownerPhone.trim() : '+7000${vehicleVin.trim().hashCode.abs().toString().padLeft(9, '0').substring(0, 9)}',
+      ownerPhone: ownerPhone.trim().isNotEmpty
+          ? ownerPhone.trim()
+          : '+7000${vehicleVin.trim().hashCode.abs().toString().padLeft(9, '0').substring(0, 9)}',
       ownerName: ownerName.trim().isEmpty ? 'Владелец ТС' : ownerName.trim(),
       ownerIin: ownerId.trim(),
       ownerAddress: ownerAddress.trim(),
@@ -1741,7 +1823,10 @@ class _ErsiDemoState extends State<ErsiDemo> {
     setState(() => apiState = 'Проверка номера свидетельства');
     try {
       final available = await repositories.inspections
-          .isCertificateNumberAvailable(number, inspectionId: draftInspectionId);
+          .isCertificateNumberAvailable(
+            number,
+            inspectionId: draftInspectionId,
+          );
       if (!available) {
         if (mounted) {
           setState(
@@ -1883,16 +1968,24 @@ class _ErsiDemoState extends State<ErsiDemo> {
   void next() => go(screen + 1);
 
   Future<void> _openInspectionDetail(InspectionSummary inspection) async {
-    if (!_isQualityControl && (inspection.status == 'draft' || inspection.status == 'rejected')) {
-      await _continueInspectionDraft(inspection, forceDataStep: inspection.status == 'rejected');
+    if (!_isQualityControl &&
+        (inspection.status == 'draft' || inspection.status == 'rejected')) {
+      await _continueInspectionDraft(
+        inspection,
+        forceDataStep: inspection.status == 'rejected',
+      );
       return;
     }
     setState(() => apiState = 'Загрузка инспекции');
     try {
       String? claimError;
       if (_isQualityControl && inspection.status == 'submitted') {
-        try { await repositories.inspections.claimQualityReview(inspection.id); }
-        on ApiException catch (error) { if (error.statusCode != 409) rethrow; claimError = error.message; }
+        try {
+          await repositories.inspections.claimQualityReview(inspection.id);
+        } on ApiException catch (error) {
+          if (error.statusCode != 409) rethrow;
+          claimError = error.message;
+        }
       }
       final detail = await repositories.inspections.detail(inspection.id);
       if (_isQualityControl) await _loadMyInspections(silent: true);
@@ -2185,7 +2278,11 @@ class _ErsiDemoState extends State<ErsiDemo> {
         onOpenInspection: _openInspectionDetail,
       ),
       15 => _OwnerStep(
-        reviewFiles: selectedInspection?.files.where((file) => ['tech_passport'].contains(file.type)).toList() ?? const [],
+        reviewFiles:
+            selectedInspection?.files
+                .where((file) => ['tech_passport'].contains(file.type))
+                .toList() ??
+            const [],
         inspectionDate: inspectionIssuedAt,
         ownerPhone: ownerPhone,
         ownerIin: ownerId,
@@ -2207,7 +2304,14 @@ class _ErsiDemoState extends State<ErsiDemo> {
         onNext: _goOwnerNext,
       ),
       16 => _VehicleStep(
-        reviewFiles: selectedInspection?.files.where((file) => ['tech_passport','vehicle_photo'].contains(file.type)).toList() ?? const [],
+        reviewFiles:
+            selectedInspection?.files
+                .where(
+                  (file) =>
+                      ['tech_passport', 'vehicle_photo'].contains(file.type),
+                )
+                .toList() ??
+            const [],
         year: vehicleYear,
         editingQuality: _editingQualityInspection,
         onYear: (value) => setState(() => vehicleYear = value),
@@ -2220,7 +2324,11 @@ class _ErsiDemoState extends State<ErsiDemo> {
         onNext: _goVehicleNext,
       ),
       17 => _CylinderStep(
-        reviewFiles: selectedInspection?.files.where((file) => ['cylinder_label'].contains(file.type)).toList() ?? const [],
+        reviewFiles:
+            selectedInspection?.files
+                .where((file) => ['cylinder_label'].contains(file.type))
+                .toList() ??
+            const [],
         editingQuality: _editingQualityInspection,
         number: cylinderNumber,
         maker: cylinderMaker,
@@ -2285,12 +2393,18 @@ class _ErsiDemoState extends State<ErsiDemo> {
         names: packageDocumentNames,
         uploaded: packageDocumentUploaded,
         readOnly: _isQualityControl,
-        requireApplicantPhotos: !_editingQualityInspection || selectedInspection?.requireApplicantPhotos == true,
-        onCamera: (type, label) => _pickInspectionDocument(type, label, camera: true),
+        requireApplicantPhotos:
+            !_editingQualityInspection ||
+            selectedInspection?.requireApplicantPhotos == true,
+        onCamera: (type, label) =>
+            _pickInspectionDocument(type, label, camera: true),
         onUpload: _pickInspectionDocument,
         onNext: () => go(23),
       ),
-      23 => _ReviewStep(onSubmit: _submitInspection, editingQuality: _editingQualityInspection),
+      23 => _ReviewStep(
+        onSubmit: _submitInspection,
+        editingQuality: _editingQualityInspection,
+      ),
       24 => _InspectorHome(
         go: go,
         inspections: myInspections,
@@ -3912,7 +4026,13 @@ class _Certificate extends StatelessWidget {
             const SizedBox(height: 10),
             _CertificateDetailsCard(
               rows: [
-                (Icons.local_fire_department_rounded, 'ТИП ГАЗА', item.cylinderFuelType.isEmpty ? 'Не указан' : item.cylinderFuelType),
+                (
+                  Icons.local_fire_department_rounded,
+                  'ТИП ГАЗА',
+                  item.cylinderFuelType.isEmpty
+                      ? 'Не указан'
+                      : item.cylinderFuelType,
+                ),
                 (
                   Icons.horizontal_rule_rounded,
                   'БАЛЛОН',
@@ -4221,7 +4341,12 @@ class _InspectionDetailScreen extends StatelessWidget {
                   : 'Свидетельство',
               onTap: null,
             ),
-            if (item.status == 'submitted' && item.qualityReviewerId.isNotEmpty) _InfoBox(title: 'На проверке', text: '${item.qualityReviewerName.isEmpty ? 'Сотрудник контроля качества' : item.qualityReviewerName} · ${_shortDateTime(item.qualityReviewStartedAt)}'),
+            if (item.status == 'submitted' && item.qualityReviewerId.isNotEmpty)
+              _InfoBox(
+                title: 'На проверке',
+                text:
+                    '${item.qualityReviewerName.isEmpty ? 'Сотрудник контроля качества' : item.qualityReviewerName} · ${_shortDateTime(item.qualityReviewStartedAt)}',
+              ),
             if (canQualityReview) ...[
               const SizedBox(height: 12),
               const Text('Контроль качества', style: _section),
@@ -4264,7 +4389,12 @@ class _InspectionDetailScreen extends StatelessWidget {
                 onTap: onApprove!,
               ),
             ],
-            if (canQualityReview && onReleaseQuality != null) _PrimaryButton(text: 'Вернуть в доступные', icon: Icons.assignment_return_rounded, onTap: qualityBusy ? null : onReleaseQuality),
+            if (canQualityReview && onReleaseQuality != null)
+              _PrimaryButton(
+                text: 'Вернуть в доступные',
+                icon: Icons.assignment_return_rounded,
+                onTap: qualityBusy ? null : onReleaseQuality,
+              ),
             if (canEdit && onEdit != null) ...[
               const SizedBox(height: 12),
               _PrimaryButton(
@@ -4320,65 +4450,82 @@ class _InspectionDetailScreen extends StatelessWidget {
             const SizedBox(height: 16),
             const Text('Данные свидетельства', style: _section),
             const SizedBox(height: 10),
-            _QualityDataWithPhotos(enabled: qualityLayout, files: files.where((file) => ['certificate_document'].contains(file.type)).toList(), child: _CertificateDetailsCard(
-              rows: [
-                (
-                  Icons.description_rounded,
-                  'НОМЕР',
-                  item.certificateNumber.isEmpty
-                      ? 'Не выдано'
-                      : item.certificateNumber,
-                ),
-                (
-                  Icons.event_available_rounded,
-                  'СРОК ДЕЙСТВИЯ',
-                  item.certificateValidUntil.isEmpty
-                      ? 'Не указан'
-                      : 'до ${item.certificateValidUntil}',
-                ),
-                (
-                  Icons.apartment_rounded,
-                  'ИНСПЕКЦИОННЫЙ ОРГАН',
-                  item.organizationName.isEmpty
-                      ? 'Не указан'
-                      : '${item.organizationName} · ${item.accreditationLabel}',
-                ),
-              ],
-            )),
+            _QualityDataWithPhotos(
+              enabled: qualityLayout,
+              files: files
+                  .where((file) => ['certificate_document'].contains(file.type))
+                  .toList(),
+              child: _CertificateDetailsCard(
+                rows: [
+                  (
+                    Icons.description_rounded,
+                    'НОМЕР',
+                    item.certificateNumber.isEmpty
+                        ? 'Не выдано'
+                        : item.certificateNumber,
+                  ),
+                  (
+                    Icons.event_available_rounded,
+                    'СРОК ДЕЙСТВИЯ',
+                    item.certificateValidUntil.isEmpty
+                        ? 'Не указан'
+                        : 'до ${item.certificateValidUntil}',
+                  ),
+                  (
+                    Icons.apartment_rounded,
+                    'ИНСПЕКЦИОННЫЙ ОРГАН',
+                    item.organizationName.isEmpty
+                        ? 'Не указан'
+                        : '${item.organizationName} · ${item.accreditationLabel}',
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 16),
             const Text('Автомобиль и владелец', style: _section),
             const SizedBox(height: 10),
-            _QualityDataWithPhotos(enabled: qualityLayout, files: files.where((file) => ['vehicle_photo','tech_passport'].contains(file.type)).toList(), child: _CertificateDetailsCard(
-              rows: [
-                (
-                  Icons.directions_car_rounded,
-                  'ТС',
-                  [
-                    item.vehicleName.isEmpty
-                        ? 'Модель не указана'
-                        : item.vehicleName,
-                    item.vehiclePlate,
-                  ].where((value) => value.trim().isNotEmpty).join(' · '),
-                ),
-                (
-                  Icons.badge_rounded,
-                  'VIN',
-                  item.vehicleVin.isEmpty ? '-' : item.vehicleVin,
-                ),
-                (
-                  Icons.person_rounded,
-                  'ВЛАДЕЛЕЦ',
-                  [
-                    item.ownerName.isEmpty ? 'Не указан' : item.ownerName,
-                  ].where((value) => value.trim().isNotEmpty).join(' · '),
-                ),
-                (
-                  Icons.home_rounded,
-                  'МЕСТО ЖИТЕЛЬСТВА',
-                  item.ownerAddress.isEmpty ? 'Не указано' : item.ownerAddress,
-                ),
-              ],
-            )),
+            _QualityDataWithPhotos(
+              enabled: qualityLayout,
+              files: files
+                  .where(
+                    (file) =>
+                        ['vehicle_photo', 'tech_passport'].contains(file.type),
+                  )
+                  .toList(),
+              child: _CertificateDetailsCard(
+                rows: [
+                  (
+                    Icons.directions_car_rounded,
+                    'ТС',
+                    [
+                      item.vehicleName.isEmpty
+                          ? 'Модель не указана'
+                          : item.vehicleName,
+                      item.vehiclePlate,
+                    ].where((value) => value.trim().isNotEmpty).join(' · '),
+                  ),
+                  (
+                    Icons.badge_rounded,
+                    'VIN',
+                    item.vehicleVin.isEmpty ? '-' : item.vehicleVin,
+                  ),
+                  (
+                    Icons.person_rounded,
+                    'ВЛАДЕЛЕЦ',
+                    [
+                      item.ownerName.isEmpty ? 'Не указан' : item.ownerName,
+                    ].where((value) => value.trim().isNotEmpty).join(' · '),
+                  ),
+                  (
+                    Icons.home_rounded,
+                    'МЕСТО ЖИТЕЛЬСТВА',
+                    item.ownerAddress.isEmpty
+                        ? 'Не указано'
+                        : item.ownerAddress,
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 16),
             const Text('Место проведения инспекции', style: _section),
             const SizedBox(height: 10),
@@ -4403,45 +4550,57 @@ class _InspectionDetailScreen extends StatelessWidget {
             const SizedBox(height: 16),
             const Text('ГБО и баллон', style: _section),
             const SizedBox(height: 10),
-            _QualityDataWithPhotos(enabled: qualityLayout, files: files.where((file) => ['cylinder_label'].contains(file.type)).toList(), child: _CertificateDetailsCard(
-              rows: [
-                (Icons.local_fire_department_rounded, 'ТИП ГАЗА', item.cylinderFuelType.isEmpty ? 'Не указан' : item.cylinderFuelType),
-                (
-                  Icons.horizontal_rule_rounded,
-                  'БАЛЛОН',
-                  [
-                    item.cylinderSerial.isEmpty
-                        ? '№ не указан'
-                        : '№ ${item.cylinderSerial}',
-                    item.cylinderManufacturer.isEmpty
-                        ? 'производитель не указан'
-                        : item.cylinderManufacturer,
-                    item.cylinderVolume.isEmpty
-                        ? ''
-                        : '${item.cylinderVolume} л',
-                  ].where((value) => value.trim().isNotEmpty).join(' · '),
-                ),
-                (
-                  Icons.event_rounded,
-                  'СРОК БАЛЛОНА',
-                  item.cylinderValidUntil.isEmpty
-                      ? 'Не указан'
-                      : 'до ${item.cylinderValidUntil}',
-                ),
-                (
-                  Icons.settings_input_component_rounded,
-                  'РЕДУКТОР',
-                  item.reducerName.isEmpty ? 'Не указан' : item.reducerName,
-                ),
-                (
-                  Icons.memory_rounded,
-                  'ЭБУ',
-                  item.controlUnitName.isEmpty
-                      ? 'Не указан'
-                      : item.controlUnitName,
-                ),
-              ],
-            )),
+            _QualityDataWithPhotos(
+              enabled: qualityLayout,
+              files: files
+                  .where((file) => ['cylinder_label'].contains(file.type))
+                  .toList(),
+              child: _CertificateDetailsCard(
+                rows: [
+                  (
+                    Icons.local_fire_department_rounded,
+                    'ТИП ГАЗА',
+                    item.cylinderFuelType.isEmpty
+                        ? 'Не указан'
+                        : item.cylinderFuelType,
+                  ),
+                  (
+                    Icons.horizontal_rule_rounded,
+                    'БАЛЛОН',
+                    [
+                      item.cylinderSerial.isEmpty
+                          ? '№ не указан'
+                          : '№ ${item.cylinderSerial}',
+                      item.cylinderManufacturer.isEmpty
+                          ? 'производитель не указан'
+                          : item.cylinderManufacturer,
+                      item.cylinderVolume.isEmpty
+                          ? ''
+                          : '${item.cylinderVolume} л',
+                    ].where((value) => value.trim().isNotEmpty).join(' · '),
+                  ),
+                  (
+                    Icons.event_rounded,
+                    'СРОК БАЛЛОНА',
+                    item.cylinderValidUntil.isEmpty
+                        ? 'Не указан'
+                        : 'до ${item.cylinderValidUntil}',
+                  ),
+                  (
+                    Icons.settings_input_component_rounded,
+                    'РЕДУКТОР',
+                    item.reducerName.isEmpty ? 'Не указан' : item.reducerName,
+                  ),
+                  (
+                    Icons.memory_rounded,
+                    'ЭБУ',
+                    item.controlUnitName.isEmpty
+                        ? 'Не указан'
+                        : item.controlUnitName,
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 16),
             const Text('Фото и документы', style: _section),
             const SizedBox(height: 10),
@@ -4451,7 +4610,16 @@ class _InspectionDetailScreen extends StatelessWidget {
                 text: 'После загрузки фото и документов они появятся здесь.',
               )
             else
-              for (final file in files.where((file) => !qualityLayout || !['certificate_document','vehicle_photo','tech_passport','cylinder_label'].contains(file.type)))
+              for (final file in files.where(
+                (file) =>
+                    !qualityLayout ||
+                    ![
+                      'certificate_document',
+                      'vehicle_photo',
+                      'tech_passport',
+                      'cylinder_label',
+                    ].contains(file.type),
+              ))
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: _InspectionFileCard(file: file),
@@ -4464,17 +4632,38 @@ class _InspectionDetailScreen extends StatelessWidget {
 }
 
 class _QualityDataWithPhotos extends StatelessWidget {
-  const _QualityDataWithPhotos({required this.enabled, required this.files, required this.child});
+  const _QualityDataWithPhotos({
+    required this.enabled,
+    required this.files,
+    required this.child,
+  });
   final bool enabled;
   final List<InspectionFileInfo> files;
   final Widget child;
   @override
   Widget build(BuildContext context) {
     if (!enabled || files.isEmpty) return child;
-    final photos = Column(children: [for (final file in files) Padding(padding: const EdgeInsets.only(bottom: 12), child: _InspectionFileCard(file: file))]);
-    return LayoutBuilder(builder: (context, constraints) => constraints.maxWidth >= 700
-      ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: child), const SizedBox(width: 16), Expanded(child: photos)])
-      : Column(children: [child, const SizedBox(height: 12), photos]));
+    final photos = Column(
+      children: [
+        for (final file in files)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _InspectionFileCard(file: file),
+          ),
+      ],
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) => constraints.maxWidth >= 700
+          ? Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: child),
+                const SizedBox(width: 16),
+                Expanded(child: photos),
+              ],
+            )
+          : Column(children: [child, const SizedBox(height: 12), photos]),
+    );
   }
 }
 
@@ -5205,10 +5394,18 @@ class _InspectorHome extends StatelessWidget {
         .where(
           (item) =>
               item.status ==
-              (isQualityControl ? 'submitted' : 'quality_approved') && (!isQualityControl || item.qualityReviewerId.isEmpty),
+                  (isQualityControl ? 'submitted' : 'quality_approved') &&
+              (!isQualityControl || item.qualityReviewerId.isEmpty),
         )
         .toList();
-    final mine = inspections.where((item) => isQualityControl && item.status == 'submitted' && item.isReviewAssignedTo(reviewerId)).toList();
+    final mine = inspections
+        .where(
+          (item) =>
+              isQualityControl &&
+              item.status == 'submitted' &&
+              item.isReviewAssignedTo(reviewerId),
+        )
+        .toList();
     return _AppScreen(
       title: 'Инспекционный орган',
       subtitle: organization?.name.isNotEmpty == true
@@ -5225,12 +5422,13 @@ class _InspectorHome extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (!isQualityControl) _GreenHero(
-            title: 'Инспекции ГБО',
-            subtitle: 'создание и фотофиксация свидетельств',
-            button: 'Новая',
-            onTap: onNewInspection,
-          ),
+          if (!isQualityControl)
+            _GreenHero(
+              title: 'Инспекции ГБО',
+              subtitle: 'создание и фотофиксация свидетельств',
+              button: 'Новая',
+              onTap: onNewInspection,
+            ),
           Row(
             children: [
               Expanded(
@@ -5275,22 +5473,29 @@ class _InspectorHome extends StatelessWidget {
               ),
           ],
           if (!isQualityControl) ...[
-          const SizedBox(height: 12),
-          _PrimaryButton(
-            text: 'Новая инспекция',
-            icon: Icons.add_rounded,
-            onTap: onNewInspection,
-          ),
-          const SizedBox(height: 10),
-          _PrimaryButton(
-            text: 'Загрузить XLSX свидетельство',
-            icon: Icons.upload_file_rounded,
-            onTap: onImportXlsx,
-          ),
+            const SizedBox(height: 12),
+            _PrimaryButton(
+              text: 'Новая инспекция',
+              icon: Icons.add_rounded,
+              onTap: onNewInspection,
+            ),
+            const SizedBox(height: 10),
+            _PrimaryButton(
+              text: 'Загрузить XLSX свидетельство',
+              icon: Icons.upload_file_rounded,
+              onTap: onImportXlsx,
+            ),
           ],
           if (isQualityControl && mine.isNotEmpty) ...[
             const Text('Мои проверки', style: _section),
-            for (final item in mine) _ListTileCard(icon: Icons.fact_check_rounded, title: item.vehiclePlate, subtitle: item.certificateNumber, status: 'На проверке у вас', onTap: () => onOpenInspection(item)),
+            for (final item in mine)
+              _ListTileCard(
+                icon: Icons.fact_check_rounded,
+                title: item.vehiclePlate,
+                subtitle: item.certificateNumber,
+                status: 'На проверке у вас',
+                onTap: () => onOpenInspection(item),
+              ),
           ],
           const SizedBox(height: 12),
           Padding(
@@ -5327,7 +5532,11 @@ class _InspectorHome extends StatelessWidget {
                       ? item.createdByPhone
                       : item.createdByName,
                 ].where((value) => value.trim().isNotEmpty).join(' · '),
-                status: item.status == 'submitted' && item.qualityReviewerId.isNotEmpty ? 'На проверке: ${item.qualityReviewerName.isEmpty ? 'сотрудник контроля качества' : item.qualityReviewerName}' : _inspectionStatusLabel(item.status),
+                status:
+                    item.status == 'submitted' &&
+                        item.qualityReviewerId.isNotEmpty
+                    ? 'На проверке: ${item.qualityReviewerName.isEmpty ? 'сотрудник контроля качества' : item.qualityReviewerName}'
+                    : _inspectionStatusLabel(item.status),
                 onTap: () => onOpenInspection(item),
               ),
         ],
@@ -5403,45 +5612,66 @@ class _OwnerStep extends StatelessWidget {
       activeNav: 1,
       leadingBack: true,
       paymentNav: true,
-      child: _QualityDataWithPhotos(enabled: editingQuality, files: reviewFiles, child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _ProgressDots(step: 1),
-          const SizedBox(height: 12),
-          _Pills(
-            values: const ['Физлицо', 'Компания'],
-            selected: ownerKind,
-            onSelected: onOwnerKind,
-          ),
-          const SizedBox(height: 26),
-          _Input(
-            label: 'Номер свидетельства',
-            value: certificateNumber,
-            hint: 'Введите номер свидетельства',
-            inputFormatters: const [_CertificateNumberFormatter()],
-            onChanged: onCertificateNumber,
-          ),
-          _Input(
-            label: 'ФИО / наименование',
-            value: ownerName,
-            hint: 'Введите владельца',
-            onChanged: onOwnerName,
-          ),
-          _Input(
-            label: 'Адрес проживания клиента',
-            value: ownerAddress,
-            hint: 'Введите адрес проживания',
-            onChanged: onOwnerAddress,
-          ),
-          _DateFilterInput(label: 'Дата инспекции', value: inspectionDate, onChanged: onInspectionDate),
-          if (editingQuality) ...[
-            _Input(label: 'Телефон владельца', value: ownerPhone, onChanged: onOwnerPhone, keyboardType: TextInputType.phone),
-            _Input(label: 'ИИН владельца', value: ownerIin, onChanged: onOwnerIin, keyboardType: TextInputType.number),
+      child: _QualityDataWithPhotos(
+        enabled: editingQuality,
+        files: reviewFiles,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _ProgressDots(step: 1),
+            const SizedBox(height: 12),
+            _Pills(
+              values: const ['Физлицо', 'Компания'],
+              selected: ownerKind,
+              onSelected: onOwnerKind,
+            ),
+            const SizedBox(height: 26),
+            _Input(
+              label: 'Номер свидетельства',
+              value: certificateNumber,
+              hint: 'Введите номер свидетельства',
+              inputFormatters: const [_CertificateNumberFormatter()],
+              onChanged: onCertificateNumber,
+            ),
+            _Input(
+              label: 'ФИО / наименование',
+              value: ownerName,
+              hint: 'Введите владельца',
+              onChanged: onOwnerName,
+            ),
+            _Input(
+              label: 'Адрес проживания клиента',
+              value: ownerAddress,
+              hint: 'Введите адрес проживания',
+              onChanged: onOwnerAddress,
+            ),
+            _DateFilterInput(
+              label: 'Дата инспекции',
+              value: inspectionDate,
+              onChanged: onInspectionDate,
+            ),
+            if (editingQuality) ...[
+              _Input(
+                label: 'Телефон владельца',
+                value: ownerPhone,
+                onChanged: onOwnerPhone,
+                keyboardType: TextInputType.phone,
+              ),
+              _Input(
+                label: 'ИИН владельца',
+                value: ownerIin,
+                onChanged: onOwnerIin,
+                keyboardType: TextInputType.number,
+              ),
+            ],
+            const SizedBox(height: 120),
+            _PrimaryButton(
+              text: 'Продолжить',
+              onTap: () => unawaited(onNext()),
+            ),
           ],
-          const SizedBox(height: 120),
-          _PrimaryButton(text: 'Продолжить', onTap: () => unawaited(onNext())),
-        ],
-      )),
+        ),
+      ),
     );
   }
 }
@@ -5502,86 +5732,90 @@ class _CylinderStep extends StatelessWidget {
       activeNav: 1,
       leadingBack: true,
       paymentNav: true,
-      child: _QualityDataWithPhotos(enabled: editingQuality, files: reviewFiles, child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _ProgressDots(step: 3),
-          const SizedBox(height: 12),
-          _Pills(
-            values: const ['Тороидальный', 'Цилиндрический'],
-            selected: shape,
-            onSelected: onShape,
-          ),
-          const SizedBox(height: 14),
-          _Input(
-            label: 'Номер баллона',
-            value: number,
-            hint: 'Введите номер баллона',
-            onChanged: onNumber,
-          ),
-          _EquipmentPicker(
-            label: 'Производитель',
-            value: maker,
-            options: makerOptions,
-            otherHint: 'Введите производителя',
-            onChanged: onMaker,
-          ),
-          _Input(
-            label: 'Объем',
-            value: volume,
-            hint: 'Например 54 л',
-            keyboardType: TextInputType.number,
-            onChanged: onVolume,
-          ),
-          _Input(
-            label: 'Год выпуска',
-            value: year,
-            hint: 'Введите год',
-            keyboardType: TextInputType.number,
-            onChanged: onYear,
-          ),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.only(left: 4, bottom: 8),
-                  child: Text(
-                    'Вид топлива',
-                    style: TextStyle(
-                      color: muted,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w900,
+      child: _QualityDataWithPhotos(
+        enabled: editingQuality,
+        files: reviewFiles,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _ProgressDots(step: 3),
+            const SizedBox(height: 12),
+            _Pills(
+              values: const ['Тороидальный', 'Цилиндрический'],
+              selected: shape,
+              onSelected: onShape,
+            ),
+            const SizedBox(height: 14),
+            _Input(
+              label: 'Номер баллона',
+              value: number,
+              hint: 'Введите номер баллона',
+              onChanged: onNumber,
+            ),
+            _EquipmentPicker(
+              label: 'Производитель',
+              value: maker,
+              options: makerOptions,
+              otherHint: 'Введите производителя',
+              onChanged: onMaker,
+            ),
+            _Input(
+              label: 'Объем',
+              value: volume,
+              hint: 'Например 54 л',
+              keyboardType: TextInputType.number,
+              onChanged: onVolume,
+            ),
+            _Input(
+              label: 'Год выпуска',
+              value: year,
+              hint: 'Введите год',
+              keyboardType: TextInputType.number,
+              onChanged: onYear,
+            ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.only(left: 4, bottom: 8),
+                    child: Text(
+                      'Вид топлива',
+                      style: TextStyle(
+                        color: muted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                   ),
-                ),
-                _Pills(
-                  values: const ['СНГ', 'КПГ'],
-                  selected: _normalizeFuelType(fuel),
-                  onSelected: onFuel,
-                ),
-              ],
+                  _Pills(
+                    values: const ['СНГ', 'КПГ'],
+                    selected: _normalizeFuelType(fuel),
+                    onSelected: onFuel,
+                  ),
+                ],
+              ),
             ),
-          ),
-          _EquipmentPicker(
-            label: 'Название редуктора',
-            value: reducerName,
-            options: reducerOptions,
-            otherHint: 'Введите название редуктора',
-            onChanged: onReducerName,
-          ),
-          _EquipmentPicker(
-            label: 'Электронный блок управления',
-            value: controlUnitName,
-            options: controlUnitOptions,
-            otherHint: 'Введите название ЭБУ',
-            onChanged: onControlUnitName,
-          ),
-          const SizedBox(height: 62),
-          _PrimaryButton(text: 'Продолжить', onTap: onNext),
-        ],
-      )),
+            _EquipmentPicker(
+              label: 'Название редуктора',
+              value: reducerName,
+              options: reducerOptions,
+              otherHint: 'Введите название редуктора',
+              onChanged: onReducerName,
+            ),
+            _EquipmentPicker(
+              label: 'Электронный блок управления',
+              value: controlUnitName,
+              options: controlUnitOptions,
+              otherHint: 'Введите название ЭБУ',
+              onChanged: onControlUnitName,
+            ),
+            const SizedBox(height: 62),
+            _PrimaryButton(text: 'Продолжить', onTap: onNext),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -5620,35 +5854,45 @@ class _VehicleStep extends StatelessWidget {
       activeNav: 1,
       leadingBack: true,
       paymentNav: true,
-      child: _QualityDataWithPhotos(enabled: editingQuality, files: reviewFiles, child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _ProgressDots(step: 2),
-          const SizedBox(height: 26),
-          _Input(
-            label: 'Государственный номер',
-            value: plate,
-            hint: 'Введите госномер',
-            inputFormatters: const [_PlateNumberFormatter()],
-            onChanged: onPlate,
-          ),
-          _Input(
-            label: 'VIN',
-            value: vin,
-            hint: 'Введите VIN',
-            onChanged: onVin,
-          ),
-          _Input(
-            label: 'Марка и модель',
-            value: makeModel,
-            hint: 'Введите марку и модель',
-            onChanged: onMakeModel,
-          ),
-          if (editingQuality) _Input(label: 'Год автомобиля', value: year, onChanged: onYear, keyboardType: TextInputType.number),
-          const SizedBox(height: 84),
-          _PrimaryButton(text: 'Продолжить', onTap: onNext),
-        ],
-      )),
+      child: _QualityDataWithPhotos(
+        enabled: editingQuality,
+        files: reviewFiles,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _ProgressDots(step: 2),
+            const SizedBox(height: 26),
+            _Input(
+              label: 'Государственный номер',
+              value: plate,
+              hint: 'Введите госномер',
+              inputFormatters: const [_PlateNumberFormatter()],
+              onChanged: onPlate,
+            ),
+            _Input(
+              label: 'VIN',
+              value: vin,
+              hint: 'Введите VIN',
+              onChanged: onVin,
+            ),
+            _Input(
+              label: 'Марка и модель',
+              value: makeModel,
+              hint: 'Введите марку и модель',
+              onChanged: onMakeModel,
+            ),
+            if (editingQuality)
+              _Input(
+                label: 'Год автомобиля',
+                value: year,
+                onChanged: onYear,
+                keyboardType: TextInputType.number,
+              ),
+            const SizedBox(height: 84),
+            _PrimaryButton(text: 'Продолжить', onTap: onNext),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -5744,10 +5988,18 @@ class _DocumentScanStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final allSelected = inspectionPackageDocuments.keys.where((type) => requireApplicantPhotos || protectedInspectionDocuments.contains(type)).every(names.containsKey);
+    final allSelected = inspectionPackageDocuments.keys
+        .where(
+          (type) =>
+              requireApplicantPhotos ||
+              protectedInspectionDocuments.contains(type),
+        )
+        .every(names.containsKey);
     return _AppScreen(
       title: 'Пакет документов',
-      subtitle: requireApplicantPhotos ? '6 обязательных файлов' : 'Документы инспекции',
+      subtitle: requireApplicantPhotos
+          ? '6 обязательных файлов'
+          : 'Документы инспекции',
       activeNav: 1,
       leadingBack: true,
       paymentNav: true,
@@ -5761,25 +6013,60 @@ class _DocumentScanStep extends StatelessWidget {
                 'Наблюдатель увидит свидетельство и техпаспорт. Контрольный орган увидит весь пакет.',
           ),
           const SizedBox(height: 10),
-          if (readOnly) const _InfoBox(title: 'Документы инспектора защищены', text: 'Рабочие записи и отчёты инспекции можно просматривать, но нельзя заменять.'),
-          for (final entry in inspectionPackageDocuments.entries)
-            Column(children: [
-            _ListTileCard(
-              icon: names.containsKey(entry.key)
-                  ? Icons.check_circle_rounded
-                  : Icons.upload_file_rounded,
-              title: entry.value,
-              subtitle: names[entry.key] ?? 'PDF, JPG, PNG',
-              status: readOnly && protectedInspectionDocuments.contains(entry.key) ? 'Зафиксировано' : uploaded[entry.key] == true ? 'Загружено' : names.containsKey(entry.key) ? 'Выбрано' : 'Выбрать',
-              onTap: readOnly && protectedInspectionDocuments.contains(entry.key) ? null : () => onUpload(entry.key, entry.value),
+          if (readOnly)
+            const _InfoBox(
+              title: 'Документы инспектора защищены',
+              text:
+                  'Рабочие записи и отчёты инспекции можно просматривать, но нельзя заменять.',
             ),
-            if (!readOnly || !protectedInspectionDocuments.contains(entry.key)) Row(children: [
-              Expanded(child: _PrimaryButton(text: 'Файл', icon: Icons.upload_file_rounded, onTap: () => onUpload(entry.key, entry.value))),
-              const SizedBox(width: 8),
-              Expanded(child: _PrimaryButton(text: 'Камера', icon: Icons.camera_alt_rounded, onTap: () => onCamera(entry.key, entry.value))),
-            ]),
-            const SizedBox(height: 12),
-            ]),
+          for (final entry in inspectionPackageDocuments.entries)
+            Column(
+              children: [
+                _ListTileCard(
+                  icon: names.containsKey(entry.key)
+                      ? Icons.check_circle_rounded
+                      : Icons.upload_file_rounded,
+                  title: entry.value,
+                  subtitle: names[entry.key] ?? 'PDF, JPG, PNG',
+                  status:
+                      readOnly &&
+                          protectedInspectionDocuments.contains(entry.key)
+                      ? 'Зафиксировано'
+                      : uploaded[entry.key] == true
+                      ? 'Загружено'
+                      : names.containsKey(entry.key)
+                      ? 'Выбрано'
+                      : 'Выбрать',
+                  onTap:
+                      readOnly &&
+                          protectedInspectionDocuments.contains(entry.key)
+                      ? null
+                      : () => onUpload(entry.key, entry.value),
+                ),
+                if (!readOnly ||
+                    !protectedInspectionDocuments.contains(entry.key))
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _PrimaryButton(
+                          text: 'Файл',
+                          icon: Icons.upload_file_rounded,
+                          onTap: () => onUpload(entry.key, entry.value),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _PrimaryButton(
+                          text: 'Камера',
+                          icon: Icons.camera_alt_rounded,
+                          onTap: () => onCamera(entry.key, entry.value),
+                        ),
+                      ),
+                    ],
+                  ),
+                const SizedBox(height: 12),
+              ],
+            ),
           if (allSelected) ...[
             const SizedBox(height: 12),
             _PrimaryButton(
@@ -5858,7 +6145,9 @@ class _ReviewStep extends StatelessWidget {
     ];
     return _AppScreen(
       title: 'Проверка данных',
-      subtitle: editingQuality ? 'Исправления контроля качества' : 'Перед отправкой в контроль качества',
+      subtitle: editingQuality
+          ? 'Исправления контроля качества'
+          : 'Перед отправкой в контроль качества',
       activeNav: 1,
       child: Column(
         children: [
@@ -5872,7 +6161,9 @@ class _ReviewStep extends StatelessWidget {
               status: 'Готово',
             ),
           _PrimaryButton(
-            text: editingQuality ? 'Сохранить исправления' : 'Отправить в контроль качества',
+            text: editingQuality
+                ? 'Сохранить исправления'
+                : 'Отправить в контроль качества',
             icon: Icons.send_rounded,
             onTap: onSubmit,
           ),

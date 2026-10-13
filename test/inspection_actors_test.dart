@@ -2,13 +2,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:reestr_ts_demo/data/models.dart';
 
 void main() {
-  test('review ownership keeps the opened employee name and rejects empty or other employee IDs', () {
-    final item = InspectionSummary.fromJson({'status':'submitted','qualityReviewerId':'qc_1','qualityReviewer':{'fullName':'Петров Петр Петрович'},'qualityReviewStartedAt':'2026-10-13T12:00:00Z'});
-    expect(item.isReviewAssignedTo('qc_1'), isTrue);
-    expect(item.isReviewAssignedTo('qc_2'), isFalse);
-    expect(item.isReviewAssignedTo(''), isFalse);
-    expect(item.qualityReviewerName, 'Петров Петр Петрович');
-  });
+  test(
+    'review ownership keeps the opened employee name and rejects empty or other employee IDs',
+    () {
+      final item = InspectionSummary.fromJson({
+        'status': 'submitted',
+        'qualityReviewerId': 'qc_1',
+        'qualityReviewer': {'fullName': 'Петров Петр Петрович'},
+        'qualityReviewStartedAt': '2026-10-13T12:00:00Z',
+      });
+      expect(item.isReviewAssignedTo('qc_1'), isTrue);
+      expect(item.isReviewAssignedTo('qc_2'), isFalse);
+      expect(item.isReviewAssignedTo(''), isFalse);
+      expect(item.qualityReviewerName, 'Петров Петр Петрович');
+    },
+  );
 
   test(
     'resuming an inspection retains the existing vehicle instead of recreating it',

@@ -26,18 +26,31 @@ void main() {
     expect(find.text('Инспекционный орган'), findsOneWidget);
   });
 
-  testWidgets('each required inspection document offers file selection and framed camera capture', (tester) async {
-    SharedPreferences.setMockInitialValues({});
-    tester.view.physicalSize = const Size(360, 740);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(const MaterialApp(home: ErsiDemo(initialScreen: 22, showStepper: false)));
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('Файл'), findsNWidgets(inspectionPackageDocuments.length));
-    expect(find.text('Камера'), findsNWidgets(inspectionPackageDocuments.length));
-    expect(tester.takeException(), isNull);
-  });
+  testWidgets(
+    'each required inspection document offers file selection and framed camera capture',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      tester.view.physicalSize = const Size(360, 740);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: ErsiDemo(initialScreen: 22, showStepper: false),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(
+        find.text('Файл'),
+        findsNWidgets(inspectionPackageDocuments.length),
+      );
+      expect(
+        find.text('Камера'),
+        findsNWidgets(inspectionPackageDocuments.length),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('renders all PDF target screens without layout errors', (
     tester,
