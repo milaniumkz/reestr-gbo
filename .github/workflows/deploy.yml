@@ -23,6 +23,7 @@ on:
           - deploy-admin
           - restore-confirmed-inspector
           - diagnose-members
+          - configure-photo-moderation
           - status
           - logs
           - restart
@@ -123,6 +124,7 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           APP_DIR: /opt/reestr/app
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           PUBLIC_ORIGIN: https://89-207-255-42.sslip.io
 
       - name: Verify public APK download
@@ -154,6 +156,7 @@ jobs:
           case "${{ github.event.inputs.operation }}" in
             restore-confirmed-inspector) bash ops/restore-confirmed-inspector.sh ;;
             diagnose-members) bash ops/diagnose-members.sh ;;
+            configure-photo-moderation) python3 ops/configure-photo-moderation.py ;;
             deploy-admin) DEPLOY_COMPONENTS=admin bash ops/deploy-production.sh "$(git rev-parse HEAD)" ;;
             deploy-services) DEPLOY_COMPONENTS=services bash ops/deploy-production.sh "$(git rev-parse HEAD)" ;;
             inventory-inspection-data) bash ops/purge-inspection-data.sh inventory ;;
