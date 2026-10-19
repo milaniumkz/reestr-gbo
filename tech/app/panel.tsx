@@ -177,9 +177,7 @@ function Download({ value, name }: { value: unknown; name: string }) {
 
 export default function Panel() {
   const [user, setUser] = useState<User | null>(null),
-    [stage, setStage] = useState<"loading" | "login" | "enroll" | "ready">(
-      "loading",
-    ),
+    [stage, setStage] = useState<"loading" | "login" | "ready">("loading"),
     [enabled, setEnabled] = useState(true),
     [isolated, setIsolated] = useState(false);
   const [section, setSection] = useState<Section>("overview"),
@@ -210,8 +208,7 @@ export default function Panel() {
         to: string;
       }[]
     >([]);
-  const [dialog, setDialog] = useState<any>(null),
-    [enrollment, setEnrollment] = useState<any>(null);
+  const [dialog, setDialog] = useState<any>(null);
   const requestSequence = useRef(0);
   const has = (permission: string) => !!user?.permissions.includes(permission);
   const displayError = useCallback((e: unknown) => {
@@ -341,31 +338,9 @@ export default function Panel() {
       const result = await api("/auth/login", {
         login: f.get("login"),
         password: f.get("password"),
-        code: String(f.get("code") ?? ""),
       });
-      if (result.mfaRequired) {
-        setEnrollment(await api("/auth/enrollment", {}));
-        setStage("enroll");
-      } else {
-        setUser(await api("/auth/me"));
-        setStage("ready");
-      }
-    } catch (e) {
-      displayError(e);
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function finishEnrollment(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBusy(true);
-    try {
-      const f = new FormData(event.currentTarget);
-      await api("/auth/enrollment/confirm", { code: f.get("code") });
-      setEnrollment(null);
       setUser(await api("/auth/me"));
       setStage("ready");
-      setError("");
     } catch (e) {
       displayError(e);
     } finally {
@@ -492,7 +467,7 @@ export default function Panel() {
         Проверяем защищённый сеанс…
       </div>
     );
-  if (stage === "login" || stage === "enroll")
+  if (stage === "login")
     return (
       <div className="login-page">
         <div className="login-intro">
@@ -520,24 +495,16 @@ export default function Panel() {
           <div className="login-feature">
             <span>⛨</span>
             <div>
-              Обязательный второй фактор
-              <small>Пароль и одноразовый код приложения</small>
+              Личный доступ владельца
+              <small>Вход по логину и паролю</small>
             </div>
           </div>
         </div>
         <div className="login-form-side">
           <div className="login-form">
             <div className="eyebrow">Техническая панель · Защищённый вход</div>
-            <h2>
-              {stage === "enroll"
-                ? "Настройте второй фактор"
-                : "Добро пожаловать"}
-            </h2>
-            <p className="muted">
-              {stage === "enroll"
-                ? "Добавьте ключ в приложение-аутентификатор и введите текущий шестизначный код."
-                : "Войдите с учётной записью технического сотрудника."}
-            </p>
+            <h2>Добро пожаловать</h2>
+            <p className="muted">Войдите с личной учётной записью владельца.</p>
             {isolated && (
               <div className="notice warning">
                 Изолированная тестовая среда. Здесь нет рабочей базы
@@ -550,82 +517,30 @@ export default function Panel() {
               </div>
             )}
             {errorBox}
-            {stage === "login" ? (
-              <form onSubmit={login}>
-                <label>
-                  Логин
-                  <input
-                    name="login"
-                    autoComplete="username"
-                    required
-                    maxLength={48}
-                  />
-                </label>
-                <label>
-                  Пароль
-                  <input
-                    name="password"
-                    type="password"
-                    autoComplete="current-password"
-                    required
-                    maxLength={72}
-                  />
-                </label>
-                <label>
-                  Код приложения-аутентификатора
-                  <input
-                    name="code"
-                    inputMode="numeric"
-                    pattern="[0-9]{6}"
-                    maxLength={6}
-                    autoComplete="one-time-code"
-                    placeholder="Шесть цифр"
-                  />
-                  <small>
-                    При первом входе второй фактор настраивается после пароля.
-                  </small>
-                </label>
-                <button className="primary" disabled={busy || !enabled}>
-                  {busy ? "Проверяем…" : "Войти в техническую панель"}
-                </button>
-              </form>
-            ) : (
-              <form onSubmit={finishEnrollment}>
-                <p>
-                  Ключ настройки доступен только вам. Не отправляйте его в чаты
-                  и журналы.
-                </p>
-                <div className="secure-key">{enrollment?.secret}</div>
-                <div className="actions">
-                  <button
-                    type="button"
-                    className="secondary"
-                    onClick={() =>
-                      void navigator.clipboard.writeText(enrollment.secret)
-                    }
-                  >
-                    Скопировать ключ
-                  </button>
-                  <a href={enrollment?.uri}>
-                    Открыть приложение-аутентификатор
-                  </a>
-                </div>
-                <label>
-                  Текущий одноразовый код
-                  <input
-                    name="code"
-                    inputMode="numeric"
-                    pattern="[0-9]{6}"
-                    maxLength={6}
-                    required
-                    autoComplete="one-time-code"
-                  />
-                </label>
-                <button className="primary" disabled={busy}>
-                  {busy ? "Подтверждаем…" : "Подтвердить и открыть панель"}
-                </button>
-              </form>
-            )}
+            <form onSubmit={login}>
+              <label>
+                Логин
+                <input
+                  name="login"
+                  autoComplete="username"
+                  required
+                  maxLength={48}
+                />
+              </label>
+              <label>
+                Пароль
+                <input
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  maxLength={72}
+                />
+              </label>
+              <button className="primary" disabled={busy || !enabled}>
+                {busy ? "Проверяем…" : "Войти в техническую панель"}
+              </button>
+            </form>
             <p className="footnote">
               Действия в панели фиксируются в журнале. Доступ к оригиналам
               файлов и опасным операциям выдаётся отдельно.
@@ -749,16 +664,6 @@ export default function Panel() {
                 <option value="168">За неделю</option>
               </select>
             )}
-            {has("accounts.manage") &&
-              section === "accounts" &&
-              tab !== "people" && (
-                <button
-                  className="primary"
-                  onClick={() => setDialog({ kind: "account" })}
-                >
-                  + Добавить сотрудника
-                </button>
-              )}
             <button
               className="secondary"
               onClick={() => setDialog({ kind: "password" })}
@@ -1395,19 +1300,8 @@ export default function Panel() {
                       autoComplete="current-password"
                     />
                   </label>
-                  <label className="full">
-                    Новый код второго фактора
-                    <input
-                      name="code"
-                      inputMode="numeric"
-                      pattern="[0-9]{6}"
-                      required
-                      autoComplete="one-time-code"
-                    />
-                  </label>
                   <div className="notice full">
-                    Подтверждение действует пять минут. Уже использованный код
-                    не принимается.
+                    Подтверждение паролем действует пять минут.
                   </div>
                 </div>
               )}
@@ -1504,8 +1398,8 @@ export default function Panel() {
                     <textarea name="reason" required />
                   </label>
                   <div className="notice full">
-                    Сотрудник настроит собственный второй фактор при первом
-                    входе. Поддержка не получает права восстановления базы или
+                    Создание дополнительных технических аккаунтов отключено.
+                    Поддержка не получает права восстановления базы или
                     просмотра оригиналов автоматически.
                   </div>
                 </div>
@@ -2281,29 +2175,13 @@ function DataTable({
         render: (r) => (
           <>
             <Badge value={r.active ? "active" : "blocked"} />
-            <p>
-              Второй фактор:{" "}
-              {r.totpConfirmedAt ? "✓ Подключён" : "Ожидает настройки"}
-            </p>
+            <p>Вход по логину и паролю</p>
           </>
         ),
       },
       {
         title: "Действие",
-        render: (r) =>
-          has("accounts.manage") ? (
-            <div className="actions">
-              <button className="secondary" onClick={() => action("access", r)}>
-                Изменить права
-              </button>
-              <button
-                className="textbutton"
-                onClick={() => action("block-account", r)}
-              >
-                {r.active ? "Отозвать доступ" : "Возобновить доступ"}
-              </button>
-            </div>
-          ) : null,
+        render: () => <span className="muted">Единственный владелец панели</span>,
       },
     ];
   if (section === "accounts" && tab === "people")
@@ -2701,7 +2579,7 @@ const runbooks = [
     check:
       "Найдите пользователя по телефону в разделе доступа. Проверьте блокировку, роль ИО, членство, БИН, обязательную смену пароля и связанные отказы входа.",
     safe: "Попросите проверить номер, БИН и дату на устройстве. Владелец после подтверждения личности может выдать одноразовую ссылку восстановления.",
-    stop: "Не просите пароль или код второго фактора. Не снимайте блокировку без причины. При неизвестном владельце аккаунта передайте вопрос владельцу панели.",
+    stop: "Не просите пароль пользователя. Не снимайте блокировку без причины. При неизвестном владельце аккаунта передайте вопрос владельцу панели.",
   },
   {
     title: "Не загружается фотография",

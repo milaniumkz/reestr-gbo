@@ -37,14 +37,11 @@ class LoginDto {
   @IsString() @MaxLength(72) password!: string;
   @IsOptional() @IsString() @MaxLength(6) code?: string;
 }
-class CodeDto {
-  @IsString() @MaxLength(6) code!: string;
-}
 class PasswordDto {
   @IsString() @MinLength(12) @MaxLength(72) password!: string;
   @IsString() @MaxLength(72) confirmation!: string;
 }
-class ReauthDto extends CodeDto {
+class ReauthDto {
   @IsString() @MaxLength(72) password!: string;
 }
 @Controller("technical/auth")
@@ -88,34 +85,11 @@ export class TechnicalLoginController {
   @Get("me") async me(@Req() req: any) {
     return this.auth.principal(techCookie(req));
   }
-  @Post("enrollment") async enroll(
-    @Req() req: any,
-    @Res({ passthrough: true }) res: any,
-  ) {
-    assertTechnicalOrigin(req);
-    res.setHeader("Cache-Control", "no-store");
-    return this.auth.beginEnrollment(
-      await this.auth.principal(techCookie(req), true),
-    );
-  }
-  @Post("enrollment/confirm") async confirm(
-    @Body() input: CodeDto,
-    @Req() req: any,
-    @Res({ passthrough: true }) res: any,
-  ) {
-    assertTechnicalOrigin(req);
-    const result = await this.auth.confirmEnrollment(
-      await this.auth.principal(techCookie(req), true),
-      input.code,
-    );
-    this.cookie(res, result.token);
-    return { ok: true };
-  }
   @Post("reauthenticate") @UseGuards(TechnicalGuard) async reauth(
     @Req() req: any,
     @Body() input: ReauthDto,
   ) {
-    return this.auth.reauthenticate(req.tech, input.password, input.code);
+    return this.auth.reauthenticate(req.tech, input.password);
   }
   @Post("password") @UseGuards(TechnicalGuard) async password(
     @Req() r: any,

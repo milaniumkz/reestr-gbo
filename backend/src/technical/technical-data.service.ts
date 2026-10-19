@@ -773,6 +773,7 @@ export class TechnicalData {
     this.auth.require(principal, "accounts.read");
     return {
       items: await this.prisma.techAccount.findMany({
+        where: { login: "owner" },
         select: {
           id: true,
           login: true,

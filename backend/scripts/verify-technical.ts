@@ -32,7 +32,7 @@ async function call(
   checks++;
   return data;
 }
-async function enroll(login: string, role: string) {
+async function signIn(login: string, role: string) {
   const password = "IsolatedPassword123!";
   await db.techAccount.upsert({
     where: { login },
@@ -43,8 +43,10 @@ async function enroll(login: string, role: string) {
       passwordHash: await bcrypt.hash(password, 12),
     },
     update: {
-      totpEncrypted: null,
-      totpConfirmedAt: null,
+      passwordHash: await bcrypt.hash(password, 12),
+      active: true,
+      totpEncrypted: "legacy-unused-mfa-value",
+      totpConfirmedAt: new Date(),
       lastTotpStep: -1,
       failedAttempts: 0,
       lockedUntil: null,
@@ -52,14 +54,9 @@ async function enroll(login: string, role: string) {
   });
   cookie = "";
   await call("/auth/login", { login, password }, 201);
-  await call("/overview", undefined, 401);
-  const enrollment = await call("/auth/enrollment", {}, 201);
-  await call(
-    "/auth/enrollment/confirm",
-    { code: totp(enrollment.secret) },
-    201,
-  );
-  return enrollment.secret;
+  await call("/overview");
+  await call("/auth/reauthenticate", { password }, 201);
+  await call("/auth/enrollment", {}, 404);
 }
 async function main() {
   await db.technicalRateLimit.deleteMany();
@@ -115,7 +112,7 @@ async function main() {
           address: "г. Астана, дом 2",
         },
       });
-  await enroll("integration-owner", "owner");
+  await signIn("owner", "owner");
   for (const path of [
     "/auth/me",
     "/overview",
@@ -262,25 +259,38 @@ async function main() {
   assert.equal(blocked.status, 401);
   checks++;
   ledger.onModuleDestroy();
-  await enroll("integration-support", "support");
-  for (const path of [
-    "/people",
+  await call(
     "/accounts",
-    "/services",
-    "/organizations",
-    "/geography",
-  ])
-    await call(path, undefined, 403);
-  const events = await call("/events");
-  assert.ok(
-    events.items.every(
-      (e: any) =>
-        e.category !== "security" &&
-        e.ipAddress === undefined &&
-        e.device === undefined,
-    ),
+    {
+      login: "second-owner",
+      password: "SyntheticPassword123!",
+      role: "owner",
+      fullName: "Тест",
+      reason: "Тест запрета",
+    },
+    403,
   );
-  checks++;
+  await db.techAccount.upsert({
+    where: { login: "integration-support" },
+    create: {
+      login: "integration-support",
+      fullName: "Тест",
+      role: "owner",
+      active: true,
+      passwordHash: await bcrypt.hash("IsolatedPassword123!", 12),
+    },
+    update: {
+      active: true,
+      passwordHash: await bcrypt.hash("IsolatedPassword123!", 12),
+    },
+  });
+  cookie = "";
+  await call(
+    "/auth/login",
+    { login: "integration-support", password: "IsolatedPassword123!" },
+    401,
+  );
+  await call("/overview", undefined, 401);
   console.log(
     `Technical HTTP integration: ${checks} checks passed; synthetic isolated data only`,
   );
