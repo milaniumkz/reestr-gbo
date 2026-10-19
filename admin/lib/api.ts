@@ -209,7 +209,7 @@ export type Inspection = {
       validUntil?: string;
     }>;
   };
-  photos?: Array<{ id: string; type: string; objectKey: string; viewUrl?: string; moderationStatus?: string }>;
+  photos?: Array<{ id: string; type: string; objectKey: string; viewUrl?: string; moderationStatus?: string; moderationReason?: string }>;
   certificate?: { number: string; status: string; validUntil: string };
   createdBy?: { id: string; phone: string; fullName: string; lastLoginAt?: string };
   submittedBy?: { id: string; phone: string; fullName: string; lastLoginAt?: string };
@@ -256,7 +256,7 @@ export type CertificateRow = {
     lat?: number;
     lng?: number;
     organization?: Organization;
-    photos?: Array<{ id: string; type: string; objectKey: string; viewUrl?: string; moderationStatus?: string }>;
+    photos?: Array<{ id: string; type: string; objectKey: string; viewUrl?: string; moderationStatus?: string; moderationReason?: string }>;
     createdBy?: { id: string; phone: string; fullName: string; lastLoginAt?: string };
     submittedBy?: { id: string; phone: string; fullName: string; lastLoginAt?: string };
     qualityConfirmedBy?: { id: string; phone: string; fullName: string; lastLoginAt?: string };

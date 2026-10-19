@@ -4882,6 +4882,13 @@ class _InspectionFileCard extends StatelessWidget {
               const _Chip('Просмотр'),
             ],
           ),
+          if (file.moderationStatus == 'manual_review' || file.moderationStatus == 'local_checked') ...[
+            const SizedBox(height: 12),
+            _InfoBox(
+              title: file.moderationStatus == 'manual_review' ? 'Нужна ручная проверка' : 'Локальная проверка',
+              text: file.moderationReason,
+            ),
+          ],
           if (file.isImage && url.isNotEmpty) ...[
             const SizedBox(height: 12),
             InkWell(

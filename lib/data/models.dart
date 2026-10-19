@@ -683,6 +683,8 @@ class InspectionFileInfo {
     required this.objectKey,
     required this.viewUrl,
     required this.createdAt,
+    this.moderationStatus = '',
+    this.moderationReason = '',
   });
 
   final String id;
@@ -690,6 +692,8 @@ class InspectionFileInfo {
   final String objectKey;
   final String viewUrl;
   final String createdAt;
+  final String moderationStatus;
+  final String moderationReason;
 
   bool get isImage {
     final lower = objectKey.toLowerCase();
@@ -706,6 +710,8 @@ class InspectionFileInfo {
       objectKey: json['objectKey']?.toString() ?? '',
       viewUrl: json['viewUrl']?.toString() ?? '',
       createdAt: json['createdAt']?.toString().split('T').first ?? '',
+      moderationStatus: json['moderationStatus']?.toString() ?? '',
+      moderationReason: json['moderationReason']?.toString() ?? '',
     );
   }
 }

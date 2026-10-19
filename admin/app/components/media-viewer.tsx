@@ -9,6 +9,7 @@ export type MediaItem = {
   objectKey: string;
   viewUrl?: string;
   moderationStatus?: string;
+  moderationReason?: string;
 };
 
 export function MediaViewer({ items }: { items: MediaItem[] }) {
@@ -27,7 +28,8 @@ export function MediaViewer({ items }: { items: MediaItem[] }) {
         >
           <span>{fileTypeLabel(item.type)}</span>
           {item.viewUrl && isImage(item.viewUrl, item.objectKey) && <img src={item.viewUrl} alt={fileTypeLabel(item.type)} loading="lazy" draggable={false} />}
-          <small>{item.moderationStatus === 'approved' ? 'ФОТОПРОВЕРКА: ПРОЙДЕНА' : 'ФОТОПРОВЕРКА: НЕ ВЫПОЛНЕНА'}</small>
+          <small>{moderationLabel(item.moderationStatus)}</small>
+          {item.moderationReason && <small>{item.moderationReason}</small>}
         </button>
       ))}
       {active && (
@@ -39,6 +41,7 @@ export function MediaViewer({ items }: { items: MediaItem[] }) {
                 Закрыть
               </button>
             </div>
+            <p>{moderationLabel(active.moderationStatus)}{active.moderationReason ? `: ${active.moderationReason}` : ''}</p>
             <div className="mediaPreview">
               {active.viewUrl ? (
                 isImage(active.viewUrl, active.objectKey) ? (
@@ -71,4 +74,11 @@ export function MediaViewer({ items }: { items: MediaItem[] }) {
 function isImage(url: string, objectKey: string) {
   const value = `${url} ${objectKey}`.toLowerCase();
   return ['.jpg', '.jpeg', '.png', '.webp', '.gif'].some((ext) => value.includes(ext));
+}
+
+function moderationLabel(status?: string) {
+  if (status === "manual_review") return "НУЖНА РУЧНАЯ ПРОВЕРКА";
+  if (status === "local_checked") return "ЛОКАЛЬНАЯ ПРОВЕРКА: ЯВНЫХ ПРИЗНАКОВ НЕ НАЙДЕНО";
+  if (status === "approved") return "ФОТОПРОВЕРКА: ПРОЙДЕНА";
+  return "ФОТОПРОВЕРКА: НЕ ВЫПОЛНЕНА";
 }

@@ -23,7 +23,6 @@ on:
           - deploy-admin
           - restore-confirmed-inspector
           - diagnose-members
-          - configure-photo-moderation
           - photo-moderation-status
           - status
           - logs
@@ -156,7 +155,6 @@ jobs:
           case "${{ github.event.inputs.operation }}" in
             restore-confirmed-inspector) bash ops/restore-confirmed-inspector.sh ;;
             diagnose-members) bash ops/diagnose-members.sh ;;
-            configure-photo-moderation) python3 ops/configure-photo-moderation.py ;;
             photo-moderation-status) bash ops/photo-moderation-status.sh ;;
             deploy-admin) DEPLOY_COMPONENTS=admin bash ops/deploy-production.sh "$(git rev-parse HEAD)" ;;
             deploy-services) DEPLOY_COMPONENTS=services bash ops/deploy-production.sh "$(git rev-parse HEAD)" ;;
@@ -168,7 +166,6 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           APP_DIR: /opt/reestr/app
-          OPENAI_API_KEY: ${{ github.event.inputs.operation == 'configure-photo-moderation' && secrets.OPENAI_API_KEY || '' }}
 
       - name: Record data operation result
         if: success() && contains(github.event.inputs.operation, 'inspection-data')
