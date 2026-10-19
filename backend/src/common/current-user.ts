@@ -5,6 +5,8 @@ export type RequestUser = {
   phone: string;
   roles: string[];
   sid?: string;
+  pv?: number;
+  scope?: string;
 };
 
 export const CurrentUser = createParamDecorator(

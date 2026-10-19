@@ -376,16 +376,14 @@ export type UserActivity = {
   approved: Inspection[];
 };
 
-export async function sendOtp(phone: string) {
-  return post<{ ok: boolean; ttlSeconds: number }>('/auth/otp/send', { phone });
+export type PasswordLoginResponse = AuthResponse | { requiresPasswordChange: true; passwordChangeToken: string };
+
+export async function loginWithPassword(phone: string, password: string) {
+  return post<PasswordLoginResponse>('/auth/login', { phone, password, deviceName: 'ЕРСИ ГБО Admin Web' });
 }
 
-export async function verifyOtp(phone: string, code: string) {
-  return post<AuthResponse>('/auth/otp/verify', {
-    phone,
-    code,
-    deviceName: 'ЕРСИ ГБО Admin Web',
-  });
+export async function changeInitialPassword(passwordChangeToken: string, newPassword: string, confirmation: string) {
+  return post<AuthResponse>('/auth/password/change', { passwordChangeToken, newPassword, confirmation });
 }
 
 export async function refreshAuth(refreshToken: string) {

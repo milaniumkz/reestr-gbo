@@ -60,7 +60,9 @@ import {
   refreshAuth,
   removeUserRole,
   removeOrganizationMember,
-  sendOtp,
+  loginWithPassword,
+  changeInitialPassword,
+  AuthResponse,
   setBannerActive,
   setEquipmentActive,
   updateEquipment,
@@ -71,7 +73,7 @@ import {
   setUserBlocked,
   trackView,
   updateOrganization,
-  verifyOtp,
+
 } from '@/lib/api';
 import { AdminShell } from './components/admin-shell';
 import { BlocksSection } from './components/blocks-section';
@@ -209,8 +211,10 @@ function uniqueAuditRows(rows: AuditRow[]) {
 
 export default function AdminDashboard() {
   const [phone, setPhone] = useState('');
-  const [code, setCode] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
+  const [password, setPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmation, setConfirmation] = useState('');
+  const [passwordChangeToken, setPasswordChangeToken] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [refreshToken, setRefreshToken] = useState<string | null>(null);
   const [user, setUser] = useState<AdminUser | null>(null);
@@ -411,50 +415,40 @@ export default function AdminDashboard() {
     }
   }, [active, availableNav]);
 
-  async function handleSendOtp(event: FormEvent) {
-    event.preventDefault();
-    setLoading(true);
-    setError('');
-    try {
-      await sendOtp(normalizeKzPhone(phone));
-      setOtpSent(true);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Ошибка отправки SMS';
-      if (message.includes('OTP resend cooldown')) {
-        setOtpSent(true);
-        setStatus('SMS-код уже отправлен. Введите полученный код.');
-      } else {
-        setError(message);
-      }
-    } finally {
-      setLoading(false);
+  async function finishLogin(response: AuthResponse) {
+    if (!hasAdminAccess(response.user)) {
+      await logoutAuth(response.accessToken).catch(() => undefined);
+      clearAdminSession(); setToken(null); setRefreshToken(null); setUser(null);
+      setError('Нет доступа: нужна роль оператора, НЦА, контрольного органа или суперадминистратора.');
+      return;
     }
+    storeAdminSession(response.accessToken,response.refreshToken,response.user);
+    setToken(response.accessToken); setRefreshToken(response.refreshToken); setUser(response.user);
+    setPassword(''); setNewPassword(''); setConfirmation(''); setPasswordChangeToken(null);
   }
 
-  async function handleVerify(event: FormEvent) {
-    event.preventDefault();
-    setLoading(true);
-    setError('');
+  async function handlePasswordLogin(event: FormEvent) {
+    event.preventDefault(); setLoading(true); setError('');
     try {
-      const response = await verifyOtp(normalizeKzPhone(phone), code);
-      if (!hasAdminAccess(response.user)) {
-        await logoutAuth(response.accessToken).catch(() => undefined);
-        clearAdminSession();
-        setToken(null);
-        setRefreshToken(null);
-        setUser(null);
-        setError('Нет доступа: нужна роль оператора, НЦА, контрольного органа или суперадминистратора.');
+      const response = await loginWithPassword(normalizeKzPhone(phone),password);
+      setPassword('');
+      if ('passwordChangeToken' in response) {
+        setPasswordChangeToken(response.passwordChangeToken); setNewPassword(''); setConfirmation('');
         return;
       }
-      storeAdminSession(response.accessToken, response.refreshToken, response.user);
-      setToken(response.accessToken);
-      setRefreshToken(response.refreshToken);
-      setUser(response.user);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка входа');
-    } finally {
-      setLoading(false);
-    }
+      await finishLogin(response);
+    } catch (err) { setError(err instanceof Error ? err.message : 'Ошибка входа'); }
+    finally { setLoading(false); }
+  }
+
+  async function handlePasswordChange(event: FormEvent) {
+    event.preventDefault();
+    if (!passwordChangeToken) return;
+    if (newPassword !== confirmation) { setError('Пароли не совпадают'); return; }
+    setLoading(true); setError('');
+    try { await finishLogin(await changeInitialPassword(passwordChangeToken,newPassword,confirmation)); }
+    catch (err) { setError(err instanceof Error ? err.message : 'Ошибка смены пароля'); }
+    finally { setLoading(false); }
   }
 
   async function logout() {
@@ -1629,21 +1623,20 @@ export default function AdminDashboard() {
   if (!token || !user) {
     return (
       <main className="loginPage">
-        <form className="loginCard" onSubmit={otpSent ? handleVerify : handleSendOtp}>
+        <form className="loginCard" onSubmit={passwordChangeToken ? handlePasswordChange : handlePasswordLogin}>
           <div className="brand dark">ЕРСИ ГБО</div>
-          <h1>Вход в админку</h1>
-          <label>
-            Телефон
-            <input value={phone} onChange={(event) => setPhone(normalizeKzPhone(event.target.value))} />
-          </label>
-          {otpSent && (
-            <label>
-              SMS-код
-              <input value={code} onChange={(event) => setCode(event.target.value)} />
-            </label>
-          )}
+          <h1>{passwordChangeToken ? 'Обязательная смена пароля' : 'Вход в админку'}</h1>
+          {passwordChangeToken ? <>
+            <p>Для продолжения замените временный пароль своим. Минимум 8 символов.</p>
+            <label>Новый пароль<input type="password" autoComplete="new-password" minLength={8} maxLength={72} required value={newPassword} onChange={event => setNewPassword(event.target.value)} /></label>
+            <label>Повторите пароль<input type="password" autoComplete="new-password" maxLength={72} required value={confirmation} onChange={event => setConfirmation(event.target.value)} /></label>
+          </> : <>
+            <label>Телефон<input autoComplete="username" required value={phone} onChange={event => setPhone(normalizeKzPhone(event.target.value))} /></label>
+            <label>Пароль<input type="password" autoComplete="current-password" required maxLength={72} value={password} onChange={event => setPassword(event.target.value)} /></label>
+          </>}
           {error && <div className="error">{error}</div>}
-          <button type="submit" disabled={loading}>{loading ? 'Подождите...' : otpSent ? 'Войти' : 'Получить SMS'}</button>
+          <button type="submit" disabled={loading}>{loading ? 'Подождите...' : passwordChangeToken ? 'Сменить пароль и войти' : 'Войти'}</button>
+          {passwordChangeToken && <button type="button" className="smallButton" disabled={loading} onClick={() => { setPasswordChangeToken(null); setNewPassword(''); setConfirmation(''); setError(''); }}>Вернуться ко входу</button>}
         </form>
       </main>
     );

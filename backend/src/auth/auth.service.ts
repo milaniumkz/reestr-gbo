@@ -1,397 +1,138 @@
-import { BadRequestException, ForbiddenException, Injectable, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, GoneException, Injectable, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import bcrypt from 'bcryptjs';
-import { randomInt } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { SmsProvider } from './sms.provider';
+import { INITIAL_PASSWORD_HASH } from './initial-password';
+
+type LoginContext = { role?: string; bin?: string; deviceName?: string };
+type ChangeProof = { sub:string; scope:string; pv:number; role:string; bin?:string; deviceName?:string };
+type SessionPayload = {sub:string;phone:string;roles:string[];sid:string;pv:number;scope:'session'};
 
 @Injectable()
 export class AuthService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly jwt: JwtService,
-    private readonly sms: SmsProvider,
-    private readonly config: ConfigService,
-    private readonly audit: AuditService,
-  ) {}
+  constructor(private readonly prisma: PrismaService, private readonly jwt: JwtService, private readonly config: ConfigService, private readonly audit: AuditService) {}
 
-  async sendOtp(phone: string, ipAddress?: string, role = 'vehicle_owner') {
-    const normalizedPhone = this.normalizePhone(phone);
-    const requestedRole = this.requestedRole(role);
-    if (requestedRole === 'inspection_org') {
-      const allowedUser = await this.prisma.user.findUnique({
-        where: { phone: normalizedPhone },
-        include: {
-          roles: true,
-          memberships: { include: { organization: true } },
-        },
-      });
-      const isSuperAdmin = allowedUser?.roles.some((item) => item.role === 'super_admin') ?? false;
-      const hasInspectionMembership = allowedUser?.memberships.some((item) =>
-        item.organization.type === 'inspection_org' &&
-        item.organization.status === 'active' &&
-        ['inspection_org', 'inspector', 'admin', 'quality_control'].includes(item.role),
-      ) ?? false;
-      const isAllowed =
-        allowedUser?.isBlocked === false &&
-        (isSuperAdmin || hasInspectionMembership);
-      if (!isAllowed) {
-        await this.audit.log('auth.inspection_otp_denied', 'auth', normalizedPhone, allowedUser?.id, { requestedRole }, ipAddress);
-        throw new ForbiddenException('Данного номера нет в списке инспекционных органов');
-      }
-    }
-    if (['nca', 'government'].includes(requestedRole)) {
-      const allowedUser = await this.prisma.user.findUnique({
-        where: { phone: normalizedPhone },
-        include: { roles: true },
-      });
-      const isAllowed = allowedUser?.isBlocked === false &&
-        allowedUser.roles.some((item) => ['nca', 'government', 'super_admin'].includes(item.role));
-      if (!isAllowed) {
-        await this.audit.log('auth.control_otp_denied', 'auth', normalizedPhone, allowedUser?.id, { requestedRole }, ipAddress);
-        throw new ForbiddenException('Данного номера нет в списке контрольных органов');
-      }
-    }
-    const recent = await this.prisma.otpChallenge.findFirst({
-      where: {
-        phone: normalizedPhone,
-        purpose: 'login',
-        createdAt: { gt: new Date(Date.now() - 30_000) },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-    if (recent) throw new BadRequestException('OTP resend cooldown is active');
+  sendOtp(..._args: unknown[]): never { throw new GoneException('SMS-вход отключён. Обновите приложение и войдите по паролю'); }
+  verifyOtp(..._args: unknown[]): never { throw new GoneException('SMS-вход отключён. Обновите приложение и войдите по паролю'); }
 
-    const code = this.sms.isMockEnabled()
-      ? this.config.get<string>('SMS_MOCK_CODE') ?? '1111'
-      : String(randomInt(1000, 10_000));
-    const expiresAt = new Date(Date.now() + 120_000);
-    await this.sms.sendOtp(normalizedPhone, code);
-    await this.prisma.otpChallenge.create({
-      data: {
-        phone: normalizedPhone,
-        codeHash: await bcrypt.hash(code, 10),
-        purpose: 'login',
-        expiresAt,
-        ipAddress,
-      },
-    });
-    await this.audit.log('auth.otp_sent', 'auth', normalizedPhone, undefined, { phone: normalizedPhone }, ipAddress);
-    return {
-      ok: true,
-      ttlSeconds: 120,
-      ...(this.sms.isMockEnabled() ? { code } : {}),
-    };
+  async login(phone:string,password:string,input:LoginContext={},ipAddress?:string) {
+    const normalized = this.normalizePhone(phone);
+    const role = this.requestedRole(input.role);
+    const user = await this.prisma.user.findUnique({where:{phone:normalized},include:{roles:true}});
+    if (user?.passwordLockedUntil && user.passwordLockedUntil > new Date()) throw new UnauthorizedException('Вход временно ограничен. Повторите через 15 минут');
+    const valid = typeof password === 'string' && Buffer.byteLength(password,'utf8') <= 72 && await bcrypt.compare(password,user?.passwordHash ?? INITIAL_PASSWORD_HASH);
+    if (!user || !valid) {
+      if (user) {
+        const failed = await this.prisma.user.update({where:{id:user.id},data:{failedPasswordAttempts:{increment:1}}});
+        if (failed.failedPasswordAttempts >= 5) await this.prisma.user.update({where:{id:user.id},data:{passwordLockedUntil:new Date(Date.now()+15*60_000)}});
+      }
+      await this.audit.log('auth.password_failed','auth',normalized,user?.id,undefined,ipAddress);
+      throw new UnauthorizedException('Неверный телефон или пароль');
+    }
+    await this.assertAccess(user,role,input.bin);
+    await this.prisma.user.update({where:{id:user.id},data:{failedPasswordAttempts:0,passwordLockedUntil:null}});
+    if (user.mustChangePassword) {
+      const passwordChangeToken = await this.jwt.signAsync({sub:user.id,scope:'password_change',pv:user.passwordVersion,role,bin:input.bin?.trim(),deviceName:input.deviceName},{secret:this.jwtSecret('JWT_ACCESS_SECRET'),expiresIn:'10m'});
+      return {requiresPasswordChange:true as const,passwordChangeToken};
+    }
+    return this.startSession(user.id,{...input,role},ipAddress);
   }
 
-  async verifyOtp(
-    phone: string,
-    code: string,
-    deviceName?: string,
-    ipAddress?: string,
-    role = 'vehicle_owner',
-    bin?: string,
-  ) {
-    const normalizedPhone = this.normalizePhone(phone);
-    const requestedRole = this.requestedRole(role);
-    const normalizedBin = bin?.trim() ?? '';
-    if (['inspection_org', 'operator'].includes(requestedRole) && !/^\d{12}$/.test(normalizedBin)) {
-      throw new BadRequestException('Valid organization BIN is required');
-    }
-    const challenge = await this.prisma.otpChallenge.findFirst({
-      where: {
-        phone: normalizedPhone,
-        purpose: 'login',
-        verifiedAt: null,
-        expiresAt: { gt: new Date() },
-      },
-      orderBy: { createdAt: 'desc' },
+  async changeInitialPassword(token:string,password:string,confirmation:string,ipAddress?:string) {
+    this.validateNewPassword(password,confirmation);
+    let proof:ChangeProof;
+    try { proof=await this.jwt.verifyAsync<ChangeProof>(token,{secret:this.jwtSecret('JWT_ACCESS_SECRET')}); }
+    catch(error) { if(error instanceof InternalServerErrorException) throw error; throw new UnauthorizedException('Время смены пароля истекло. Войдите заново'); }
+    if(proof.scope!=='password_change'||!proof.sub||!Number.isInteger(proof.pv)) throw new UnauthorizedException('Неверное подтверждение смены пароля');
+    const user=await this.prisma.user.findUnique({where:{id:proof.sub},include:{roles:true}});
+    if(!user||!user.mustChangePassword||user.passwordVersion!==proof.pv) throw new UnauthorizedException('Пароль уже изменён. Войдите заново');
+    await this.assertAccess(user,this.requestedRole(proof.role),proof.bin);
+    if(await bcrypt.compare(password,user.passwordHash)) throw new BadRequestException('Новый пароль должен отличаться от временного');
+    const hash=await bcrypt.hash(password,12);
+    await this.prisma.$transaction(async tx=>{
+      const changed=await tx.user.updateMany({where:{id:user.id,passwordVersion:proof.pv,mustChangePassword:true,isBlocked:false},data:{passwordHash:hash,mustChangePassword:false,passwordVersion:{increment:1},passwordChangedAt:new Date(),failedPasswordAttempts:0,passwordLockedUntil:null}});
+      if(changed.count!==1) throw new UnauthorizedException('Пароль уже изменён. Войдите заново');
+      await tx.session.updateMany({where:{userId:user.id,revokedAt:null},data:{revokedAt:new Date()}});
     });
-    if (!challenge) throw new UnauthorizedException('Invalid OTP');
-    if (challenge.attempts >= challenge.maxAttempts) {
-      await this.audit.log('auth.otp_blocked', 'auth', normalizedPhone, undefined, { reason: 'attempts_exceeded' }, ipAddress);
-      throw new UnauthorizedException('OTP attempts exceeded');
+    await this.audit.log('auth.password_changed','user',user.id,user.id,{firstLogin:true},ipAddress);
+    return this.startSession(user.id,proof,ipAddress);
+  }
+
+  private validateNewPassword(password:string,confirmation:string) {
+    if(typeof password!=='string'||password.length<8||Buffer.byteLength(password,'utf8')>72) throw new BadRequestException('Новый пароль: минимум 8 символов, максимум 72 байта');
+    if(password==='123456'||!password.trim()) throw new BadRequestException('Установите собственный пароль');
+    if(password!==confirmation) throw new BadRequestException('Пароли не совпадают');
+  }
+
+  private async assertAccess(user:{id:string;isBlocked:boolean;roles:Array<{role:string}>},role:string,bin?:string) {
+    if(user.isBlocked) throw new ForbiddenException('Пользователь заблокирован');
+    const superAdmin=user.roles.some(r=>r.role==='super_admin');
+    if(role==='inspection_org'||role==='operator') {
+      if(!/^\d{12}$/.test(bin?.trim()??'')) throw new BadRequestException('Введите БИН организации из 12 цифр');
+      const organization=await this.prisma.organization.findUnique({where:{bin:bin!.trim()}});
+      if(!organization||organization.type!==role||organization.status!=='active') throw new ForbiddenException('Организация не найдена или заблокирована');
+      const membership=await this.prisma.organizationMember.findFirst({where:{organizationId:organization.id,userId:user.id,...(role==='inspection_org'?{role:{in:['inspection_org','inspector','admin','quality_control']}}:{role:{in:['operator','admin']}})}});
+      if(!membership&&!superAdmin) throw new ForbiddenException('Сотрудник не состоит в выбранной организации');
+      if(role==='inspection_org'&&!user.roles.some(r=>r.role==='inspection_org')) await this.prisma.userRole.upsert({where:{userId_role:{userId:user.id,role:'inspection_org'}},update:{},create:{userId:user.id,role:'inspection_org'}});
+    } else if(['nca','government'].includes(role)&&!superAdmin&&!user.roles.some(r=>r.role===role)) {
+      throw new ForbiddenException('Нет доступа к выбранному органу');
     }
+  }
 
-    const isValid = await bcrypt.compare(code, challenge.codeHash);
-    await this.prisma.otpChallenge.update({
-      where: { id: challenge.id },
-      data: {
-        attempts: { increment: 1 },
-        ...(isValid ? { verifiedAt: new Date() } : {}),
-      },
-    });
-    if (!isValid) {
-      await this.audit.log('auth.otp_failed', 'auth', normalizedPhone, undefined, { attempts: challenge.attempts + 1 }, ipAddress);
-      throw new UnauthorizedException('Invalid OTP');
-    }
-
-    const user = await this.prisma.user.upsert({
-      where: { phone: normalizedPhone },
-      update: { lastLoginAt: new Date() },
-      create: {
-        phone: normalizedPhone,
-        fullName: 'Пользователь ЕРСИ ГБО',
-        lastLoginAt: new Date(),
-        roles: { create: [{ role: 'vehicle_owner' }] },
-      },
-      include: { roles: true },
-    });
-    if (user.isBlocked) throw new ForbiddenException('User is blocked');
-
-    const selfServiceRoles = ['vehicle_owner', 'operator'];
-    if (selfServiceRoles.includes(requestedRole)) {
-      await this.prisma.userRole.upsert({
-        where: { userId_role: { userId: user.id, role: requestedRole } },
-        update: {},
-        create: { userId: user.id, role: requestedRole },
-      });
-    } else if (!user.roles.some((item) => item.role === requestedRole)) {
-      const inspectionMembershipAllowed = requestedRole === 'inspection_org'
-        ? await this.isInspectionMemberForBin(user.id, normalizedBin)
-        : false;
-      if (!inspectionMembershipAllowed) {
-        await this.audit.log('auth.role_denied', 'auth', normalizedPhone, user.id, { requestedRole }, ipAddress);
-        throw new ForbiddenException(
-          requestedRole === 'inspection_org'
-            ? 'Данного номера нет в списке инспекционных органов'
-            : 'Role is not assigned',
-        );
-      }
-    }
-
-    if (requestedRole === 'inspection_org') {
-      const organization = await this.prisma.organization.findUnique({
-        where: { bin: normalizedBin },
-      });
-      if (!organization || organization.type !== 'inspection_org' || organization.status !== 'active') {
-        throw new ForbiddenException('Инспекционный орган не найден или заблокирован');
-      }
-      const isMember = await this.isInspectionMemberForBin(user.id, normalizedBin);
-      const isSuperAdmin = user.roles.some((item) => item.role === 'super_admin');
-      if (!isMember && !isSuperAdmin) {
-        throw new ForbiddenException('Данного номера нет в списке инспекционных органов');
-      }
-      await this.prisma.userRole.upsert({
-        where: { userId_role: { userId: user.id, role: 'inspection_org' } },
-        update: {},
-        create: { userId: user.id, role: 'inspection_org' },
-      });
-    }
-
-    if (requestedRole === 'operator') {
-      const organization = await this.prisma.organization.upsert({
-        where: { bin: normalizedBin },
-        update: {
-          type: requestedRole,
-        },
-        create: {
-          type: requestedRole,
-          name: `Организация ${normalizedBin}`,
-          bin: normalizedBin,
-        },
-      });
-      if (organization.status !== 'active') {
-        throw new ForbiddenException('Organization is not active');
-      }
-      await this.prisma.organizationMember.upsert({
-        where: {
-          organizationId_userId_role: {
-            organizationId: organization.id,
-            userId: user.id,
-            role: requestedRole,
-          },
-        },
-        update: {},
-        create: {
-          organizationId: organization.id,
-          userId: user.id,
-          role: requestedRole,
-        },
-      });
-      await this.audit.log('auth.organization_registered', 'organization', organization.id, user.id, {
-        bin: normalizedBin,
-        role: requestedRole,
-      }, ipAddress);
-    }
-
-    const activeInspectionMembership = await this.prisma.organizationMember.findFirst({
-      where: {
-        userId: user.id,
-        role: { in: ['inspection_org', 'inspector', 'admin', 'quality_control'] },
-        organization: {
-          type: 'inspection_org',
-          status: 'active',
-        },
-      },
-      select: { id: true },
-    });
-    if (activeInspectionMembership) {
-      await this.prisma.userRole.upsert({
-        where: { userId_role: { userId: user.id, role: 'inspection_org' } },
-        update: {},
-        create: { userId: user.id, role: 'inspection_org' },
-      });
-    }
-
-    const userWithRoles = await this.prisma.user.findUniqueOrThrow({
-      where: { id: user.id },
-      include: { roles: true },
-    });
-
-    const session = await this.prisma.session.create({
-      data: {
-        userId: userWithRoles.id,
-        refreshHash: 'pending',
-        deviceName,
-        ipAddress,
-        expiresAt: this.refreshExpiresAtForRoles(userWithRoles.roles.map((item) => item.role)),
-      },
-    });
-
-    const payload = {
-      sub: userWithRoles.id,
-      phone: userWithRoles.phone,
-      roles: userWithRoles.roles.map((item) => item.role),
-      sid: session.id,
-    };
-    const result = await this.issueTokens(payload);
-    await this.audit.log('auth.login', 'session', session.id, userWithRoles.id, {
-      phone: normalizedPhone,
-      roles: payload.roles,
-      deviceName,
-      requestedRole,
-    }, ipAddress);
+  private async startSession(userId:string,input:LoginContext,ipAddress?:string) {
+    const user=await this.prisma.user.findUniqueOrThrow({where:{id:userId},include:{roles:true}});
+    if(user.mustChangePassword||user.isBlocked) throw new ForbiddenException('Требуется смена пароля или пользователь заблокирован');
+    await this.assertAccess(user,this.requestedRole(input.role),input.bin);
+    const roles=user.roles.map(r=>r.role);
+    const session=await this.prisma.session.create({data:{userId,refreshHash:'pending',deviceName:input.deviceName,ipAddress,expiresAt:this.refreshExpiresAtForRoles(roles)}});
+    const result=await this.issueTokens({sub:user.id,phone:user.phone,roles,sid:session.id,pv:user.passwordVersion,scope:'session'});
+    await this.prisma.user.update({where:{id:userId},data:{lastLoginAt:new Date()}});
+    await this.audit.log('auth.login','session',session.id,user.id,{requestedRole:input.role,deviceName:input.deviceName},ipAddress);
     return result;
   }
 
-  async refresh(refreshToken: string, ipAddress?: string) {
-    const payload = await this.jwt.verifyAsync<{ sub: string; sid: string }>(refreshToken, {
-      secret: this.jwtSecret('JWT_REFRESH_SECRET'),
-    });
-    const session = await this.prisma.session.findUnique({
-      where: { id: payload.sid },
-      include: { user: { include: { roles: true } } },
-    });
-    if (!session || session.revokedAt || session.expiresAt < new Date()) {
-      throw new UnauthorizedException('Invalid session');
-    }
-    const roles = session.user.roles.map((item) => item.role);
-    if (this.isInspectionSessionExpired(session.createdAt, roles)) {
-      await this.prisma.session.updateMany({
-        where: { id: session.id, revokedAt: null },
-        data: { revokedAt: new Date() },
-      });
-      await this.audit.log('auth.session_expired', 'session', session.id, session.user.id, { roles }, ipAddress);
-      throw new UnauthorizedException('Session expired');
-    }
-    if (session.user.isBlocked) throw new ForbiddenException('User is blocked');
-    if (!(await bcrypt.compare(refreshToken, session.refreshHash))) {
-      throw new UnauthorizedException('Invalid refresh token');
-    }
-
-    const result = await this.issueTokens({
-      sub: session.user.id,
-      phone: session.user.phone,
-      roles,
-      sid: session.id,
-    });
-    await this.audit.log('auth.refresh', 'session', session.id, session.user.id, undefined, ipAddress);
+  async refresh(refreshToken:string,ipAddress?:string) {
+    let payload:SessionPayload;
+    try { payload=await this.jwt.verifyAsync<SessionPayload>(refreshToken,{secret:this.jwtSecret('JWT_REFRESH_SECRET')}); }
+    catch(error) {if(error instanceof InternalServerErrorException) throw error;throw new UnauthorizedException('Недействительная сессия');}
+    if(payload.scope!=='session'||!payload.sid||!payload.sub) throw new UnauthorizedException('Недействительная сессия');
+    const session=await this.prisma.session.findUnique({where:{id:payload.sid},include:{user:{include:{roles:true}}}});
+    if(!session||session.userId!==payload.sub||session.revokedAt||session.expiresAt<=new Date()||session.user.isBlocked||session.user.mustChangePassword||session.user.passwordVersion!==payload.pv) throw new UnauthorizedException('Войдите заново по паролю');
+    const roles=session.user.roles.map(r=>r.role);
+    if(this.isInspectionSessionExpired(session.createdAt,roles)) throw new UnauthorizedException('Сессия истекла');
+    if(!await bcrypt.compare(this.refreshFingerprint(refreshToken),session.refreshHash)) throw new UnauthorizedException('Недействительная сессия');
+    const result=await this.issueTokens({sub:session.user.id,phone:session.user.phone,roles,sid:session.id,pv:session.user.passwordVersion,scope:'session'});
+    await this.audit.log('auth.refresh','session',session.id,session.user.id,undefined,ipAddress);
     return result;
   }
 
-  async logout(user?: { sid?: string; sub?: string }, ipAddress?: string) {
-    if (!user?.sid) return { ok: true };
-    await this.prisma.session.updateMany({
-      where: { id: user.sid, revokedAt: null },
-      data: { revokedAt: new Date() },
-    });
-    await this.audit.log('auth.logout', 'session', user.sid, user.sub, undefined, ipAddress);
-    return { ok: true };
+  async logout(user?:{sid?:string;sub?:string},ipAddress?:string) {
+    if(!user?.sid) return {ok:true};
+    await this.prisma.session.updateMany({where:{id:user.sid,revokedAt:null},data:{revokedAt:new Date()}});
+    await this.audit.log('auth.logout','session',user.sid,user.sub,undefined,ipAddress);
+    return {ok:true};
   }
 
-  private async issueTokens(payload: { sub: string; phone: string; roles: string[]; sid: string }) {
-    const sessionExpiresAt = this.refreshExpiresAtForRoles(payload.roles);
-    const accessToken = await this.jwt.signAsync(payload, {
-      secret: this.jwtSecret('JWT_ACCESS_SECRET'),
-      expiresIn: '15m',
-    });
-    const refreshToken = await this.jwt.signAsync(payload, {
-      secret: this.jwtSecret('JWT_REFRESH_SECRET'),
-      expiresIn: this.refreshJwtTtlForRoles(payload.roles),
-    });
-    await this.prisma.session.update({
-      where: { id: payload.sid },
-      data: {
-        refreshHash: await bcrypt.hash(refreshToken, 10),
-        expiresAt: sessionExpiresAt,
-      },
-    });
-    return { accessToken, refreshToken, sessionExpiresAt, user: payload };
+  private async issueTokens(payload:SessionPayload) {
+    const sessionExpiresAt=this.refreshExpiresAtForRoles(payload.roles);
+    const accessToken=await this.jwt.signAsync(payload,{secret:this.jwtSecret('JWT_ACCESS_SECRET'),expiresIn:'15m'});
+    const refreshToken=await this.jwt.signAsync({...payload,jti:randomUUID()},{secret:this.jwtSecret('JWT_REFRESH_SECRET'),expiresIn:payload.roles.includes('inspection_org')?'12h':'30d'});
+    await this.prisma.session.update({where:{id:payload.sid},data:{refreshHash:await bcrypt.hash(this.refreshFingerprint(refreshToken),10),expiresAt:sessionExpiresAt}});
+    return {accessToken,refreshToken,sessionExpiresAt,user:payload};
   }
-
-  private refreshExpiresAtForRoles(roles: string[]) {
-    const expiresAt = new Date();
-    if (roles.includes('inspection_org')) {
-      expiresAt.setHours(expiresAt.getHours() + 12);
-      return expiresAt;
-    }
-    expiresAt.setDate(expiresAt.getDate() + 30);
-    return expiresAt;
+  private refreshFingerprint(token:string) {return createHash('sha256').update(token).digest('hex');}
+  private refreshExpiresAtForRoles(roles:string[]) {return new Date(Date.now()+(roles.includes('inspection_org')?12*60*60_000:30*24*60*60_000));}
+  private isInspectionSessionExpired(createdAt:Date,roles:string[]) {return roles.includes('inspection_org')&&createdAt.getTime()+12*60*60_000<=Date.now();}
+  private normalizePhone(value:string) {
+    const digits=value.replace(/\D/g,'');
+    if(digits.length===10) return `+7${digits}`;
+    if(digits.length===11&&digits.startsWith('8')) return `+7${digits.slice(1)}`;
+    if(digits.length>=10&&digits.length<=15) return `+${digits}`;
+    throw new BadRequestException('Проверьте номер телефона');
   }
-
-  private refreshJwtTtlForRoles(roles: string[]) {
-    return roles.includes('inspection_org') ? '12h' : '30d';
-  }
-
-  private isInspectionSessionExpired(createdAt: Date, roles: string[]) {
-    if (!roles.includes('inspection_org')) return false;
-    return createdAt.getTime() + 12 * 60 * 60 * 1000 <= Date.now();
-  }
-
-  private async isInspectionMemberForBin(userId: string, bin: string) {
-    if (!/^\d{12}$/.test(bin)) return false;
-    const membership = await this.prisma.organizationMember.findFirst({
-      where: {
-        userId,
-        role: { in: ['inspection_org', 'inspector', 'admin', 'quality_control'] },
-        organization: {
-          bin,
-          type: 'inspection_org',
-          status: 'active',
-        },
-      },
-    });
-    return Boolean(membership);
-  }
-
-  private normalizePhone(value: string) {
-    const digits = value.replace(/\D/g, '');
-    if (!digits) throw new BadRequestException('Phone is required');
-    if (digits.length < 10 || digits.length > 15) {
-      throw new BadRequestException('Phone format is invalid');
-    }
-    if (digits.startsWith('7')) return `+${digits}`;
-    if (digits.startsWith('8')) return `+7${digits.slice(1)}`;
-    return `+7${digits}`;
-  }
-
-  private requestedRole(value?: string) {
-    if (!value || value === 'vehicle_owner') return 'vehicle_owner';
-    if (value === 'inspection_org') return 'inspection_org';
-    if (value === 'operator') return 'operator';
-    if (value === 'government') return 'government';
-    if (value === 'nca') return 'nca';
-    throw new ForbiddenException('Role cannot be self-assigned');
-  }
-
-  private jwtSecret(name: 'JWT_ACCESS_SECRET' | 'JWT_REFRESH_SECRET') {
-    const value = this.config.get<string>(name);
-    if (!value || value.startsWith('replace_') || value.startsWith('dev_')) {
-      throw new InternalServerErrorException(`${name} is not configured`);
-    }
-    return value;
-  }
+  private requestedRole(role?:string) {if(!role) return 'vehicle_owner';if(['vehicle_owner','inspection_org','operator','government','nca'].includes(role)) return role;throw new ForbiddenException('Роль не назначается при входе');}
+  private jwtSecret(name:'JWT_ACCESS_SECRET'|'JWT_REFRESH_SECRET') {const value=this.config.get<string>(name);if(!value||value.startsWith('replace_')||value.startsWith('dev_')) throw new InternalServerErrorException(`${name} is not configured`);return value;}
 }

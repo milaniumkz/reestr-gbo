@@ -310,7 +310,7 @@ const screenTitles = [
   '01. Заставка',
   '02. Выбор роли',
   '03. Вход в компанию',
-  '04. SMS-подтверждение',
+  '04. Смена временного пароля',
   '05. Главная пользователя',
   '06. Поиск по VIN',
   '07. Поиск по БИН/ИИН',
@@ -467,7 +467,10 @@ class _ErsiDemoState extends State<ErsiDemo> {
   String vinQuery = '';
   String authPhone = '';
   String authBin = '';
-  String smsCode = '';
+  String authPassword = '';
+  String newPassword = '';
+  String confirmPassword = '';
+  String? passwordChangeToken;
   String lastSearchQuery = '';
   String inspectionCertificateNumber = '';
   String ownerId = '';
@@ -493,7 +496,6 @@ class _ErsiDemoState extends State<ErsiDemo> {
   String publicVinLast3 = '';
   String? draftVehicleId;
   String? draftInspectionId;
-  String? visibleOtpCode;
   RegistryVehicle? publicCertificateResult;
   RegistryVehicle? selectedRegistryVehicle;
   bool publicCertificateSearched = false;
@@ -546,7 +548,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
   String employeeActivityDateTo = '';
   final List<int> _history = [];
   bool promoted = true;
-  bool sendingOtp = false;
+  bool authBusy = false;
   bool bootstrapping = true;
   String language = 'Русский';
   Timer? _qualityQueueTimer;
@@ -974,94 +976,46 @@ class _ErsiDemoState extends State<ErsiDemo> {
     }
   }
 
-  Future<void> _sendOtp() async {
-    if (sendingOtp) return;
-    final phone = _normalizeKzPhone(authPhone);
-    final bin = authBin.trim();
-    if (phone.isEmpty) {
-      setState(() => apiState = 'Введите телефон');
-      return;
-    }
-    if (['inspection_org', 'operator'].contains(_roleCode) && bin.isEmpty) {
-      setState(() => apiState = 'Введите БИН');
-      return;
-    }
-    setState(() => sendingOtp = true);
+  String _apiErrorText(String message) => message.replaceFirst(RegExp(r'^ApiException\(\d+\):\s*'), '').replaceFirst('Exception: ', '');
+
+  Future<void> _passwordLogin() async {
+    if (authBusy) return;
+    if (authPassword.isEmpty) { setState(() => apiState = 'Введите пароль'); return; }
+    setState(() => authBusy = true);
     try {
-      final code = await repositories.auth.sendOtp(phone, role: _roleCode);
-      if (mounted) {
-        setState(() {
-          visibleOtpCode = code;
-          smsCode = '';
-          apiState = code == null ? 'SMS sent' : 'SMS code: $code';
-        });
-        go(3);
-      }
-    } catch (error) {
+      final result = await repositories.auth.login(_normalizeKzPhone(authPhone), authPassword, _roleCode, bin: authBin.trim());
       if (!mounted) return;
-      final message = error.toString();
-      if (message.contains('cooldown')) {
-        setState(() {
-          visibleOtpCode = null;
-          smsCode = '';
-          apiState = 'SMS уже отправлен';
-        });
+      setState(() => authPassword = '');
+      if (result.passwordChangeToken != null) {
+        setState(() { currentUser = null; passwordChangeToken = result.passwordChangeToken; newPassword = ''; confirmPassword = ''; apiState = 'Установите собственный пароль'; });
         go(3);
-      } else {
-        setState(() => apiState = _apiErrorText(message));
-      }
-    } finally {
-      if (mounted) setState(() => sendingOtp = false);
-    }
+      } else if (result.user != null) { await _enterAuthenticated(result.user!); }
+    } catch (error) { if (mounted) setState(() => apiState = error is ApiException ? error.message : 'Не удалось выполнить вход'); }
+    finally { if (mounted) setState(() => authBusy = false); }
   }
 
-  String _apiErrorText(String message) {
-    if (message.contains('контрольных органов')) {
-      return 'Данного номера нет в списке контрольных органов';
-    }
-    if (message.contains('инспекционных органов')) {
-      return 'Данного номера нет в списке инспекционных органов';
-    }
-    if (message.contains('Role cannot')) return 'Нет доступа к выбранной роли';
-    if (message.contains('Phone')) return 'Проверьте номер телефона';
-    return 'SMS API error';
-  }
-
-  Future<void> _confirmOtp() async {
-    final phone = _normalizeKzPhone(authPhone);
-    final code = smsCode.trim();
-    if (code.isEmpty) {
-      setState(() => apiState = 'Введите SMS-код');
-      return;
-    }
+  Future<void> _completePasswordChange() async {
+    if (authBusy) return;
+    if (passwordChangeToken == null) { setState(() => apiState = 'Сначала войдите по временному паролю'); go(2); return; }
+    if (newPassword.length < 8) { setState(() => apiState = 'Новый пароль должен содержать минимум 8 символов'); return; }
+    if (newPassword != confirmPassword) { setState(() => apiState = 'Пароли не совпадают'); return; }
+    setState(() => authBusy = true);
     try {
-      final user = await repositories.auth.verifyOtp(
-        phone,
-        code,
-        _roleCode,
-        bin: authBin.trim(),
-      );
-      if (mounted) {
-        setState(() {
-          currentUser = user;
-          apiState = 'Authorized';
-        });
-        if (_roleCode == 'inspection_org') await _loadOrganizations();
-        if (_roleCode == 'inspection_org') await _loadMyInspections();
-        if (_roleCode == 'nca' || _roleCode == 'government') {
-          await _loadControlCertificates();
-        }
-        if (_roleCode == 'inspection_org' ||
-            _roleCode == 'nca' ||
-            _roleCode == 'government') {
-          await _loadNotifications();
-          await _loadViewHistory();
-        }
-        go(_homeScreenForRoleCode(_roleCode));
-      }
-    } catch (_) {
-      if (mounted) setState(() => apiState = 'Login API error');
-    }
+      final user = await repositories.auth.changeInitialPassword(passwordChangeToken!,newPassword,confirmPassword,_roleCode,bin:authBin.trim());
+      if (!mounted) return;
+      setState(() { passwordChangeToken = null; newPassword = ''; confirmPassword = ''; });
+      await _enterAuthenticated(user);
+    } catch (error) { if (mounted) setState(() => apiState = error is ApiException ? error.message : 'Не удалось изменить пароль'); }
+    finally { if (mounted) setState(() => authBusy = false); }
+  }
+
+  Future<void> _enterAuthenticated(AppUser user) async {
+    if (!mounted) return;
+    setState(() { currentUser = user; apiState = 'Authorized'; });
+    if (_roleCode == 'inspection_org') { await _loadOrganizations(); await _loadMyInspections(); }
+    if (_roleCode == 'nca' || _roleCode == 'government') { await _loadControlCertificates(); }
+    if (['inspection_org','nca','government'].contains(_roleCode)) { await _loadNotifications(); await _loadViewHistory(); }
+    if (mounted) go(_homeScreenForRoleCode(_roleCode));
   }
 
   Future<void> _searchRegistry(String query) async {
@@ -1279,7 +1233,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
   String _xlsxImportErrorText(Object error) {
     if (error is ApiException) {
       if (error.statusCode == 401) {
-        return 'Сессия истекла. Выйдите и войдите заново по SMS.';
+        return 'Сессия истекла. Выйдите и войдите заново по паролю.';
       }
       if (error.statusCode == 403) {
         return 'Нет доступа к импорту XLSX. Войдите как инспекционный орган или руководитель ИО.';
@@ -1660,7 +1614,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
 
   String _inspectionSubmitErrorText(ApiException error) {
     if (error.statusCode == 401) {
-      return 'Сессия истекла. Войдите заново по SMS.';
+      return 'Сессия истекла. Войдите заново по паролю.';
     }
     if (error.statusCode == 403) {
       if (error.message.contains('leader') ||
@@ -2123,8 +2077,10 @@ class _ErsiDemoState extends State<ErsiDemo> {
       role = 'Проверка свидетельства';
       authPhone = '+7';
       authBin = '';
-      smsCode = '';
-      visibleOtpCode = null;
+      authPassword = '';
+      passwordChangeToken = null;
+      newPassword = '';
+      confirmPassword = '';
       myInspections = const [];
       selectedEmployee = null;
       employeeActivityDateFrom = '';
@@ -2220,15 +2176,17 @@ class _ErsiDemoState extends State<ErsiDemo> {
         bin: authBin,
         onPhone: (value) => setState(() => authPhone = value),
         onBin: (value) => setState(() => authBin = value),
-        onLogin: _sendOtp,
-        isLoading: sendingOtp,
+        password: authPassword,
+        onPassword: (value) => setState(() => authPassword = value),
+        onLogin: _passwordLogin,
+        isLoading: authBusy,
       ),
-      3 => _SmsScreen(
-        phone: authPhone,
-        visibleCode: visibleOtpCode,
-        onCode: (value) => setState(() => smsCode = value),
-        onConfirm: _confirmOtp,
-        onChangePhone: () => go(2),
+      3 => _PasswordChangeScreen(
+        newPassword: newPassword, confirmation: confirmPassword, busy: authBusy,
+        onPassword: (value) => setState(() => newPassword = value),
+        onConfirmation: (value) => setState(() => confirmPassword = value),
+        onConfirm: _completePasswordChange,
+        onBack: () { setState(() { passwordChangeToken = null; newPassword = ''; confirmPassword = ''; }); go(2); },
       ),
       4 => _UserHome(
         go: go,
@@ -2910,7 +2868,7 @@ class _AppAlertBanner extends StatelessWidget {
 
   String _titleFor(_AlertTone tone, String value) {
     final lower = value.toLowerCase();
-    if (lower.contains('sms') || lower.contains('код')) return 'SMS';
+    if (lower.contains('парол')) return 'ВХОД';
     return switch (tone) {
       _AlertTone.error => 'Не удалось выполнить действие',
       _AlertTone.warning => 'Проверьте данные',
@@ -2921,14 +2879,11 @@ class _AppAlertBanner extends StatelessWidget {
 
   String _messageFor(String value) {
     return switch (value.trim()) {
-      'SMS sent' => 'SMS-код отправлен. Введите код для входа.',
       'Authorized' => 'Вход выполнен.',
       'API offline' =>
         'Сервер сейчас недоступен. Проверьте подключение и попробуйте ещё раз.',
-      'SMS API error' =>
-        'Не удалось отправить SMS. Проверьте номер и попробуйте ещё раз.',
       'Login API error' =>
-        'Не удалось выполнить вход. Проверьте SMS-код и данные организации.',
+        'Не удалось выполнить вход. Проверьте пароль и данные организации.',
       'Registry API error' =>
         'Не удалось загрузить реестр. Попробуйте ещё раз.',
       'Inspection API error' =>
@@ -3457,7 +3412,7 @@ class _RoleSelect extends StatelessWidget {
               icon: item.$3,
               title: item.$1,
               subtitle: item.$2,
-              badge: item.$1 == 'Инспекционный орган' ? 'SMS + БИН' : 'SMS',
+              badge: item.$1 == 'Инспекционный орган' ? 'ПАРОЛЬ + БИН' : 'ПАРОЛЬ',
               selected: selected == item.$1,
               onTap: () {
                 onRole(item.$1);
@@ -3474,6 +3429,8 @@ class _Login extends StatelessWidget {
   const _Login({
     required this.role,
     required this.phone,
+    required this.password,
+    required this.onPassword,
     required this.bin,
     required this.onPhone,
     required this.onBin,
@@ -3483,6 +3440,8 @@ class _Login extends StatelessWidget {
 
   final String role;
   final String phone;
+  final String password;
+  final ValueChanged<String> onPassword;
   final String bin;
   final ValueChanged<String> onPhone;
   final ValueChanged<String> onBin;
@@ -3501,7 +3460,7 @@ class _Login extends StatelessWidget {
         children: [
           const _HintPill(text: 'ЗАЩИЩЕННЫЙ ДОСТУП'),
           const SizedBox(height: 26),
-          _Input(
+          if (role.startsWith('Инспекционный') || role.startsWith('Установщик')) _Input(
             label: role.startsWith('Владелец')
                 ? 'ИИН / БИН'
                 : 'БИН ОРГАНИЗАЦИИ',
@@ -3515,17 +3474,18 @@ class _Login extends StatelessWidget {
             label: 'ТЕЛЕФОН СОТРУДНИКА',
             value: phone,
             hint: '+7 ...',
-            suffix: 'SMS',
+
             keyboardType: TextInputType.phone,
             inputFormatters: const [_KzPhoneFormatter()],
             onChanged: onPhone,
           ),
+          _Input(label: 'Пароль', value: password, hint: 'Введите пароль', obscureText: true, keyboardType: TextInputType.visiblePassword, onChanged: onPassword),
           const SizedBox(height: 26),
           const _SecurityPanel(),
           const SizedBox(height: 34),
           _PrimaryButton(
-            text: isLoading ? 'Отправляем...' : 'Получить SMS-код',
-            icon: Icons.sms_rounded,
+            text: isLoading ? 'Входим...' : 'Войти',
+            icon: Icons.login_rounded,
             onTap: isLoading ? null : onLogin,
           ),
           const SizedBox(height: 34),
@@ -3542,94 +3502,28 @@ class _Login extends StatelessWidget {
   }
 }
 
-class _SmsScreen extends StatelessWidget {
-  const _SmsScreen({
-    required this.phone,
-    required this.onCode,
-    required this.onConfirm,
-    required this.onChangePhone,
-    this.visibleCode,
-  });
-
-  final String phone;
-  final String? visibleCode;
-  final ValueChanged<String> onCode;
+class _PasswordChangeScreen extends StatelessWidget {
+  const _PasswordChangeScreen({required this.newPassword,required this.confirmation,required this.busy,required this.onPassword,required this.onConfirmation,required this.onConfirm,required this.onBack});
+  final String newPassword;
+  final String confirmation;
+  final bool busy;
+  final ValueChanged<String> onPassword;
+  final ValueChanged<String> onConfirmation;
   final VoidCallback onConfirm;
-  final VoidCallback onChangePhone;
-
+  final VoidCallback onBack;
   @override
-  Widget build(BuildContext context) {
-    return _AppScreen(
-      title: 'Подтверждение',
-      subtitle: 'Код отправлен на ${phone.isEmpty ? 'указанный номер' : phone}',
-      showNav: false,
-      leadingBack: true,
-      child: Column(
-        children: [
-          const SizedBox(height: 42),
-          Text(
-            visibleCode == null
-                ? 'Введите SMS-код'
-                : 'Тестовый SMS-код: $visibleCode',
-            style: TextStyle(
-              color: ink,
-              fontSize: 19,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 26),
-          TextField(
-            keyboardType: TextInputType.number,
-            onChanged: onCode,
-            decoration: InputDecoration(
-              labelText: 'SMS-код',
-              hintText: 'Введите код из SMS',
-              filled: true,
-              fillColor: Colors.white,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: const BorderSide(color: line),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: const BorderSide(color: line),
-              ),
-            ),
-            style: const TextStyle(
-              color: ink,
-              fontSize: 20,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 2,
-            ),
-          ),
-          const SizedBox(height: 40),
-          const Text(
-            'Повторная отправка через 00:38',
-            style: TextStyle(color: muted, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 52),
-          _PrimaryButton(text: 'Подтвердить вход', onTap: onConfirm),
-          const SizedBox(height: 54),
-          _WarningCard(
-            text:
-                'Никому не сообщайте код\nСотрудники ЕРСИ ГБО никогда не запрашивают SMS-код.',
-          ),
-          const SizedBox(height: 42),
-          SizedBox(
-            width: double.infinity,
-            height: 54,
-            child: FilledButton.tonal(
-              onPressed: onChangePhone,
-              child: const Text(
-                'Изменить номер',
-                style: TextStyle(fontWeight: FontWeight.w900),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => _AppScreen(
+    title:'Обязательная смена пароля', subtitle:'Первый вход', showNav:false,
+    child:Column(children:[
+      const _InfoBox(title:'Установите свой пароль',text:'Для продолжения работы замените временный пароль. Новый пароль — минимум 8 символов.'),
+      const SizedBox(height:20),
+      _Input(label:'Новый пароль',value:newPassword,obscureText:true,keyboardType:TextInputType.visiblePassword,onChanged:onPassword),
+      _Input(label:'Повторите пароль',value:confirmation,obscureText:true,keyboardType:TextInputType.visiblePassword,onChanged:onConfirmation),
+      _PrimaryButton(text:busy?'Сохраняем...':'Сменить пароль и войти',onTap:busy?null:onConfirm),
+      const SizedBox(height:16),
+      TextButton(onPressed:busy?null:onBack,child:const Text('Вернуться ко входу')),
+    ]),
+  );
 }
 
 class _UserHome extends StatelessWidget {
@@ -8384,6 +8278,7 @@ class _Input extends StatefulWidget {
     this.keyboardType,
     this.inputFormatters,
     this.readOnly = false,
+    this.obscureText = false,
     this.onTap,
     this.onChanged,
   });
@@ -8395,6 +8290,7 @@ class _Input extends StatefulWidget {
   final TextInputType? keyboardType;
   final List<TextInputFormatter>? inputFormatters;
   final bool readOnly;
+  final bool obscureText;
   final VoidCallback? onTap;
   final ValueChanged<String>? onChanged;
 
@@ -8437,6 +8333,7 @@ class _InputState extends State<_Input> {
         autofillHints: const [],
         enableSuggestions: false,
         readOnly: widget.readOnly,
+        obscureText: widget.obscureText,
         onTap: widget.onTap,
         keyboardType: widget.keyboardType,
         inputFormatters: widget.inputFormatters,
@@ -8995,7 +8892,7 @@ class _SecurityPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => const _InfoBox(
     title: 'Корпоративное подтверждение',
-    text: 'Вход разрешён только по SMS и активному статусу организации.',
+    text: 'Вход по личному паролю и активному статусу организации.',
   );
 }
 

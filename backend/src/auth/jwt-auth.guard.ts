@@ -27,15 +27,15 @@ export class JwtAuthGuard implements CanActivate {
     const token = header.startsWith('Bearer ') ? header.slice(7) : '';
     if (!token) throw new UnauthorizedException();
     const user = await this.verifyToken(token);
-    if (!user.sid) throw new UnauthorizedException();
+    if (!user.sid || user.scope !== 'session') throw new UnauthorizedException();
     const session = await this.prisma.session.findUnique({
       where: { id: user.sid },
-      select: { expiresAt: true, revokedAt: true },
+      select: { expiresAt: true, revokedAt: true, user: {select:{id:true,phone:true,isBlocked:true,mustChangePassword:true,passwordVersion:true,roles:{select:{role:true}}}} },
     });
-    if (!session || session.revokedAt || session.expiresAt <= new Date()) {
+    if (!session || session.revokedAt || session.expiresAt <= new Date() || session.user.id !== user.sub || session.user.isBlocked || session.user.mustChangePassword || session.user.passwordVersion !== user.pv) {
       throw new UnauthorizedException();
     }
-    request.user = user;
+    request.user = {...user,phone:session.user.phone,roles:session.user.roles.map(item=>item.role)};
     return true;
   }
 

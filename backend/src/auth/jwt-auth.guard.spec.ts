@@ -29,3 +29,12 @@ describe('JwtAuthGuard', () => {
     await expect(guard.canActivate(context('broken-token'))).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });
+
+describe('mandatory password change protection',()=>{
+  it('rejects a password-change proof as API authorization without looking up sessions',async()=>{
+    const lookup=jest.fn();
+    const guard=new JwtAuthGuard({verifyAsync:jest.fn(async()=>({sub:'u1',scope:'password_change',pv:0}))} as unknown as JwtService,{get:()=> 'test-secret'} as unknown as ConfigService,{getAllAndOverride:()=>false} as unknown as Reflector,{session:{findUnique:lookup}} as never);
+    await expect(guard.canActivate(context('change-proof'))).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(lookup).not.toHaveBeenCalled();
+  });
+});

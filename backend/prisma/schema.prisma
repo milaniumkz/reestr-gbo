@@ -14,6 +14,12 @@ model User {
   fullName    String
   iin         String?
   isBlocked   Boolean   @default(false)
+  passwordHash String @default("$2b$12$i.sS/wBAoDl.IRiJFeQjue1wpHeFFZ9dlER8f/EAmmreRVcVQAElq")
+  mustChangePassword Boolean @default(true)
+  passwordVersion Int @default(0)
+  failedPasswordAttempts Int @default(0)
+  passwordLockedUntil DateTime?
+  passwordChangedAt DateTime?
   lastLoginAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt

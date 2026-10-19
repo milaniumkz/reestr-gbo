@@ -5,45 +5,48 @@ import 'app_environment.dart';
 import 'models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+class PasswordLoginResult {
+  const PasswordLoginResult({this.user,this.passwordChangeToken});
+  final AppUser? user;
+  final String? passwordChangeToken;
+}
+
 class AuthRepository {
   AuthRepository(this._api);
 
   final ApiClient _api;
 
-  Future<String?> sendOtp(String phone, {String role = 'vehicle_owner'}) async {
-    if (AppEnvironment.isDemo) return '1111';
-    final response = await _api.postJson('/auth/otp/send', {
-      'phone': phone,
-      'role': role,
+  Future<PasswordLoginResult> login(String phone, String password, String role, {String? bin}) async {
+    if (AppEnvironment.isDemo) return PasswordLoginResult(user: AppUser(id: 'demo', phone: phone, roles: [role]));
+    final response = await _api.postJson('/auth/login', {
+      'phone': phone, 'password': password, 'role': role,
+      if (bin != null && bin.isNotEmpty) 'bin': bin,
+      'deviceName': 'ЕРСИ ГБО приложение',
     });
-    return response['code']?.toString();
+    if (response['requiresPasswordChange'] == true) {
+      await clearLocalSession();
+      final token = response['passwordChangeToken']?.toString();
+      if (token == null || token.isEmpty) throw StateError('Повторите вход');
+      return PasswordLoginResult(passwordChangeToken: token);
+    }
+    final user = await _storeAuthResponse(response);
+    await _storeLoginContext(role, bin);
+    return PasswordLoginResult(user: user);
   }
 
-  Future<AppUser> verifyOtp(
-    String phone,
-    String code,
-    String role, {
-    String? bin,
-  }) async {
-    if (AppEnvironment.isDemo) {
-      return const AppUser(id: 'demo', phone: '', roles: ['vehicle_owner']);
-    }
-    final response = await _api.postJson('/auth/otp/verify', {
-      'phone': phone,
-      'code': code,
-      'role': role,
-      if (bin != null && bin.isNotEmpty) 'bin': bin,
-      'deviceName': 'ЕРСИ ГБО Flutter Web',
-    });
+  Future<AppUser> changeInitialPassword(String token, String password, String confirmation, String role, {String? bin}) async {
+    if (AppEnvironment.isDemo) return AppUser(id:'demo',phone:'',roles:[role]);
+    final response = await _api.postJson('/auth/password/change', {'passwordChangeToken':token,'newPassword':password,'confirmation':confirmation});
     final user = await _storeAuthResponse(response);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('lastRoleCode', role);
-    if (bin != null && bin.isNotEmpty) {
-      await prefs.setString('lastOrganizationBin', bin);
-    } else {
-      await prefs.remove('lastOrganizationBin');
-    }
+    await _storeLoginContext(role,bin);
     return user;
+  }
+
+  Future<void> _storeLoginContext(String role,String? bin) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('lastRoleCode',role);
+    if (bin != null && bin.isNotEmpty) { await prefs.setString('lastOrganizationBin',bin); }
+    else { await prefs.remove('lastOrganizationBin'); }
   }
 
   Future<AppUser?> restoreSession() async {
