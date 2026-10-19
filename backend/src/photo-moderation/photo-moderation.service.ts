@@ -9,7 +9,7 @@ export type PhotoCheck = {
   moderationCheckedAt?: Date;
   moderationReason?: string;
 };
-const MODEL = "local-screening-v2";
+const MODEL = "local-screening-v3";
 @Injectable()
 export class PhotoModerationService {
   private readonly limiter = new PhotoAnalysisLimiter();
@@ -21,7 +21,7 @@ export class PhotoModerationService {
       provider: "local",
       model: MODEL,
       authenticityGuaranteed: false,
-      analysisRevision: "v2-performance-1",
+      analysisRevision: "v3-document-sharpness",
       load: this.limiter.status(),
     };
   }
@@ -68,6 +68,8 @@ export class PhotoModerationService {
         throw new BadRequestException(
           "Слишком маленькое фото. Короткая сторона должна быть от 240, длинная от 480 пикселей",
         );
+      const document = !['vehicle_photo','cylinder_label','photo'].includes(_type);
+      if(document && (Math.min(width,height)<720 || Math.max(width,height)<1000))throw new BadRequestException('Документ снят с недостаточным разрешением: нужно минимум 720×1000 пикселей. Снимите оригинал ближе, без размытия');
       const { data, info } = await input
         .clone()
         .rotate()
@@ -110,6 +112,11 @@ export class PhotoModerationService {
         throw new BadRequestException(
           "Обнаружены совместные признаки экрана: тёмная рамка и повторяющиеся полосы. Сфотографируйте оригинал документа вне экрана другого устройства",
         );
+      if(document){
+        const native=await input.clone().rotate().flatten({background:'#ffffff'}).resize({width:1500,height:1500,fit:'inside',withoutEnlargement:true}).greyscale().raw().toBuffer({resolveWithObject:true});
+        const focus=analyzePixels(native.data,native.info.width,native.info.height);
+        if(focus.laplacianVariance<28 && focus.edgeFraction<0.025)throw new BadRequestException('Документ размыт: мелкий текст недостаточно различим. Протрите камеру, наведите резкость и переснимите оригинал');
+      }
       const reasons = reviewReasons(metrics);
       if (evidence.enclosedDisplay)
         reasons.push(

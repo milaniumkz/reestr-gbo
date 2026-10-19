@@ -20,7 +20,7 @@ afterEach(() => {
 });
 function documentSvg() {
   return Buffer.from(
-    `<svg width="900" height="600" xmlns="http://www.w3.org/2000/svg"><rect width="900" height="600" fill="#eeeece"/>${Array.from({ length: 14 }, (_, y) => Array.from({ length: 12 }, (_, x) => `<rect x="${35 + x * 65}" y="${35 + y * 37}" width="${25 + ((x * y) % 27)}" height="7" fill="#303030"/>`).join("")).join("")}</svg>`,
+    `<svg width="1200" height="800" xmlns="http://www.w3.org/2000/svg"><rect width="1200" height="800" fill="#eeeece"/>${Array.from({ length: 14 }, (_, y) => Array.from({ length: 12 }, (_, x) => `<rect x="${35 + x * 65}" y="${35 + y * 37}" width="${25 + ((x * y) % 27)}" height="7" fill="#303030"/>`).join("")).join("")}</svg>`,
   );
 }
 async function image() {
@@ -41,7 +41,7 @@ describe("local photo screening", () => {
       "screenshot.png",
       "tech_passport",
     );
-    expect(result.moderationModel).toBe("local-screening-v2");
+    expect(result.moderationModel).toBe("local-screening-v3");
     expect(result.moderationStatus).toBe("local_checked");
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -56,8 +56,8 @@ describe("local photo screening", () => {
   it.each(["horizontal", "vertical"])(
     "flags synthetic %s screen bands for human review, without rejecting upload",
     async (axis) => {
-      const width = 640,
-        height = 480,
+      const width = 1200,
+        height = 800,
         data = Buffer.alloc(width * height);
       for (let y = 0; y < height; y++)
         for (let x = 0; x < width; x++)
@@ -77,7 +77,7 @@ describe("local photo screening", () => {
       const result = await new PhotoModerationService().check(
         png,
         "document.jpg",
-        "tech_passport",
+        "vehicle_photo",
       );
       expect(result.moderationStatus).toBe("manual_review");
       expect(result.moderationReason).toContain("полосы");
@@ -92,7 +92,7 @@ describe("local photo screening", () => {
       .png()
       .toBuffer();
     expect(
-      await new PhotoModerationService().check(png, "doc.png", "tech_passport"),
+      await new PhotoModerationService().check(png, "doc.png", "vehicle_photo"),
     ).toMatchObject({
       moderationStatus: "manual_review",
       moderationReason: expect.stringContaining("рамка"),
@@ -112,7 +112,7 @@ describe("local photo screening", () => {
   });
   it("rejects uniform unusable frames and low resolution", async () => {
     const blank = await sharp({
-      create: { width: 640, height: 480, channels: 3, background: "white" },
+      create: { width: 1200, height: 800, channels: 3, background: "white" },
     })
       .png()
       .toBuffer();
@@ -166,6 +166,14 @@ describe("local photo screening", () => {
     expect(
       (await service.check(png, "file.pdf", "tech_passport")).moderationStatus,
     ).toBe("local_checked");
+  });
+  it('rejects low-resolution document originals even with strong borders',async()=>{
+    const low=await sharp(documentSvg()).resize(648,913,{fit:'fill'}).jpeg().toBuffer();
+    await expect(new PhotoModerationService().check(low,'record.jpg','cylinder_work_record')).rejects.toThrow('720×1000');
+  });
+  it('rejects high-resolution blurred text instead of treating table edges as legibility',async()=>{
+    const blurred=await sharp(documentSvg()).resize(1200,1600,{fit:'fill'}).blur(6).jpeg().toBuffer();
+    await expect(new PhotoModerationService().check(blurred,'record.jpg','gas_work_record')).rejects.toThrow(/размыт|деталей/);
   });
   it("respects explicit off mode without reporting a successful check", async () => {
     process.env.PHOTO_MODERATION_MODE = "off";

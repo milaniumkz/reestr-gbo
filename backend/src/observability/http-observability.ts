@@ -6,6 +6,7 @@ import {
   Injectable,
 } from "@nestjs/common";
 import { EventLedger } from "./event-ledger.service";
+import { requestLocation } from "./request-location";
 import { requestContext } from "./request-context";
 import { randomUUID } from "node:crypto";
 import { safeText, safeRoute } from "./safe-data";
@@ -20,7 +21,11 @@ export function traceMiddleware(ledger: EventLedger) {
       res.on("finish", () => {
         const status = res.statusCode,
           route = safeRoute(req.route?.path);
-        if (route.includes("/technical/auth") || route === "/api/v1/health")
+        if (
+          (route.includes("/technical/auth") &&
+            (req.method === "GET" || status < 400)) ||
+          route === "/api/v1/health"
+        )
           return;
         const input = {
           category:
@@ -30,7 +35,14 @@ export function traceMiddleware(ledger: EventLedger) {
                 ? "error"
                 : "audit",
           action: `${req.method} ${route}`,
-          result: status >= 400 ? "denied" : "success",
+          result:
+            status >= 500
+              ? "error"
+              : status >= 400
+                ? "denied"
+                : req.accountContext?.reasonCode === "password_change_required"
+                  ? "pending"
+                  : "success",
           explanation:
             status >= 500
               ? "Ошибка сервера"
@@ -46,13 +58,31 @@ export function traceMiddleware(ledger: EventLedger) {
           severity:
             status >= 500 ? "critical" : status >= 400 ? "warning" : "info",
           requestId: id,
-          actorId: req.user?.sub,
+          location: requestLocation(req.headers),
+          actorId: req.user?.sub ?? req.accountContext?.actorId,
           actorRole: req.user?.roles?.join(","),
-          techActorId: req.tech?.account.id,
-          sessionId: req.user?.sid,
+          techActorId: req.tech?.account.id ?? req.accountContext?.techActorId,
+          sessionId: req.user?.sid ?? req.accountContext?.sessionId,
           objectType: route.split("/")[3],
+          objectId:
+            typeof req.params?.id === "string" &&
+            /^[a-f0-9]{8}-[a-f0-9-]{27}$/i.test(req.params.id)
+              ? req.params.id
+              : undefined,
           ipAddress: req.ip,
-          device: req.headers["user-agent"],
+          device:
+            String(req.headers["user-agent"] ?? "").slice(0, 140) +
+            ([
+              "android",
+              "iOS",
+              "ios",
+              "web",
+              "windows",
+              "macOS",
+              "linux",
+            ].includes(req.headers["x-client-platform"])
+              ? " · " + req.headers["x-client-platform"]
+              : ""),
           appVersion:
             typeof req.headers["x-app-version"] === "string"
               ? req.headers["x-app-version"].slice(0, 40)
@@ -62,6 +92,11 @@ export function traceMiddleware(ledger: EventLedger) {
             route,
             statusCode: status,
             durationMs: Date.now() - started,
+            message: req.clientErrorMessage,
+            verified: !!(req.user || req.tech || req.accountContext?.verified),
+            reasonCode: req.accountContext?.reasonCode,
+            requestedRole: req.accountContext?.requestedRole,
+            organizationId: req.accountContext?.organizationId,
           },
           problemId: req.problemId,
         };
@@ -146,15 +181,21 @@ export class SafeExceptionFilter implements ExceptionFilter {
             429: "Слишком много запросов. Повторите позже",
           } as any
         )[status] ?? "Запрос не выполнен";
+    message =
+      (
+        {
+          "Insufficient role": "Недостаточно прав для этого раздела",
+          "Forbidden resource": "Недостаточно прав для этой операции",
+        } as Record<string, string>
+      )[message] ?? message;
     message = safeText(message, 500);
     if (status >= 500)
       message += ". Номер обращения: " + (req.requestId ?? "не определён");
-    res
-      .status(status)
-      .json({
-        statusCode: status,
-        message,
-        requestId: req.requestId ?? randomUUID(),
-      });
+    req.clientErrorMessage = message;
+    res.status(status).json({
+      statusCode: status,
+      message,
+      requestId: req.requestId ?? randomUUID(),
+    });
   }
 }

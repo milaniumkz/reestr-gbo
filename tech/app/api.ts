@@ -1,3 +1,4 @@
+import {locationHeaders} from "./location";
 export class PanelError extends Error {
   constructor(
     public status: number,
@@ -16,6 +17,7 @@ export async function api(path: string, body?: unknown, method?: string) {
       headers: {
         "Content-Type": "application/json",
         "X-Technical-Request": "1",
+        ...locationHeaders(),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       cache: "no-store",

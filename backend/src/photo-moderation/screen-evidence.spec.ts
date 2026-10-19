@@ -77,6 +77,7 @@ describe("combined screen evidence", () => {
     const jpeg = await sharp(f.data, {
       raw: { width: f.width, height: f.height, channels: 3 },
     })
+      .resize(1200,1200)
       .jpeg({ quality: 80 })
       .toBuffer();
     await expect(
@@ -104,6 +105,7 @@ describe("combined screen evidence", () => {
     const png = await sharp(f.data, {
       raw: { width: f.width, height: f.height, channels: 3 },
     })
+      .resize(1200,1200)
       .png()
       .toBuffer();
     await expect(

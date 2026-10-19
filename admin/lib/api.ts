@@ -1,3 +1,4 @@
+import {diagnosticHeaders} from './location-telemetry';
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? '/api/v1';
 export const API_BASE_URL = API_URL;
 
@@ -58,7 +59,7 @@ async function apiError(response: Response, path: string) {
 
 async function api<T>(path: string, token?: string): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers: {...await diagnosticHeaders(),...(token ? { Authorization: `Bearer ${token}` } : {})},
     cache: 'no-store',
   });
   if (!response.ok) {
@@ -71,6 +72,7 @@ async function post<T>(path: string, body: unknown, token?: string): Promise<T> 
   const response = await fetch(`${API_URL}${path}`, {
     method: 'POST',
     headers: {
+      ...await diagnosticHeaders(),
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
@@ -86,6 +88,7 @@ async function patch<T>(path: string, body: unknown, token: string): Promise<T> 
   const response = await fetch(`${API_URL}${path}`, {
     method: 'PATCH',
     headers: {
+      ...await diagnosticHeaders(),
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
@@ -100,7 +103,7 @@ async function patch<T>(path: string, body: unknown, token: string): Promise<T> 
 async function del<T>(path: string, token: string): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
     method: 'DELETE',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: {...await diagnosticHeaders(), Authorization: `Bearer ${token}` },
   });
   if (!response.ok) {
     throw await apiError(response, path);
@@ -111,7 +114,7 @@ async function del<T>(path: string, token: string): Promise<T> {
 async function upload<T>(path: string, form: FormData, token: string): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: {...await diagnosticHeaders(), Authorization: `Bearer ${token}` },
     body: form,
   });
   if (!response.ok) {
@@ -754,7 +757,7 @@ export async function uploadInspectionPhoto(token: string, id: string, type: str
   form.append('file', file);
   const response = await fetch(`${API_URL}/inspections/${id}/photos`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: {...await diagnosticHeaders(), Authorization: `Bearer ${token}` },
     body: form,
   });
   if (!response.ok) {

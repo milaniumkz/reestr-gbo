@@ -1,3 +1,6 @@
+import {TechnicalPush} from './technical-push.service';
+import {TechnicalSupport} from './technical-support.service';
+import {TechnicalActivity} from './technical-activity.service';
 import { TechnicalWatchdog } from "./technical-watchdog.service";
 import { Module } from "@nestjs/common";
 import { TechnicalAuthService } from "./technical-auth.service";
@@ -18,6 +21,9 @@ import { CityRiskService } from "./city-risk.service";
     TechnicalAuthService,
     TechnicalGuard,
     TechnicalData,
+    TechnicalActivity,
+    TechnicalSupport,
+    TechnicalPush,
     TechnicalMonitor,
     CityRiskService,
     TechnicalWatchdog,

@@ -577,6 +577,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       key: objectKey,
       body: file.buffer,
       contentType: file.mimetype,
+      createdById: user?.sub,
     });
     const photoData = {
         inspectionId: id,

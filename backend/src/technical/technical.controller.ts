@@ -1,3 +1,6 @@
+import { TechnicalPush } from "./technical-push.service";
+import { PhotoModerationService } from "../photo-moderation/photo-moderation.service";
+import { TechnicalSupport } from "./technical-support.service";
 import {
   BadRequestException,
   Body,
@@ -129,7 +132,93 @@ export class TechnicalController {
     private readonly prisma: PrismaService,
     private readonly ledger: EventLedger,
     private readonly city: CityRiskService,
+    private readonly support: TechnicalSupport,
+    private readonly push: TechnicalPush,
+    private readonly moderation: PhotoModerationService,
   ) {}
+  @Get("push") pushStatus(@Req() r: any) {
+    return this.push.status(r.tech);
+  }
+  @Post("push/subscribe") pushSubscribe(@Req() r: any, @Body() b: any) {
+    return this.push.subscribe(r.tech, b);
+  }
+  @Post("push/unsubscribe") pushUnsubscribe(@Req() r: any, @Body() b: any) {
+    return this.push.unsubscribe(r.tech, b);
+  }
+  @Post("push/test") pushTest(@Req() r: any, @Body() b: any) {
+    return this.push.test(r.tech, b);
+  }
+  @Post("files/:id/recheck") @TechnicalPermission("files.review") async recheck(
+    @Req() r: any,
+    @Param("id") id: string,
+  ) {
+    const photo = await this.prisma.inspectionPhoto.findUniqueOrThrow({
+      where: { id },
+    });
+    const content = await this.storage.readObject(photo.objectKey);
+    let assessment: any;
+    try {
+      assessment = await this.moderation.check(content, "document", photo.type);
+    } catch (error) {
+      if (!(error instanceof BadRequestException)) throw error;
+      assessment = {
+        moderationStatus: "require_reshoot",
+        moderationReason: error.message,
+        moderationModel: "local-screening-v3",
+        moderationCheckedAt: new Date(),
+      };
+    }
+    await this.prisma.$transaction(async (tx) => {
+      await tx.technicalSetting.upsert({
+        where: { key: "file-recheck:" + id },
+        create: {
+          key: "file-recheck:" + id,
+          value: JSON.parse(JSON.stringify(assessment)),
+          updatedBy: r.tech.account.id,
+          reason: "Повторная проверка оригинала",
+        },
+        update: {
+          value: JSON.parse(JSON.stringify(assessment)),
+          updatedBy: r.tech.account.id,
+          reason: "Повторная проверка оригинала",
+        },
+      });
+      if (assessment.moderationStatus !== "local_checked")
+        await tx.inspectionDeviation.upsert({
+          where: { dedupKey: "file-quality:" + id },
+          create: {
+            dedupKey: "file-quality:" + id,
+            inspectionId: photo.inspectionId,
+            kind: "photo_quality",
+            explanation: assessment.moderationReason,
+            facts: { photoId: id, type: photo.type, assessment },
+          },
+          update: {
+            lastSeenAt: new Date(),
+            explanation: assessment.moderationReason,
+            facts: { photoId: id, type: photo.type, assessment },
+          },
+        });
+      await this.ledger.write(
+        {
+          category: "audit",
+          action: "technical.file.recheck",
+          result: "success",
+          techActorId: r.tech.account.id,
+          objectType: "inspection_file",
+          objectId: id,
+          explanation:
+            "Повторно проверен оригинал; первоначальный результат сохранён",
+          details: {
+            moderationStatus: assessment.moderationStatus,
+            reason: assessment.moderationReason,
+          },
+        },
+        tx,
+      );
+    });
+    return assessment;
+  }
   @Get("overview") overview(@Req() r: any, @Query() q: any) {
     return this.data.overview(r.tech, q);
   }
@@ -189,8 +278,12 @@ export class TechnicalController {
   @Get("problems") problems(@Req() r: any, @Query() q: any) {
     return this.data.problems(r.tech, q);
   }
-  @Get("problems/:id") problem(@Req() r: any, @Param("id") id: string) {
-    return this.data.problem(r.tech, id);
+  @Get("problems/:id") problem(
+    @Req() r: any,
+    @Param("id") id: string,
+    @Query() q: any,
+  ) {
+    return this.data.problem(r.tech, id, q);
   }
   @Patch("problems/:id") updateProblem(
     @Req() r: any,
@@ -326,6 +419,104 @@ export class TechnicalController {
     });
     for (const row of rows) await this.city.inspect(row);
     return { ok: true };
+  }
+  @Post("people/:id/password") resetPassword(
+    @Req() r: any,
+    @Param("id") id: string,
+    @Body() body: any,
+  ) {
+    return this.support.change(r.tech, id, body, "password");
+  }
+  @Patch("people/:id/block") blockUser(
+    @Req() r: any,
+    @Param("id") id: string,
+    @Body() body: any,
+  ) {
+    return this.support.change(r.tech, id, body, "block");
+  }
+  @Get("deviations") @TechnicalPermission("people.read") async deviations(
+    @Query() q: any,
+  ) {
+    const page = Math.max(1, Math.min(100000, parseInt(q.page) || 1)),
+      limit = 25;
+    const where = { ...(q.status ? { status: String(q.status) } : {}) };
+    const [rows, total] = await Promise.all([
+      this.prisma.inspectionDeviation.findMany({
+        where,
+        orderBy: { lastSeenAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.inspectionDeviation.count({ where }),
+    ]);
+    const inspections = await this.prisma.inspection.findMany({
+      where: { id: { in: rows.map((x) => x.inspectionId) } },
+      select: {
+        id: true,
+        certificateNumber: true,
+        status: true,
+        address: true,
+        createdAt: true,
+        createdBy: { select: { id: true, fullName: true } },
+        organization: { select: { name: true } },
+      },
+    });
+    const names = await this.prisma.techAccount.findMany({
+      where: {
+        id: { in: rows.map((x) => x.reviewedBy).filter(Boolean) as string[] },
+      },
+      select: { id: true, fullName: true },
+    });
+    return {
+      items: rows.map((row) => ({
+        ...row,
+        inspection: inspections.find((i) => i.id === row.inspectionId) ?? null,
+        reviewedName: names.find((n) => n.id === row.reviewedBy)?.fullName,
+      })),
+      total,
+      page,
+      limit,
+    };
+  }
+  @Patch("deviations/:id")
+  @TechnicalPermission("issues.manage")
+  async reviewDeviation(
+    @Req() r: any,
+    @Param("id") id: string,
+    @Body() body: any,
+  ) {
+    if (
+      !["in_progress", "resolved", "dismissed", "new"].includes(body.status) ||
+      typeof body.reason !== "string" ||
+      body.reason.trim().length < 5 ||
+      body.reason.length > 1000
+    )
+      throw new BadRequestException("Укажите статус и результат проверки");
+    return this.prisma.$transaction(async (tx) => {
+      const row = await tx.inspectionDeviation.update({
+        where: { id },
+        data: {
+          status: body.status,
+          reviewedBy: r.tech.account.id,
+          reviewedAt: new Date(),
+          reviewNote: body.reason,
+        },
+      });
+      await this.ledger.write(
+        {
+          category: "audit",
+          action: "technical.deviation.review",
+          result: "success",
+          techActorId: r.tech.account.id,
+          objectType: "inspection",
+          objectId: row.inspectionId,
+          explanation: "Изменён статус проверки отклонения инспекции",
+          details: { reason: body.reason, status: body.status },
+        },
+        tx,
+      );
+      return { ok: true };
+    });
   }
   @Get("organizations") @TechnicalPermission("people.read") async organizations(
     @Query() q: any,

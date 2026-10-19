@@ -465,6 +465,49 @@ createdAt DateTime @default(now())
 @@index([accountId,revokedAt])
 }
 
+model TechnicalPushSubscription {
+id String @id @default(uuid())
+accountId String
+endpoint String @unique
+p256dh String
+auth String
+createdAt DateTime @default(now())
+lastSuccessAt DateTime?
+lastAttemptAt DateTime?
+lastError String?
+active Boolean @default(true)
+@@index([accountId,active])
+}
+
+model TechnicalPushDelivery {
+subscriptionId String
+alertId String
+state String @default("pending")
+attempts Int @default(0)
+nextAttemptAt DateTime @default(now())
+lastError String?
+sentAt DateTime?
+@@id([subscriptionId,alertId])
+}
+
+model InspectionDeviation {
+id String @id @default(uuid())
+dedupKey String @unique
+inspectionId String
+kind String
+severity String @default("warning")
+explanation String
+facts Json
+status String @default("new")
+firstSeenAt DateTime @default(now())
+lastSeenAt DateTime @default(now())
+reviewedBy String?
+reviewedAt DateTime?
+reviewNote String?
+@@index([inspectionId])
+@@index([status,lastSeenAt])
+}
+
 model TechnicalEvent {
 id String @id @default(uuid())
 createdAt DateTime @default(now())
@@ -485,6 +528,7 @@ details Json?
 ipAddress String?
 device String?
 appVersion String?
+location Json?
 problemId String?
 expiresAt DateTime
 holdUntil DateTime?

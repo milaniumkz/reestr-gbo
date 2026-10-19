@@ -55,7 +55,7 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: flutter build web --release --pwa-strategy=none --dart-define=API_BASE_URL=https://89-207-255-42.sslip.io/api/v1 --dart-define=APP_MODE=production
+      - run: flutter build web --release --pwa-strategy=none --dart-define=API_BASE_URL=https://89-207-255-42.sslip.io/api/v1 --dart-define=APP_MODE=production --dart-define=APP_VERSION="1.0.0+$(git rev-parse --short HEAD)"
       - uses: actions/setup-java@v4
         if: github.event.inputs.operation != 'deploy-web'
         with:
@@ -84,7 +84,7 @@ jobs:
       - name: Build Android APK for the production API
         if: github.event.inputs.operation != 'deploy-web'
         run: |
-          flutter build apk --release --build-number="$(date +%s)" --dart-define=API_BASE_URL=https://89-207-255-42.sslip.io/api/v1 --dart-define=APP_MODE=production
+          flutter build apk --release --build-number="$(date +%s)" --dart-define=API_BASE_URL=https://89-207-255-42.sslip.io/api/v1 --dart-define=APP_MODE=production --dart-define=APP_VERSION="1.0.0+$(git rev-parse --short HEAD)"
           mkdir -p build/web/downloads
           cp build/app/outputs/flutter-apk/app-release.apk build/web/downloads/ersi-gbo.apk
           cd build/web/downloads

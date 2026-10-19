@@ -1,3 +1,4 @@
+import {accountContext} from '../observability/account-context';
 import {
   BadRequestException,
   ForbiddenException,
@@ -83,6 +84,7 @@ export class TechnicalAuthService {
     const account = await this.prisma.techAccount.findUnique({
       where: { login: normalized },
     });
+    accountContext({techActorId:account?.id,verified:false});
     const valid =
       account &&
       typeof password === "string" &&
@@ -119,6 +121,7 @@ export class TechnicalAuthService {
         "Неверные данные входа или вход временно ограничен",
       );
     }
+    accountContext({techActorId:account.id,verified:true});
     await this.prisma.techAccount.update({
       where: { id: account.id },
       data: { failedAttempts: 0, lockedUntil: null },

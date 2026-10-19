@@ -939,3 +939,5 @@ pre {
     font-size: 9px;
   }
 }
+
+.problem-context{margin:22px 0;border-top:1px solid var(--border);padding-top:16px}.problem-person{padding:14px;background:var(--bg);border-radius:10px;margin:10px 0}.activity-event{border:1px solid var(--border);border-radius:12px;padding:16px;margin:12px 0}.activity-event header{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:14px}.activity-event-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:20px}.activity-event p{margin:9px 0}.actor-summary{font-size:13px;line-height:1.6;overflow-wrap:anywhere}.actor-summary strong{font-size:14px}.actor-summary small{display:block;margin-top:7px}.identity-warning{color:#946000;margin-top:5px}@media(max-width:760px){.activity-event-grid{grid-template-columns:1fr;gap:14px}.activity-event header{align-items:flex-start;flex-direction:column}}

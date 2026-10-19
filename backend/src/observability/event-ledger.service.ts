@@ -5,6 +5,7 @@ import { traceFields } from "./request-context";
 import { randomUUID } from "node:crypto";
 
 export type LedgerInput = {
+  location?: any;
   id?: string;
   source?: string;
   category: string;

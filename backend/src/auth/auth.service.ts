@@ -1,3 +1,4 @@
+import {accountContext} from '../observability/account-context';
 import { BadRequestException, ForbiddenException, GoneException, Injectable, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -22,9 +23,11 @@ export class AuthService {
     const normalized = this.normalizePhone(phone);
     const role = this.requestedRole(input.role);
     const user = await this.prisma.user.findUnique({where:{phone:normalized},include:{roles:true}});
-    if (user?.passwordLockedUntil && user.passwordLockedUntil > new Date()) throw new UnauthorizedException('Вход временно ограничен. Повторите через 15 минут');
+    accountContext({actorId:user?.id,verified:false,requestedRole:role});
+    if (user?.passwordLockedUntil && user.passwordLockedUntil > new Date()){accountContext({verified:false,reasonCode:'login_locked'});throw new UnauthorizedException('Вход временно ограничен. Повторите через 15 минут');}
     const valid = typeof password === 'string' && Buffer.byteLength(password,'utf8') <= 72 && await bcrypt.compare(password,user?.passwordHash ?? INITIAL_PASSWORD_HASH);
     if (!user || !valid) {
+      accountContext({verified:false,reasonCode:'credentials_invalid'});
       if (user) {
         const failed = await this.prisma.user.update({where:{id:user.id},data:{failedPasswordAttempts:{increment:1}}});
         if (failed.failedPasswordAttempts >= 5) await this.prisma.user.update({where:{id:user.id},data:{passwordLockedUntil:new Date(Date.now()+15*60_000)}});
@@ -32,9 +35,11 @@ export class AuthService {
       await this.audit.log('auth.password_failed','auth',undefined,user?.id,{verified:false},ipAddress);
       throw new UnauthorizedException('Неверный телефон или пароль');
     }
+    accountContext({actorId:user.id,verified:true});
     await this.assertAccess(user,role,input.bin);
     await this.prisma.user.update({where:{id:user.id},data:{failedPasswordAttempts:0,passwordLockedUntil:null}});
     if (user.mustChangePassword) {
+      accountContext({verified:true,reasonCode:'password_change_required'});
       const passwordChangeToken = await this.jwt.signAsync({sub:user.id,scope:'password_change',pv:user.passwordVersion,role,bin:input.bin?.trim(),deviceName:input.deviceName},{secret:this.jwtSecret('JWT_ACCESS_SECRET'),expiresIn:'10m'});
       return {requiresPasswordChange:true as const,passwordChangeToken};
     }
@@ -68,14 +73,15 @@ export class AuthService {
   }
 
   private async assertAccess(user:{id:string;isBlocked:boolean;roles:Array<{role:string}>},role:string,bin?:string) {
-    if(user.isBlocked) throw new ForbiddenException('Пользователь заблокирован');
+    if(user.isBlocked){accountContext({verified:true,reasonCode:'account_blocked'});throw new ForbiddenException('Пользователь заблокирован');}
     const superAdmin=user.roles.some(r=>r.role==='super_admin');
     if(role==='inspection_org'||role==='operator') {
       if(!/^\d{12}$/.test(bin?.trim()??'')) throw new BadRequestException('Введите БИН организации из 12 цифр');
       const organization=await this.prisma.organization.findUnique({where:{bin:bin!.trim()}});
+      if(organization)accountContext({verified:true,organizationId:organization.id});
       if(!organization||organization.type!==role||organization.status!=='active') throw new ForbiddenException('Организация не найдена или заблокирована');
       const membership=await this.prisma.organizationMember.findFirst({where:{organizationId:organization.id,userId:user.id,...(role==='inspection_org'?{role:{in:['inspection_org','inspector','admin','quality_control']}}:{role:{in:['operator','admin']}})}});
-      if(!membership&&!superAdmin) throw new ForbiddenException('Сотрудник не состоит в выбранной организации');
+      if(!membership&&!superAdmin){accountContext({verified:true,reasonCode:'organization_membership_missing'});throw new ForbiddenException('Сотрудник не состоит в выбранной организации');}
       if(role==='inspection_org'&&!user.roles.some(r=>r.role==='inspection_org')) await this.prisma.userRole.upsert({where:{userId_role:{userId:user.id,role:'inspection_org'}},update:{},create:{userId:user.id,role:'inspection_org'}});
     } else if(['nca','government'].includes(role)&&!superAdmin&&!user.roles.some(r=>r.role===role)) {
       throw new ForbiddenException('Нет доступа к выбранному органу');
@@ -88,6 +94,7 @@ export class AuthService {
     await this.assertAccess(user,this.requestedRole(input.role),input.bin);
     const roles=user.roles.map(r=>r.role);
     const session=await this.prisma.session.create({data:{userId,refreshHash:'pending',deviceName:input.deviceName,ipAddress,expiresAt:this.refreshExpiresAtForRoles(roles)}});
+    accountContext({actorId:user.id,verified:true,sessionId:session.id});
     const result=await this.issueTokens({sub:user.id,phone:user.phone,roles,sid:session.id,pv:user.passwordVersion,scope:'session'});
     await this.prisma.user.update({where:{id:userId},data:{lastLoginAt:new Date()}});
     await this.audit.log('auth.login','session',session.id,user.id,{requestedRole:input.role,deviceName:input.deviceName},ipAddress);

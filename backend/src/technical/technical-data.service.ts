@@ -1,3 +1,5 @@
+import { TechnicalActivity } from "./technical-activity.service";
+import { problemName } from "./activity-presentation";
 import {
   BadRequestException,
   ForbiddenException,
@@ -44,7 +46,28 @@ export class TechnicalData {
     private readonly ledger: EventLedger,
     private readonly monitor: TechnicalMonitor,
     private readonly auth: TechnicalAuthService,
+    private readonly activity: TechnicalActivity,
   ) {}
+  private async problemSummaries(items: any[], principal: TechnicalPrincipal) {
+    if (!items.length) return items;
+    const latest = await this.prisma.technicalEvent.findMany({
+      where: { problemId: { in: items.map((item) => item.id) } },
+      orderBy: { createdAt: "desc" },
+      distinct: ["problemId"],
+    });
+    const events = await this.activity.enrich(latest, principal);
+    const accounts = await this.activity.profiles(
+      [],
+      items.map((x) => x.assignedTo).filter(Boolean),
+      principal,
+    );
+    return items.map((item) => ({
+      ...item,
+      title: problemName(item),
+      assignedName: accounts.get("tech:" + item.assignedTo)?.name,
+      latestEvent: events.find((event) => event.problemId === item.id) ?? null,
+    }));
+  }
   async overview(principal: TechnicalPrincipal, q: any) {
     this.auth.require(principal, "overview.read");
     const hours = Math.max(1, Math.min(168, Number(q.hours) || 24)),
@@ -136,7 +159,7 @@ export class TechnicalData {
         requests,
         lastEventAt: lastEvent?.createdAt ?? null,
       },
-      attention: issues,
+      attention: await this.problemSummaries(issues, principal),
       snapshot: infrastructure
         ? snapshot
         : {
@@ -173,6 +196,9 @@ export class TechnicalData {
       ...(q.result ? { result: String(q.result).slice(0, 30) } : {}),
       ...(q.requestId ? { requestId: String(q.requestId).slice(0, 64) } : {}),
       ...(q.actorId ? { actorId: String(q.actorId).slice(0, 64) } : {}),
+      ...(q.techActorId
+        ? { techActorId: String(q.techActorId).slice(0, 64) }
+        : {}),
       ...(q.problemId ? { problemId: String(q.problemId).slice(0, 64) } : {}),
       ...(dateRange(q) ? { createdAt: dateRange(q) } : {}),
       ...(q.q
@@ -200,6 +226,44 @@ export class TechnicalData {
           }
         : {}),
     };
+    if (q.q && principal.permissions.includes("people.read")) {
+      const term = String(q.q).slice(0, 100);
+      const [users, accounts] = await Promise.all([
+        this.prisma.user.findMany({
+          where: {
+            OR: [
+              { fullName: { contains: term, mode: "insensitive" } },
+              {
+                memberships: {
+                  some: {
+                    organization: {
+                      name: { contains: term, mode: "insensitive" },
+                    },
+                  },
+                },
+              },
+            ],
+          },
+          select: { id: true },
+          take: 100,
+        }),
+        this.prisma.techAccount.findMany({
+          where: {
+            OR: [
+              { fullName: { contains: term, mode: "insensitive" } },
+              { login: { contains: term, mode: "insensitive" } },
+            ],
+          },
+          select: { id: true },
+          take: 20,
+        }),
+      ]);
+      where.OR = [
+        ...(where.OR ?? []),
+        { actorId: { in: users.map((x) => x.id) } },
+        { techActorId: { in: accounts.map((x) => x.id) } },
+      ];
+    }
     const [items, total] = await Promise.all([
       this.prisma.technicalEvent.findMany({
         where,
@@ -209,30 +273,6 @@ export class TechnicalData {
       }),
       this.prisma.technicalEvent.count({ where }),
     ]);
-    const showIp = principal.permissions.includes("security.ip");
-    const names = new Map<string, string>();
-    if (principal.permissions.includes("people.read")) {
-      const ids = [
-        ...new Set(
-          items
-            .flatMap((item) => [item.actorId, item.techActorId])
-            .filter((id): id is string => !!id),
-        ),
-      ];
-      const [users, accounts] = await Promise.all([
-        this.prisma.user.findMany({
-          where: { id: { in: ids } },
-          select: { id: true, fullName: true },
-        }),
-        this.prisma.techAccount.findMany({
-          where: { id: { in: ids } },
-          select: { id: true, fullName: true },
-        }),
-      ]);
-      for (const person of [...users, ...accounts])
-        names.set(person.id, person.fullName);
-    }
-
     await this.ledger.write({
       category: "audit",
       action: "technical.events.read",
@@ -242,12 +282,7 @@ export class TechnicalData {
       details: { category: category ?? "all", count: items.length },
     });
     return {
-      items: items.map((x) => ({
-        ...x,
-        actorName: names.get(x.techActorId ?? x.actorId ?? ""),
-        ipAddress: showIp ? x.ipAddress : undefined,
-        device: showIp ? x.device : undefined,
-      })),
+      items: await this.activity.enrich(items, principal),
       total,
       page: page.page,
       limit: page.limit,
@@ -270,7 +305,15 @@ export class TechnicalData {
       scope:
         "Текущая страница, максимум 100 записей; IP и сведения устройства исключены",
       items: result.items.map(
-        ({ ipAddress, device, actorName, ...item }) => item,
+        ({
+          objectContext,
+          location,
+          ipAddress,
+          device,
+          actorName,
+          actor,
+          ...item
+        }) => item,
       ),
     };
   }
@@ -298,22 +341,29 @@ export class TechnicalData {
       }),
       this.prisma.technicalProblem.count({ where }),
     ]);
-    return { items, total, page: page.page, limit: page.limit };
+    return {
+      items: await this.problemSummaries(items, principal),
+      total,
+      page: page.page,
+      limit: page.limit,
+    };
   }
-  async problem(principal: TechnicalPrincipal, id: string) {
+  async problem(principal: TechnicalPrincipal, id: string, q: any = {}) {
     this.auth.require(principal, "issues.read");
     const problem = await this.prisma.technicalProblem.findUniqueOrThrow({
       where: { id },
       include: { comments: { orderBy: { createdAt: "desc" }, take: 50 } },
     });
-    const [people, versions] = await Promise.all([
-      this.prisma.technicalEvent.groupBy({
-        by: ["actorId"],
-        where: { problemId: id, actorId: { not: null } },
-        _count: true,
-        take: 1000,
-        orderBy: { actorId: "asc" },
+    const page = pageInput({ page: q.eventsPage, limit: "25" });
+    const [participants, rows, eventTotal, versions] = await Promise.all([
+      this.activity.participants(id, principal, problem.lastSeenAt),
+      this.prisma.technicalEvent.findMany({
+        where: { problemId: id },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        skip: page.skip,
+        take: page.limit,
       }),
+      this.prisma.technicalEvent.count({ where: { problemId: id } }),
       this.prisma.technicalEvent.groupBy({
         by: ["appVersion"],
         where: { problemId: id, appVersion: { not: null } },
@@ -322,10 +372,33 @@ export class TechnicalData {
         orderBy: { appVersion: "asc" },
       }),
     ]);
+    const events = await this.activity.enrich(rows, principal);
+    const authors = await this.activity.profiles(
+      [],
+      [problem.assignedTo, ...problem.comments.map((c) => c.accountId)].filter(
+        (id): id is string => !!id,
+      ),
+      principal,
+    );
     return {
       ...problem,
-      affectedUsers: people.length,
-      affectedUsersTruncated: people.length === 1000,
+      title: problemName(problem),
+      assignedName: authors.get("tech:" + problem.assignedTo)?.name,
+      comments: problem.comments.map((comment) => ({
+        ...comment,
+        authorName:
+          authors.get("tech:" + comment.accountId)?.name ??
+          "Автор не установлен",
+      })),
+      affectedUsers: participants.knownAccounts,
+      affectedUsersTruncated: participants.participantsTruncated,
+      ...participants,
+      events,
+      eventTotal,
+      eventsPage: page.page,
+      eventLimit: page.limit,
+      historyNote:
+        "Это сохранённые серверные события. Если учётная запись или точная причина не были записаны, они не восстанавливаются предположением.",
       versions,
       confirmedCause: false,
       recommendation:
@@ -433,6 +506,13 @@ export class TechnicalData {
         select: {
           id: true,
           inspectionId: true,
+          objectKey: true,
+          inspection: {
+            select: {
+              certificateNumber: true,
+              organization: { select: { name: true } },
+            },
+          },
           type: true,
           moderationStatus: true,
           moderationModel: true,
@@ -447,9 +527,59 @@ export class TechnicalData {
       }),
       this.prisma.inspectionPhoto.count({ where }),
     ]);
+    const [objects, uploadAudit] = await Promise.all([
+      this.prisma.storageObject.findMany({
+        where: { objectKey: { in: items.map((file) => file.objectKey) } },
+        select: {
+          objectKey: true,
+          createdById: true,
+          contentType: true,
+          sizeBytes: true,
+        },
+      }),
+      items.length
+        ? this.prisma.auditLog.findMany({
+            where: {
+              action: "inspection.photo.upload",
+              OR: items.map((file) => ({
+                metadata: { path: ["photoId"], equals: file.id },
+              })),
+            },
+            select: { actorId: true, metadata: true },
+            take: items.length,
+          })
+        : [],
+    ]);
+    const uploaderIds = items
+      .map(
+        (file) =>
+          objects.find((object) => object.objectKey === file.objectKey)
+            ?.createdById ??
+          uploadAudit.find(
+            (audit) => (audit.metadata as any)?.photoId === file.id,
+          )?.actorId,
+      )
+      .filter((id): id is string => !!id);
+    const profiles = await this.activity.profiles(uploaderIds, [], principal);
     const enriched = await Promise.all(
       items.map(async (file) => ({
         ...file,
+        objectKey: undefined,
+        uploader:
+          profiles.get(
+            "app:" +
+              (objects.find((object) => object.objectKey === file.objectKey)
+                ?.createdById ??
+                uploadAudit.find(
+                  (audit) => (audit.metadata as any)?.photoId === file.id,
+                )?.actorId),
+          ) ?? null,
+        contentType:
+          objects.find((object) => object.objectKey === file.objectKey)
+            ?.contentType ?? null,
+        sizeBytes:
+          objects.find((object) => object.objectKey === file.objectKey)
+            ?.sizeBytes ?? null,
         exactRepeats: file.checksum
           ? await this.prisma.inspectionPhoto.count({
               where: { checksum: file.checksum },
@@ -458,6 +588,12 @@ export class TechnicalData {
         antivirus: "Не подключено",
         fieldMatch:
           "Семантическое распознавание не подключено; проверяется сотрудником",
+        recheck:
+          (
+            await this.prisma.technicalSetting.findUnique({
+              where: { key: "file-recheck:" + file.id },
+            })
+          )?.value ?? null,
         manualReview:
           (
             await this.prisma.technicalSetting.findUnique({
@@ -466,7 +602,24 @@ export class TechnicalData {
           )?.value ?? null,
       })),
     );
-    return { items: enriched, total, page: page.page, limit: page.limit };
+    const reviewers = await this.activity.profiles(
+      [],
+      enriched
+        .map((file) => (file.manualReview as any)?.reviewedBy)
+        .filter(Boolean),
+      principal,
+    );
+    return {
+      items: enriched.map((file) => ({
+        ...file,
+        reviewerName:
+          reviewers.get("tech:" + (file.manualReview as any)?.reviewedBy)
+            ?.name ?? null,
+      })),
+      total,
+      page: page.page,
+      limit: page.limit,
+    };
   }
   async reviewFile(principal: TechnicalPrincipal, id: string, input: any) {
     this.auth.require(principal, "files.review");
@@ -527,9 +680,10 @@ export class TechnicalData {
       "security",
       "monitoring",
       "inspection_geography",
+      "inspection_deviation",
     ].filter((category) => {
       if (
-        category === "inspection_geography" &&
+        ["inspection_geography", "inspection_deviation"].includes(category) &&
         !principal.permissions.includes("people.read")
       )
         return false;
@@ -577,7 +731,24 @@ export class TechnicalData {
       }),
       this.prisma.technicalAlert.count({ where }),
     ]);
-    return { items, total, page: page.page, limit: page.limit };
+    const profiles = await this.activity.profiles(
+      [],
+      items
+        .flatMap((item) => [item.acknowledgedBy, item.assignedTo])
+        .filter((id): id is string => !!id),
+      principal,
+    );
+    return {
+      items: items.map((item) => ({
+        ...item,
+        acknowledgedName:
+          profiles.get("tech:" + item.acknowledgedBy)?.name ?? null,
+        assignedName: profiles.get("tech:" + item.assignedTo)?.name ?? null,
+      })),
+      total,
+      page: page.page,
+      limit: page.limit,
+    };
   }
   async updateAlert(principal: TechnicalPrincipal, id: string, input: any) {
     this.auth.require(principal, "alerts.manage");
@@ -634,7 +805,14 @@ export class TechnicalData {
         orderBy: { category: "asc" },
       }),
       settings: await this.prisma.technicalSetting.findMany({
-        where: { NOT: { key: { startsWith: "file-review:" } } },
+        where: {
+          NOT: {
+            OR: [
+              { key: { startsWith: "file-" } },
+              { key: "browser-push-vapid" },
+            ],
+          },
+        },
         take: 100,
       }),
       externalChannels: {
@@ -737,6 +915,7 @@ export class TechnicalData {
           isBlocked: true,
           mustChangePassword: true,
           lastLoginAt: true,
+          residenceCity: true,
           roles: { select: { role: true } },
           memberships: {
             select: {

@@ -58,6 +58,8 @@ const permitted = new Set([
   "scope",
   "expiresAt",
   "requiresIdentityVerification",
+  "reasonCode",
+  "photoId",
   "userId",
   "organizationId",
   "inspectionId",
@@ -86,6 +88,7 @@ export function safeDetails(value: unknown, depth = 0): any {
           "organizationId",
           "inspectionId",
           "fileId",
+          "photoId",
           "requestId",
         ].includes(k) &&
         typeof v === "string" &&

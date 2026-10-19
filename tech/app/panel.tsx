@@ -1,4 +1,6 @@
 "use client";
+import PushControls from "./push-controls";
+import { consentLocation } from "./location";
 import {
   useCallback,
   useEffect,
@@ -14,6 +16,7 @@ type User = {
   permissions: string[];
 };
 type Section =
+  | "deviations"
   | "overview"
   | "problems"
   | "services"
@@ -31,6 +34,12 @@ const navigation: {
   icon: string;
   permission: string;
 }[] = [
+  {
+    id: "deviations",
+    title: "Отклонения инспекций",
+    icon: "⚑",
+    permission: "people.read",
+  },
   {
     id: "overview",
     title: "Обзор системы",
@@ -94,6 +103,8 @@ const navigation: {
   },
 ];
 const descriptions: Record<Section, string> = {
+  deviations:
+    "Отклонения по городам инспектора и владельца и результатам повторной проверки фотографий. Проверка не является обвинением.",
   overview: "Сначала — то, что требует вашего внимания.",
   problems: "Повторения ошибок объединены в расследования.",
   services: "Состояние компонентов, подтверждённое доступными источниками.",
@@ -175,6 +186,129 @@ function Download({ value, name }: { value: unknown; name: string }) {
   );
 }
 
+function ActorSummary({ actor }: { actor: any }) {
+  if (!actor) return <span>Пользователь не установлен</span>;
+  return (
+    <div className="actor-summary">
+      <strong>{actor.name ?? "Пользователь не установлен"}</strong>
+      {actor.login && <div>Логин: {actor.login}</div>}
+      {actor.phoneMasked && <div>Телефон: {actor.phoneMasked}</div>}
+      {actor.roles?.length > 0 && <div>{actor.roles.join(" · ")}</div>}
+      {actor.organizations?.map((org: any) => (
+        <div key={org.id}>
+          <b>{org.name}</b> · {org.role}
+        </div>
+      ))}
+      {actor.verified === false && (
+        <div className="identity-warning">
+          Аккаунт определён, вход не подтверждён
+        </div>
+      )}
+      {actor.identityNote && (
+        <small className="muted">{actor.identityNote}</small>
+      )}
+    </div>
+  );
+}
+function readableDevice(value: string) {
+  const browser = /Edg\//.test(value)
+    ? "Microsoft Edge"
+    : /Chrome\//.test(value)
+      ? "Chrome"
+      : /Firefox\//.test(value)
+        ? "Firefox"
+        : /Safari\//.test(value)
+          ? "Safari"
+          : /Dart\//.test(value)
+            ? "Мобильное приложение"
+            : "Клиент не определён";
+  const os = /Android/.test(value)
+    ? "Android"
+    : /iPhone|iPad/.test(value)
+      ? "iOS"
+      : /Windows/.test(value)
+        ? "Windows"
+        : /Macintosh/.test(value)
+          ? "macOS"
+          : /Linux/.test(value)
+            ? "Linux"
+            : null;
+  return [browser, os].filter(Boolean).join(" · ");
+}
+function ActivityTimeline({ events }: { events: any[] }) {
+  return (
+    <div className="activity-timeline">
+      {events.map((event) => (
+        <article className="activity-event" key={event.id}>
+          <header>
+            <strong>{date(event.createdAt)}</strong>
+            <Badge
+              value={event.result}
+              text={event.display?.outcomeLabel ?? label(event.result)}
+            />
+          </header>
+          <div className="activity-event-grid">
+            <ActorSummary actor={event.actor} />
+            <div>
+              <strong>{event.display?.actionLabel ?? event.explanation}</strong>
+              <div className="muted">
+                {event.display?.sourceLabel ?? "Источник не указан"}
+              </div>
+              <p>{event.display?.message ?? event.explanation}</p>
+              {event.objectContext && (
+                <p>
+                  <b>{event.objectContext.organization.name}</b> ·{" "}
+                  {event.objectContext.vehicle.plateNumber} · Свидетельство{" "}
+                  {event.objectContext.certificateNumber ?? "не выпущено"}
+                </p>
+              )}
+              {event.display?.clientMessage &&
+                event.display.clientMessage !== event.display.message && (
+                  <p>Сообщение пользователю: {event.display.clientMessage}</p>
+                )}
+              {event.ipAddress && <div>IP подключения: {event.ipAddress}</div>}
+              {event.device && (
+                <div>Клиент: {readableDevice(event.device)}</div>
+              )}
+              {event.appVersion && (
+                <div>Версия приложения: {event.appVersion}</div>
+              )}
+              {event.location?.state === "available" ? (
+                <div>
+                  GPS: {event.location.lat}, {event.location.lng} · точность ±
+                  {Math.round(event.location.accuracy)} м<br />
+                  <small>
+                    Сообщено клиентом · {date(event.location.capturedAt)}
+                  </small>
+                </div>
+              ) : (
+                <div className="muted">
+                  GPS:{" "}
+                  {event.location?.state === "denied"
+                    ? "пользователь не разрешил"
+                    : event.location?.state === "not_requested"
+                      ? "разрешение не запрошено"
+                      : "координаты не получены"}
+                </div>
+              )}
+              <Details
+                value={{
+                  requestId: event.requestId,
+                  action: event.action,
+                  httpStatus: event.display?.statusCode,
+                  sessionId: event.sessionId,
+                  details: event.details,
+                  device: event.device,
+                }}
+              />
+            </div>
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
 export default function Panel() {
   const [user, setUser] = useState<User | null>(null),
     [stage, setStage] = useState<"loading" | "login" | "ready">("loading"),
@@ -208,6 +342,11 @@ export default function Panel() {
         to: string;
       }[]
     >([]);
+  const [accountFilter, setAccountFilter] = useState<{
+    id: string;
+    kind: string;
+    name: string;
+  } | null>(null);
   const [dialog, setDialog] = useState<any>(null);
   const requestSequence = useRef(0);
   const has = (permission: string) => !!user?.permissions.includes(permission);
@@ -240,6 +379,20 @@ export default function Panel() {
       }
     })();
   }, []);
+  useEffect(() => {
+    if (stage !== "ready") return;
+    const params = new URLSearchParams(location.search);
+    const target = params.get("section");
+    if (target && navigation.some((n) => n.id === target)) {
+      navigate(target as Section);
+      const problem = params.get("problem");
+      if (problem && /^[a-f0-9-]{36}$/i.test(problem))
+        void api("/problems/" + problem)
+          .then((value) => setDialog({ kind: "problem", value }))
+          .catch(displayError);
+      history.replaceState(null, "", location.pathname);
+    }
+  }, [stage, displayError]);
   function switchTheme() {
     const t = theme === "light" ? "dark" : "light";
     setTheme(t);
@@ -249,6 +402,11 @@ export default function Panel() {
   const endpoint = useCallback(() => {
     const p = new URLSearchParams({ page: String(page), limit: "25" });
     if (q) p.set("q", q);
+    if (accountFilter)
+      p.set(
+        accountFilter.kind === "technical" ? "techActorId" : "actorId",
+        accountFilter.id,
+      );
     if (problemFilter && section === "events")
       p.set("problemId", problemFilter);
     if (status) p.set(section === "files" ? "status" : "status", status);
@@ -269,7 +427,18 @@ export default function Panel() {
     if (section === "accounts" && tab === "people" && q) p.set("phone", q);
     if (section === "overview") p.set("hours", hours);
     return "/" + route + "?" + p.toString();
-  }, [section, tab, page, q, status, from, to, hours, problemFilter]);
+  }, [
+    section,
+    tab,
+    page,
+    q,
+    status,
+    from,
+    to,
+    hours,
+    problemFilter,
+    accountFilter,
+  ]);
   const load = useCallback(
     async (background = false) => {
       if (!user) return;
@@ -304,6 +473,7 @@ export default function Panel() {
     requestSequence.current++;
     setSection(id);
     setProblemFilter("");
+    setAccountFilter(null);
     setTab(id === "accounts" ? "accounts" : "events");
     setQ("");
     setStatus("");
@@ -358,6 +528,16 @@ export default function Panel() {
         f,
         "PATCH",
       );
+    if (kind === "user-password")
+      result = await perform("/people/" + dialog.value.id + "/password", f);
+    if (kind === "user-block")
+      result = await perform(
+        "/people/" + dialog.value.id + "/block",
+        { ...f, blocked: !dialog.value.isBlocked },
+        "PATCH",
+      );
+    if (kind === "deviation")
+      result = await perform("/deviations/" + dialog.value.id, f, "PATCH");
     if (kind === "password") result = await perform("/auth/password", f);
     if (kind === "hold")
       result = await perform(
@@ -685,6 +865,18 @@ export default function Panel() {
           </div>
         )}
         {errorBox}
+        {accountFilter && (
+          <div className="notice">
+            Действия аккаунта: <strong>{accountFilter.name}</strong>
+            <button
+              type="button"
+              className="textbutton"
+              onClick={() => setAccountFilter(null)}
+            >
+              Снять фильтр
+            </button>
+          </div>
+        )}
         {notice && (
           <div className="notice" role="status">
             ✓ {notice}
@@ -935,6 +1127,27 @@ export default function Panel() {
                 }
               />
             )}
+            {section === "deviations" && (
+              <div className="filters">
+                <label>
+                  Результат проверки
+                  <select
+                    value={status}
+                    onChange={(e) => {
+                      setStatus(e.target.value);
+                      setPage(1);
+                    }}
+                  >
+                    <option value="">Все отклонения</option>
+                    <option value="new">Новые</option>
+                    <option value="in_progress">На проверке</option>
+                    <option value="resolved">Устранённые</option>
+                    <option value="dismissed">Не подтвердились</option>
+                  </select>
+                </label>
+              </div>
+            )}
+            {section === "alerts" && <PushControls />}
             {section === "settings" && (
               <Settings
                 data={data}
@@ -1000,6 +1213,18 @@ export default function Panel() {
                           );
                         return;
                       }
+                      if (kind === "recheck") {
+                        const result = await perform(
+                          "/files/" + value.id + "/recheck",
+                          {},
+                        );
+                        if (result) setNotice(result.moderationReason);
+                        return;
+                      }
+                      if (kind === "support") {
+                        setDialog({ kind: "user-password", value });
+                        return;
+                      }
                       if (kind === "photo") {
                         window.open(
                           "/api/v1/technical/files/" + value.id + "/original",
@@ -1039,6 +1264,20 @@ export default function Panel() {
               )}
           </>
         )}
+        <section className="notice">
+          <button
+            type="button"
+            className="textbutton"
+            onClick={async () => {
+              await consentLocation();
+              setNotice(
+                "Разрешение геолокации обработано. В журнал попадут координаты, если браузер их предоставил.",
+              );
+            }}
+          >
+            Разрешить GPS для диагностики действий в этой панели
+          </button>
+        </section>
         <footer className="footnote">
           Последнее успешное обновление: {date(updated)} · Сведения из
           недоступных источников не считаются исправным состоянием.
@@ -1101,6 +1340,102 @@ export default function Panel() {
             </>
           ) : (
             <form onSubmit={submitDialog}>
+              {dialog.kind === "user-password" && (
+                <>
+                  <h3>
+                    Временный пароль:{" "}
+                    {dialog.value.name ?? dialog.value.fullName}
+                  </h3>
+                  <p>
+                    Все сеансы будут завершены. При следующем входе пользователь
+                    обязан установить свой пароль.
+                  </p>
+                  <label>
+                    Временный пароль
+                    <input
+                      name="password"
+                      type="password"
+                      minLength={8}
+                      maxLength={72}
+                      required
+                      autoComplete="new-password"
+                    />
+                  </label>
+                  <label>
+                    Повторите пароль
+                    <input
+                      name="confirmation"
+                      type="password"
+                      required
+                      autoComplete="new-password"
+                    />
+                  </label>
+                  <label>
+                    Основание и подтверждение личности
+                    <textarea
+                      name="reason"
+                      minLength={5}
+                      maxLength={1000}
+                      required
+                    />
+                  </label>
+                </>
+              )}
+              {dialog.kind === "user-block" && (
+                <>
+                  <h3>
+                    {dialog.value.isBlocked
+                      ? "Разблокировать"
+                      : "Заблокировать"}
+                    : {dialog.value.name ?? dialog.value.fullName}
+                  </h3>
+                  <p>
+                    Действие и ваше имя будут сохранены в журнале. Все текущие
+                    сеансы пользователя завершатся.
+                  </p>
+                  <label>
+                    Основание
+                    <textarea
+                      name="reason"
+                      minLength={5}
+                      maxLength={1000}
+                      required
+                    />
+                  </label>
+                </>
+              )}
+              {dialog.kind === "deviation" && (
+                <>
+                  <h3>{dialog.value.explanation}</h3>
+                  <p>
+                    {dialog.value.inspection?.organization?.name} ·
+                    Свидетельство{" "}
+                    {dialog.value.inspection?.certificateNumber ??
+                      "не выпущено"}
+                  </p>
+                  <Details value={dialog.value.facts} />
+                  <label>
+                    Статус
+                    <select name="status" defaultValue={dialog.value.status}>
+                      <option value="new">Новая</option>
+                      <option value="in_progress">На проверке</option>
+                      <option value="resolved">Устранено</option>
+                      <option value="dismissed">
+                        Нарушение не подтвердилось
+                      </option>
+                    </select>
+                  </label>
+                  <label>
+                    Результат проверки
+                    <textarea
+                      name="reason"
+                      minLength={5}
+                      maxLength={1000}
+                      required
+                    />
+                  </label>
+                </>
+              )}
               {dialog.kind === "problem" && (
                 <>
                   <h3>{dialog.value.title}</h3>
@@ -1115,15 +1450,137 @@ export default function Panel() {
                     <dd>{date(dialog.value.lastSeenAt)}</dd>
                     <dt>Повторений</dt>
                     <dd>{dialog.value.occurrences}</dd>
-                    <dt>Пользователей затронуто</dt>
+                    <dt>Определено аккаунтов</dt>
                     <dd>
-                      {dialog.value.affectedUsers}
-                      {dialog.value.affectedUsersTruncated ? "+" : ""}
+                      {dialog.value.knownAccounts ?? dialog.value.affectedUsers}
                     </dd>
+                    <dt>Попыток без установленного пользователя</dt>
+                    <dd>{dialog.value.unidentifiedAttempts ?? "Нет данных"}</dd>
+                    <dt>Ответственный</dt>
+                    <dd>{dialog.value.assignedName ?? "Не назначен"}</dd>
                     <dt>Причина</dt>
-                    <dd>Требует расследования</dd>
+                    <dd>Подтверждённые сведения указаны в событиях ниже</dd>
                   </dl>
                   <div className="notice">{dialog.value.recommendation}</div>
+                  <section className="problem-context">
+                    <h3>Кто столкнулся с проблемой</h3>
+                    {dialog.value.participants?.length ? (
+                      dialog.value.participants.map((actor: any) => (
+                        <div
+                          className="problem-person"
+                          key={actor.kind + actor.id}
+                        >
+                          <ActorSummary actor={actor} />
+                          {actor.kind === "application" &&
+                            has("credentials.manage") && (
+                              <div className="actions">
+                                <button
+                                  type="button"
+                                  className="secondary"
+                                  onClick={() =>
+                                    setDialog({
+                                      kind: "user-password",
+                                      value: actor,
+                                    })
+                                  }
+                                >
+                                  Сменить пароль
+                                </button>
+                                <button
+                                  type="button"
+                                  className="secondary"
+                                  onClick={() =>
+                                    setDialog({
+                                      kind: "user-block",
+                                      value: actor,
+                                    })
+                                  }
+                                >
+                                  {actor.isBlocked
+                                    ? "Разблокировать"
+                                    : "Заблокировать"}
+                                </button>
+                              </div>
+                            )}
+                          <button
+                            type="button"
+                            className="textbutton"
+                            onClick={() => {
+                              navigate("events");
+                              setAccountFilter({
+                                id: actor.id,
+                                kind: actor.kind,
+                                name: actor.name,
+                              });
+                              setDialog(null);
+                            }}
+                          >
+                            Все сохранённые действия этого аккаунта ↗
+                          </button>
+                          <p className="muted">
+                            Последний сохранённый успешный вход до этой
+                            проблемы:{" "}
+                            {actor.lastSuccessfulLoginAt
+                              ? date(actor.lastSuccessfulLoginAt)
+                              : "В доступном журнале не найден"}
+                          </p>
+                          <small className="muted">{actor.profileNote}</small>
+                        </div>
+                      ))
+                    ) : (
+                      <p>
+                        В сохранённых событиях нет подтверждённой связи с
+                        аккаунтом. Это не означает, что никто не пытался войти.
+                      </p>
+                    )}
+                  </section>
+                  <section className="problem-context">
+                    <h3>Что произошло и когда</h3>
+                    <p className="muted">{dialog.value.historyNote}</p>
+                    <ActivityTimeline events={dialog.value.events ?? []} />
+                    {!dialog.value.events?.length && (
+                      <p>
+                        Связанные события не найдены. Доступно только сводное
+                        описание ошибки выше.
+                      </p>
+                    )}
+                    {dialog.value.events?.length < dialog.value.eventTotal && (
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={async () => {
+                          try {
+                            const next = await api(
+                              "/problems/" +
+                                dialog.value.id +
+                                "?eventsPage=" +
+                                (dialog.value.eventsPage + 1),
+                            );
+                            setDialog((current: any) =>
+                              current?.value.id === next.id
+                                ? {
+                                    ...current,
+                                    value: {
+                                      ...next,
+                                      events: [
+                                        ...current.value.events,
+                                        ...next.events,
+                                      ],
+                                    },
+                                  }
+                                : current,
+                            );
+                          } catch (e) {
+                            displayError(e);
+                          }
+                        }}
+                      >
+                        Показать более ранние события · всего{" "}
+                        {dialog.value.eventTotal}
+                      </button>
+                    )}
+                  </section>
+
                   <button
                     type="button"
                     className="textbutton"
@@ -1215,7 +1672,10 @@ export default function Panel() {
                   ) : null}
                   {dialog.value.comments?.map((c: any) => (
                     <div className="issue-comment" key={c.id}>
-                      <small>{date(c.createdAt)}</small>
+                      <small>
+                        {c.authorName ?? "Автор не установлен"} ·{" "}
+                        {date(c.createdAt)}
+                      </small>
                       <p>{c.note}</p>
                     </div>
                   ))}
@@ -1927,7 +2387,9 @@ function DataTable({
         render: (r) => (
           <>
             {date(r.createdAt)}
-            <div className="muted">{label(r.source)}</div>
+            <div className="muted">
+              {r.display?.sourceLabel ?? label(r.source)}
+            </div>
           </>
         ),
       },
@@ -1935,7 +2397,19 @@ function DataTable({
         title: "Что произошло",
         render: (r) => (
           <>
-            <strong>{r.explanation}</strong>
+            <strong>{r.display?.actionLabel ?? r.explanation}</strong>
+            <p>{r.display?.message ?? r.explanation}</p>
+            {r.objectContext && (
+              <p>
+                <b>{r.objectContext.organization.name}</b>
+                <br />
+                Госномер: {r.objectContext.vehicle.plateNumber}
+                <br />
+                Свидетельство:{" "}
+                {r.objectContext.certificateNumber ?? "не выпущено"} ·{" "}
+                {label(r.objectContext.status)}
+              </p>
+            )}
             <Details
               value={{
                 action: r.action,
@@ -1953,33 +2427,57 @@ function DataTable({
           </>
         ),
       },
-      { title: "Результат", render: (r) => <Badge value={r.result} /> },
+      {
+        title: "Подключение / GPS",
+        render: (r) => (
+          <>
+            <p>
+              {r.ipAddress ? "IP: " + r.ipAddress : "IP не сохранён или скрыт"}
+            </p>
+            <p>{r.device ? readableDevice(r.device) : "Клиент не указан"}</p>
+            <p>{r.appVersion ?? "Версия не передана"}</p>
+            {r.location?.state === "available" ? (
+              <p>
+                GPS: {r.location.lat}, {r.location.lng} · ±
+                {Math.round(r.location.accuracy)} м<br />
+                <small>Сообщено клиентом · {date(r.location.capturedAt)}</small>
+              </p>
+            ) : (
+              <p>
+                GPS:{" "}
+                {r.location?.state === "denied" ? "не разрешён" : "не получен"}
+              </p>
+            )}
+          </>
+        ),
+      },
+      {
+        title: "Результат",
+        render: (r) => (
+          <Badge value={r.result} text={r.display?.outcomeLabel} />
+        ),
+      },
       {
         title: "Исполнитель",
         render: (r) => (
           <>
-            {r.details?.verified === false && (
-              <small>
-                Аккаунт входа · личность не подтверждена
-                <br />
-              </small>
+            <ActorSummary actor={r.actor} />
+            {r.actor?.kind === "application" && has("credentials.manage") && (
+              <button
+                className="textbutton"
+                onClick={() => action("support", r.actor)}
+              >
+                Помочь со входом / сменить пароль
+              </button>
             )}
-            {r.actorName ??
-              (r.techActorId
-                ? "Технический сотрудник"
-                : r.actorId
-                  ? "Пользователь приложения"
-                  : "Не установлен")}
-            <Details
-              value={{
-                actorId: r.actorId,
-                techActorId: r.techActorId,
-                actorRole: r.actorRole,
-                sessionId: r.sessionId,
-                ipAddress: r.ipAddress,
-                device: r.device,
-              }}
-            />
+            {r.actor?.kind === "application" && has("accounts.manage") && (
+              <button
+                className="textbutton"
+                onClick={() => action("user-block", r.actor)}
+              >
+                {r.actor.isBlocked ? "Разблокировать" : "Заблокировать"}
+              </button>
+            )}
           </>
         ),
       },
@@ -1992,6 +2490,12 @@ function DataTable({
           <>
             <strong>{r.title}</strong>
             <div className="muted">Начало: {date(r.firstSeenAt)}</div>
+            {r.latestEvent && (
+              <>
+                <ActorSummary actor={r.latestEvent.actor} />
+                <p>{r.latestEvent.display?.message}</p>
+              </>
+            )}
           </>
         ),
       },
@@ -2017,7 +2521,13 @@ function DataTable({
       },
       {
         title: "Ответственный",
-        render: (r) => <>{r.assignedTo ? "Назначен" : "Не назначен"}</>,
+        render: (r) => (
+          <>
+            {r.assignedTo
+              ? (r.assignedName ?? "Имя ответственного не установлено")
+              : "Не назначен"}
+          </>
+        ),
       },
       {
         title: "Действие",
@@ -2035,6 +2545,20 @@ function DataTable({
         render: (r) => (
           <>
             <strong>{fileNames[r.type] ?? "Документ инспекции"}</strong>
+            <p>{r.inspection?.organization?.name ?? "ИО не указан"}</p>
+            {r.inspection?.certificateNumber && (
+              <p>Номер свидетельства: {r.inspection.certificateNumber}</p>
+            )}
+            {r.uploader ? (
+              <ActorSummary actor={r.uploader} />
+            ) : (
+              <p className="muted">
+                Автор загрузки не установлен по сохранённым данным
+              </p>
+            )}
+            <p className="muted">
+              {r.contentType ?? "Формат не записан"} · {bytes(r.sizeBytes)}
+            </p>
             <div className="muted">{date(r.createdAt)}</div>
             <Details
               value={{
@@ -2074,10 +2598,27 @@ function DataTable({
                 {r.manualReview.result === "quarantined"
                   ? "⚠ Технический карантин"
                   : "Ручной просмотр зафиксирован"}{" "}
-                · {date(r.manualReview.reviewedAt)}
+                · {date(r.manualReview.reviewedAt)} ·{" "}
+                {r.reviewerName ?? "Имя проверявшего не установлено"}
               </p>
             )}
             <div className="muted">{r.fieldMatch}</div>
+            {r.recheck && (
+              <div className="notice warning">
+                <b>Повторная проверка:</b> {label(r.recheck.moderationStatus)} ·{" "}
+                {r.recheck.moderationReason}
+                <br />
+                {date(r.recheck.moderationCheckedAt)}
+              </div>
+            )}
+            {has("files.review") && (
+              <button
+                className="secondary"
+                onClick={() => action("recheck", r)}
+              >
+                Повторить проверку качества
+              </button>
+            )}
             {has("files.review") && (
               <button
                 className="textbutton"
@@ -2101,6 +2642,53 @@ function DataTable({
           ),
       },
     ];
+  if (section === "deviations")
+    columns = [
+      {
+        title: "Инспекция",
+        render: (r) => (
+          <>
+            <strong>
+              {r.inspection?.organization?.name ?? "ИО недоступен"}
+            </strong>
+            <p>
+              Свидетельство: {r.inspection?.certificateNumber ?? "не выпущено"}
+            </p>
+            <p>
+              Инспектор: {r.inspection?.createdBy?.fullName ?? "не установлен"}
+            </p>
+            <p>{r.inspection?.address}</p>
+            <small>{date(r.inspection?.createdAt)}</small>
+          </>
+        ),
+      },
+      {
+        title: "Отклонение",
+        render: (r) => (
+          <>
+            <strong>{r.explanation}</strong>
+            <Details value={r.facts} />
+            <p>{date(r.firstSeenAt)}</p>
+          </>
+        ),
+      },
+      {
+        title: "Проверка",
+        render: (r) => (
+          <>
+            <Badge value={r.status} />
+            <p>
+              {r.reviewedName ?? "Проверяющий не назначен"} ·{" "}
+              {date(r.reviewedAt)}
+            </p>
+            <p>{r.reviewNote}</p>
+            <button onClick={() => action("deviation", r)}>
+              Разобраться / изменить статус
+            </button>
+          </>
+        ),
+      },
+    ];
   if (section === "alerts")
     columns = [
       {
@@ -2121,7 +2709,17 @@ function DataTable({
         render: (r) => (
           <>
             {r.acknowledgedAt ? "✓ Получение подтверждено" : "Не подтверждено"}
-            <p>{r.assignedTo ? "Есть ответственный" : "Не назначен"}</p>
+            {r.acknowledgedAt && (
+              <p>
+                {r.acknowledgedName ?? "Имя не установлено"} ·{" "}
+                {date(r.acknowledgedAt)}
+              </p>
+            )}
+            <p>
+              {r.assignedTo
+                ? (r.assignedName ?? "Имя ответственного не установлено")
+                : "Ответственный не назначен"}
+            </p>
             {r.mutedUntil && (
               <div className="muted">
                 Приглушено до {date(r.mutedUntil)}. {r.muteReason}
@@ -2181,7 +2779,9 @@ function DataTable({
       },
       {
         title: "Действие",
-        render: () => <span className="muted">Единственный владелец панели</span>,
+        render: () => (
+          <span className="muted">Единственный владелец панели</span>
+        ),
       },
     ];
   if (section === "accounts" && tab === "people")
@@ -2229,9 +2829,17 @@ function DataTable({
             {has("credentials.manage") && (
               <button
                 className="secondary"
-                onClick={() => action("recovery", r)}
+                onClick={() => action("user-password", r)}
               >
-                Восстановить доступ
+                Сменить пароль
+              </button>
+            )}
+            {has("accounts.manage") && (
+              <button
+                className="secondary"
+                onClick={() => action("user-block", r)}
+              >
+                {r.isBlocked ? "Разблокировать" : "Заблокировать"}
               </button>
             )}
             {has("accounts.manage") && (

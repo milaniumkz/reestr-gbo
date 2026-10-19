@@ -1,3 +1,5 @@
+import 'package:shared_preferences/shared_preferences.dart';
+import 'data/client_telemetry.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart' hide Text;
@@ -988,6 +990,16 @@ class _ErsiDemoState extends State<ErsiDemo> {
     }
     setState(() => authBusy = true);
     try {
+      final consentPreferences = await SharedPreferences.getInstance();
+      if (consentPreferences.getBool('diagnosticLocationAsked') != true && mounted) {
+        final allow = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
+          title: const Text('Геолокация для технической поддержки'),
+          content: const Text('Разрешить сохранять координаты при входе и действиях в системе? Это поможет разобраться с ошибками и местом инспекции. Отказ не мешает входу.'),
+          actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Не сейчас')), TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Разрешить'))],
+        ));
+        await consentPreferences.setBool('diagnosticLocationAsked', true);
+        if (allow == true) await ClientTelemetry.allowLocation();
+      }
       final result = await repositories.auth.login(
         _normalizeKzPhone(authPhone),
         authPassword,

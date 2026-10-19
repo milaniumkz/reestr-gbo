@@ -1,3 +1,4 @@
+import {accountContext} from '../observability/account-context';
 import { CanActivate, ExecutionContext, Injectable, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
@@ -32,9 +33,11 @@ export class JwtAuthGuard implements CanActivate {
       where: { id: user.sid },
       select: { expiresAt: true, revokedAt: true, user: {select:{id:true,phone:true,isBlocked:true,mustChangePassword:true,passwordVersion:true,roles:{select:{role:true}}}} },
     });
+    if(session&&session.user.id===user.sub){accountContext({actorId:user.sub,sessionId:user.sid,verified:false,reasonCode:session.revokedAt?'session_revoked':session.expiresAt<=new Date()?'session_expired':session.user.isBlocked?'account_blocked':session.user.mustChangePassword?'password_change_required':session.user.passwordVersion!==user.pv?'session_version_changed':undefined});}
     if (!session || session.revokedAt || session.expiresAt <= new Date() || session.user.id !== user.sub || session.user.isBlocked || session.user.mustChangePassword || session.user.passwordVersion !== user.pv) {
       throw new UnauthorizedException();
     }
+    accountContext({actorId:user.sub,sessionId:user.sid,verified:true});
     request.user = {...user,phone:session.user.phone,roles:session.user.roles.map(item=>item.role)};
     return true;
   }

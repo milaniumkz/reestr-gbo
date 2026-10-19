@@ -9,7 +9,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     super();
     this.$use(async(params,next)=>{
       if(params.model==='AuditLog'&&['create','createMany','upsert'].includes(params.action)){
-        const clean=(data:any)=>{if(!data)return data;return {...traceFields(),...data,metadata:data.metadata?safeDetails(data.metadata):undefined,entityId:data.entity==='auth'&&data.entityId&&/\d{8,}/.test(data.entityId)?undefined:data.entityId};};
+        const clean=(data:any)=>{if(!data)return data;const {location,...trace}=traceFields();return {...trace,...data,metadata:data.metadata?safeDetails(data.metadata):undefined,entityId:data.entity==='auth'&&data.entityId&&/\d{8,}/.test(data.entityId)?undefined:data.entityId};};
         if(params.action==='createMany')params.args.data=Array.isArray(params.args.data)?params.args.data.map(clean):clean(params.args.data);
         else if(params.action==='upsert'){params.args.create=clean(params.args.create);params.args.update=clean(params.args.update);}
         else params.args.data=clean(params.args.data);

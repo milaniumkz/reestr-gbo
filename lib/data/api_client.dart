@@ -1,3 +1,4 @@
+import 'client_telemetry.dart';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -17,7 +18,7 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> getJson(String path) async {
-    final response = await _http.get(_uri(path), headers: _headers);
+    final response = await _http.get(_uri(path), headers: {..._headers,...await ClientTelemetry.headers()});
     if (response.statusCode == 401 && await _refreshAccessToken()) {
       return getJson(path);
     }
@@ -30,7 +31,7 @@ class ApiClient {
   ) async {
     final response = await _http.post(
       _uri(path),
-      headers: {..._headers, 'Content-Type': 'application/json'},
+      headers: {..._headers,...await ClientTelemetry.headers(), 'Content-Type': 'application/json'},
       body: jsonEncode(body),
     );
     if (response.statusCode == 401 && await _refreshAccessToken()) {
@@ -45,7 +46,7 @@ class ApiClient {
   ) async {
     final response = await _http.patch(
       _uri(path),
-      headers: {..._headers, 'Content-Type': 'application/json'},
+      headers: {..._headers,...await ClientTelemetry.headers(), 'Content-Type': 'application/json'},
       body: jsonEncode(body),
     );
     if (response.statusCode == 401 && await _refreshAccessToken()) {
@@ -63,7 +64,7 @@ class ApiClient {
     Map<String, String> fields = const {},
   }) async {
     final request = http.MultipartRequest('POST', _uri(path));
-    request.headers.addAll(_headers);
+    request.headers.addAll({..._headers,...await ClientTelemetry.headers()});
     request.fields.addAll(fields);
     request.files.add(
       http.MultipartFile.fromBytes(
@@ -123,7 +124,7 @@ class ApiClient {
     try {
       final response = await _http.post(
         _uri('/auth/refresh'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {...await ClientTelemetry.headers(),'Content-Type': 'application/json'},
         body: jsonEncode({'refreshToken': refreshToken}),
       );
       if (response.statusCode < 200 || response.statusCode >= 300) {
