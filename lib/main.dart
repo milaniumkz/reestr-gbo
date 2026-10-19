@@ -976,45 +976,114 @@ class _ErsiDemoState extends State<ErsiDemo> {
     }
   }
 
-  String _apiErrorText(String message) => message.replaceFirst(RegExp(r'^ApiException\(\d+\):\s*'), '').replaceFirst('Exception: ', '');
+  String _apiErrorText(String message) => message
+      .replaceFirst(RegExp(r'^ApiException\(\d+\):\s*'), '')
+      .replaceFirst('Exception: ', '');
 
   Future<void> _passwordLogin() async {
     if (authBusy) return;
-    if (authPassword.isEmpty) { setState(() => apiState = 'Введите пароль'); return; }
+    if (authPassword.isEmpty) {
+      setState(() => apiState = 'Введите пароль');
+      return;
+    }
     setState(() => authBusy = true);
     try {
-      final result = await repositories.auth.login(_normalizeKzPhone(authPhone), authPassword, _roleCode, bin: authBin.trim());
+      final result = await repositories.auth.login(
+        _normalizeKzPhone(authPhone),
+        authPassword,
+        _roleCode,
+        bin: authBin.trim(),
+      );
       if (!mounted) return;
       setState(() => authPassword = '');
       if (result.passwordChangeToken != null) {
-        setState(() { currentUser = null; passwordChangeToken = result.passwordChangeToken; newPassword = ''; confirmPassword = ''; apiState = 'Установите собственный пароль'; });
+        setState(() {
+          currentUser = null;
+          passwordChangeToken = result.passwordChangeToken;
+          newPassword = '';
+          confirmPassword = '';
+          apiState = 'Установите собственный пароль';
+        });
         go(3);
-      } else if (result.user != null) { await _enterAuthenticated(result.user!); }
-    } catch (error) { if (mounted) { setState(() => apiState = error is ApiException ? error.message : 'Не удалось выполнить вход'); } }
-    finally { if (mounted) setState(() => authBusy = false); }
+      } else if (result.user != null) {
+        await _enterAuthenticated(result.user!);
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () => apiState = error is ApiException
+              ? error.message
+              : 'Не удалось выполнить вход',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => authBusy = false);
+    }
   }
 
   Future<void> _completePasswordChange() async {
     if (authBusy) return;
-    if (passwordChangeToken == null) { setState(() => apiState = 'Сначала войдите по временному паролю'); go(2); return; }
-    if (newPassword.length < 8) { setState(() => apiState = 'Новый пароль должен содержать минимум 8 символов'); return; }
-    if (newPassword != confirmPassword) { setState(() => apiState = 'Пароли не совпадают'); return; }
+    if (passwordChangeToken == null) {
+      setState(() => apiState = 'Сначала войдите по временному паролю');
+      go(2);
+      return;
+    }
+    if (newPassword.length < 8) {
+      setState(
+        () => apiState = 'Новый пароль должен содержать минимум 8 символов',
+      );
+      return;
+    }
+    if (newPassword != confirmPassword) {
+      setState(() => apiState = 'Пароли не совпадают');
+      return;
+    }
     setState(() => authBusy = true);
     try {
-      final user = await repositories.auth.changeInitialPassword(passwordChangeToken!,newPassword,confirmPassword,_roleCode,bin:authBin.trim());
+      final user = await repositories.auth.changeInitialPassword(
+        passwordChangeToken!,
+        newPassword,
+        confirmPassword,
+        _roleCode,
+        bin: authBin.trim(),
+      );
       if (!mounted) return;
-      setState(() { passwordChangeToken = null; newPassword = ''; confirmPassword = ''; });
+      setState(() {
+        passwordChangeToken = null;
+        newPassword = '';
+        confirmPassword = '';
+      });
       await _enterAuthenticated(user);
-    } catch (error) { if (mounted) { setState(() => apiState = error is ApiException ? error.message : 'Не удалось изменить пароль'); } }
-    finally { if (mounted) setState(() => authBusy = false); }
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () => apiState = error is ApiException
+              ? error.message
+              : 'Не удалось изменить пароль',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => authBusy = false);
+    }
   }
 
   Future<void> _enterAuthenticated(AppUser user) async {
     if (!mounted) return;
-    setState(() { currentUser = user; apiState = 'Authorized'; });
-    if (_roleCode == 'inspection_org') { await _loadOrganizations(); await _loadMyInspections(); }
-    if (_roleCode == 'nca' || _roleCode == 'government') { await _loadControlCertificates(); }
-    if (['inspection_org','nca','government'].contains(_roleCode)) { await _loadNotifications(); await _loadViewHistory(); }
+    setState(() {
+      currentUser = user;
+      apiState = 'Authorized';
+    });
+    if (_roleCode == 'inspection_org') {
+      await _loadOrganizations();
+      await _loadMyInspections();
+    }
+    if (_roleCode == 'nca' || _roleCode == 'government') {
+      await _loadControlCertificates();
+    }
+    if (['inspection_org', 'nca', 'government'].contains(_roleCode)) {
+      await _loadNotifications();
+      await _loadViewHistory();
+    }
     if (mounted) go(_homeScreenForRoleCode(_roleCode));
   }
 
@@ -2182,11 +2251,20 @@ class _ErsiDemoState extends State<ErsiDemo> {
         isLoading: authBusy,
       ),
       3 => _PasswordChangeScreen(
-        newPassword: newPassword, confirmation: confirmPassword, busy: authBusy,
+        newPassword: newPassword,
+        confirmation: confirmPassword,
+        busy: authBusy,
         onPassword: (value) => setState(() => newPassword = value),
         onConfirmation: (value) => setState(() => confirmPassword = value),
         onConfirm: _completePasswordChange,
-        onBack: () { setState(() { passwordChangeToken = null; newPassword = ''; confirmPassword = ''; }); go(2); },
+        onBack: () {
+          setState(() {
+            passwordChangeToken = null;
+            newPassword = '';
+            confirmPassword = '';
+          });
+          go(2);
+        },
       ),
       4 => _UserHome(
         go: go,
@@ -3412,7 +3490,9 @@ class _RoleSelect extends StatelessWidget {
               icon: item.$3,
               title: item.$1,
               subtitle: item.$2,
-              badge: item.$1 == 'Инспекционный орган' ? 'ПАРОЛЬ + БИН' : 'ПАРОЛЬ',
+              badge: item.$1 == 'Инспекционный орган'
+                  ? 'ПАРОЛЬ + БИН'
+                  : 'ПАРОЛЬ',
               selected: selected == item.$1,
               onTap: () {
                 onRole(item.$1);
@@ -3460,15 +3540,18 @@ class _Login extends StatelessWidget {
         children: [
           const _HintPill(text: 'ЗАЩИЩЕННЫЙ ДОСТУП'),
           const SizedBox(height: 26),
-          if (role.startsWith('Инспекционный') || role.startsWith('Установщик')) _Input(
-            label: role.startsWith('Владелец')
-                ? 'ИИН / БИН'
-                : 'БИН ОРГАНИЗАЦИИ',
-            value: bin,
-            hint: role.startsWith('Владелец') ? 'Необязательно' : 'Введите БИН',
-            keyboardType: TextInputType.number,
-            onChanged: onBin,
-          ),
+          if (role.startsWith('Инспекционный') || role.startsWith('Установщик'))
+            _Input(
+              label: role.startsWith('Владелец')
+                  ? 'ИИН / БИН'
+                  : 'БИН ОРГАНИЗАЦИИ',
+              value: bin,
+              hint: role.startsWith('Владелец')
+                  ? 'Необязательно'
+                  : 'Введите БИН',
+              keyboardType: TextInputType.number,
+              onChanged: onBin,
+            ),
           const SizedBox(height: 20),
           _Input(
             label: 'ТЕЛЕФОН СОТРУДНИКА',
@@ -3479,7 +3562,14 @@ class _Login extends StatelessWidget {
             inputFormatters: const [_KzPhoneFormatter()],
             onChanged: onPhone,
           ),
-          _Input(label: 'Пароль', value: password, hint: 'Введите пароль', obscureText: true, keyboardType: TextInputType.visiblePassword, onChanged: onPassword),
+          _Input(
+            label: 'Пароль',
+            value: password,
+            hint: 'Введите пароль',
+            obscureText: true,
+            keyboardType: TextInputType.visiblePassword,
+            onChanged: onPassword,
+          ),
           const SizedBox(height: 26),
           const _SecurityPanel(),
           const SizedBox(height: 34),
@@ -3503,7 +3593,15 @@ class _Login extends StatelessWidget {
 }
 
 class _PasswordChangeScreen extends StatelessWidget {
-  const _PasswordChangeScreen({required this.newPassword,required this.confirmation,required this.busy,required this.onPassword,required this.onConfirmation,required this.onConfirm,required this.onBack});
+  const _PasswordChangeScreen({
+    required this.newPassword,
+    required this.confirmation,
+    required this.busy,
+    required this.onPassword,
+    required this.onConfirmation,
+    required this.onConfirm,
+    required this.onBack,
+  });
   final String newPassword;
   final String confirmation;
   final bool busy;
@@ -3513,16 +3611,42 @@ class _PasswordChangeScreen extends StatelessWidget {
   final VoidCallback onBack;
   @override
   Widget build(BuildContext context) => _AppScreen(
-    title:'Обязательная смена пароля', subtitle:'Первый вход', showNav:false,
-    child:Column(children:[
-      const _InfoBox(title:'Установите свой пароль',text:'Для продолжения работы замените временный пароль. Новый пароль — минимум 8 символов.'),
-      const SizedBox(height:20),
-      _Input(label:'Новый пароль',value:newPassword,obscureText:true,keyboardType:TextInputType.visiblePassword,onChanged:onPassword),
-      _Input(label:'Повторите пароль',value:confirmation,obscureText:true,keyboardType:TextInputType.visiblePassword,onChanged:onConfirmation),
-      _PrimaryButton(text:busy?'Сохраняем...':'Сменить пароль и войти',onTap:busy?null:onConfirm),
-      const SizedBox(height:16),
-      TextButton(onPressed:busy?null:onBack,child:const Text('Вернуться ко входу')),
-    ]),
+    title: 'Обязательная смена пароля',
+    subtitle: 'Первый вход',
+    showNav: false,
+    child: Column(
+      children: [
+        const _InfoBox(
+          title: 'Установите свой пароль',
+          text:
+              'Для продолжения работы замените временный пароль. Новый пароль — минимум 8 символов.',
+        ),
+        const SizedBox(height: 20),
+        _Input(
+          label: 'Новый пароль',
+          value: newPassword,
+          obscureText: true,
+          keyboardType: TextInputType.visiblePassword,
+          onChanged: onPassword,
+        ),
+        _Input(
+          label: 'Повторите пароль',
+          value: confirmation,
+          obscureText: true,
+          keyboardType: TextInputType.visiblePassword,
+          onChanged: onConfirmation,
+        ),
+        _PrimaryButton(
+          text: busy ? 'Сохраняем...' : 'Сменить пароль и войти',
+          onTap: busy ? null : onConfirm,
+        ),
+        const SizedBox(height: 16),
+        TextButton(
+          onPressed: busy ? null : onBack,
+          child: const Text('Вернуться ко входу'),
+        ),
+      ],
+    ),
   );
 }
 

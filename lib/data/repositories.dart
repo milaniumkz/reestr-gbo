@@ -6,7 +6,7 @@ import 'models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class PasswordLoginResult {
-  const PasswordLoginResult({this.user,this.passwordChangeToken});
+  const PasswordLoginResult({this.user, this.passwordChangeToken});
   final AppUser? user;
   final String? passwordChangeToken;
 }
@@ -16,10 +16,21 @@ class AuthRepository {
 
   final ApiClient _api;
 
-  Future<PasswordLoginResult> login(String phone, String password, String role, {String? bin}) async {
-    if (AppEnvironment.isDemo) { return PasswordLoginResult(user: AppUser(id: 'demo', phone: phone, roles: [role])); }
+  Future<PasswordLoginResult> login(
+    String phone,
+    String password,
+    String role, {
+    String? bin,
+  }) async {
+    if (AppEnvironment.isDemo) {
+      return PasswordLoginResult(
+        user: AppUser(id: 'demo', phone: phone, roles: [role]),
+      );
+    }
     final response = await _api.postJson('/auth/login', {
-      'phone': phone, 'password': password, 'role': role,
+      'phone': phone,
+      'password': password,
+      'role': role,
       if (bin != null && bin.isNotEmpty) 'bin': bin,
       'deviceName': 'ЕРСИ ГБО приложение',
     });
@@ -34,19 +45,34 @@ class AuthRepository {
     return PasswordLoginResult(user: user);
   }
 
-  Future<AppUser> changeInitialPassword(String token, String password, String confirmation, String role, {String? bin}) async {
-    if (AppEnvironment.isDemo) { return AppUser(id:'demo',phone:'',roles:[role]); }
-    final response = await _api.postJson('/auth/password/change', {'passwordChangeToken':token,'newPassword':password,'confirmation':confirmation});
+  Future<AppUser> changeInitialPassword(
+    String token,
+    String password,
+    String confirmation,
+    String role, {
+    String? bin,
+  }) async {
+    if (AppEnvironment.isDemo) {
+      return AppUser(id: 'demo', phone: '', roles: [role]);
+    }
+    final response = await _api.postJson('/auth/password/change', {
+      'passwordChangeToken': token,
+      'newPassword': password,
+      'confirmation': confirmation,
+    });
     final user = await _storeAuthResponse(response);
-    await _storeLoginContext(role,bin);
+    await _storeLoginContext(role, bin);
     return user;
   }
 
-  Future<void> _storeLoginContext(String role,String? bin) async {
+  Future<void> _storeLoginContext(String role, String? bin) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('lastRoleCode',role);
-    if (bin != null && bin.isNotEmpty) { await prefs.setString('lastOrganizationBin',bin); }
-    else { await prefs.remove('lastOrganizationBin'); }
+    await prefs.setString('lastRoleCode', role);
+    if (bin != null && bin.isNotEmpty) {
+      await prefs.setString('lastOrganizationBin', bin);
+    } else {
+      await prefs.remove('lastOrganizationBin');
+    }
   }
 
   Future<AppUser?> restoreSession() async {
