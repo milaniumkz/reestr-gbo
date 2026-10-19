@@ -8,15 +8,15 @@ import subprocess
 import sys
 
 REMOTE_SCRIPT = r'''
-import datetime,json,os,pathlib,re,shutil,subprocess,sys,urllib.error,urllib.request
+import datetime,json,os,pathlib,re,shutil,subprocess,sys,time,urllib.error,urllib.request
 config=json.load(sys.stdin)
 app=pathlib.Path(config['app_dir'])
 if not (app/'backend/dist/src/photo-moderation/photo-moderation.service.js').exists():
     raise SystemExit('Deploy the photo moderation release first; configuration unchanged')
 try:
-    request=urllib.request.Request('https://api.openai.com/v1/models/gpt-4.1-mini',headers={'Authorization':'Bearer '+config['key']})
+    request=urllib.request.Request('https://api.openai.com/v1/responses',data=json.dumps({'model':'gpt-4.1-mini','input':'Reply only OK.','max_output_tokens':16,'store':False}).encode(),headers={'Authorization':'Bearer '+config['key'],'Content-Type':'application/json'},method='POST')
     with urllib.request.urlopen(request,timeout=20) as response:
-        if response.status != 200: raise ValueError('provider unavailable')
+        if response.status != 200 or json.load(response).get('status') != 'completed': raise ValueError('provider unavailable')
 except Exception:
     raise SystemExit('OpenAI credential/model check failed; configuration unchanged')
 path=app/'backend/.env'
@@ -34,6 +34,13 @@ os.replace(temporary,path)
 try:
     subprocess.run(['systemctl','restart','reestr-backend'],check=True)
     subprocess.run(['systemctl','is-active','--quiet','reestr-backend'],check=True)
+    for attempt in range(15):
+        try:
+            with urllib.request.urlopen('http://127.0.0.1:3000/api/v1/health',timeout=2) as response:
+                if json.load(response).get('ok') is True: break
+        except Exception: pass
+        time.sleep(1)
+    else: raise RuntimeError('backend health check failed')
 except Exception:
     shutil.copyfile(backup,path)
     os.chmod(path,0o600)
