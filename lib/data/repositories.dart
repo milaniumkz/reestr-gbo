@@ -17,7 +17,7 @@ class AuthRepository {
   final ApiClient _api;
 
   Future<PasswordLoginResult> login(String phone, String password, String role, {String? bin}) async {
-    if (AppEnvironment.isDemo) return PasswordLoginResult(user: AppUser(id: 'demo', phone: phone, roles: [role]));
+    if (AppEnvironment.isDemo) { return PasswordLoginResult(user: AppUser(id: 'demo', phone: phone, roles: [role])); }
     final response = await _api.postJson('/auth/login', {
       'phone': phone, 'password': password, 'role': role,
       if (bin != null && bin.isNotEmpty) 'bin': bin,
@@ -35,7 +35,7 @@ class AuthRepository {
   }
 
   Future<AppUser> changeInitialPassword(String token, String password, String confirmation, String role, {String? bin}) async {
-    if (AppEnvironment.isDemo) return AppUser(id:'demo',phone:'',roles:[role]);
+    if (AppEnvironment.isDemo) { return AppUser(id:'demo',phone:'',roles:[role]); }
     final response = await _api.postJson('/auth/password/change', {'passwordChangeToken':token,'newPassword':password,'confirmation':confirmation});
     final user = await _storeAuthResponse(response);
     await _storeLoginContext(role,bin);

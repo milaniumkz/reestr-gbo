@@ -990,7 +990,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         setState(() { currentUser = null; passwordChangeToken = result.passwordChangeToken; newPassword = ''; confirmPassword = ''; apiState = 'Установите собственный пароль'; });
         go(3);
       } else if (result.user != null) { await _enterAuthenticated(result.user!); }
-    } catch (error) { if (mounted) setState(() => apiState = error is ApiException ? error.message : 'Не удалось выполнить вход'); }
+    } catch (error) { if (mounted) { setState(() => apiState = error is ApiException ? error.message : 'Не удалось выполнить вход'); } }
     finally { if (mounted) setState(() => authBusy = false); }
   }
 
@@ -1005,7 +1005,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       if (!mounted) return;
       setState(() { passwordChangeToken = null; newPassword = ''; confirmPassword = ''; });
       await _enterAuthenticated(user);
-    } catch (error) { if (mounted) setState(() => apiState = error is ApiException ? error.message : 'Не удалось изменить пароль'); }
+    } catch (error) { if (mounted) { setState(() => apiState = error is ApiException ? error.message : 'Не удалось изменить пароль'); } }
     finally { if (mounted) setState(() => authBusy = false); }
   }
 
