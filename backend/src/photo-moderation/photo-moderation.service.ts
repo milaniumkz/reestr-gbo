@@ -1,9 +1,6 @@
-import {
-  BadRequestException,
-  Injectable,
-  ServiceUnavailableException,
-} from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import sharp from "sharp";
+import { PhotoAnalysisLimiter } from "./photo-analysis-limiter";
 import { screenEvidence, shouldReshoot } from "./screen-evidence";
 import { analyzePixels, reviewReasons } from "./local-photo-analysis";
 export type PhotoCheck = {
@@ -15,7 +12,7 @@ export type PhotoCheck = {
 const MODEL = "local-screening-v2";
 @Injectable()
 export class PhotoModerationService {
-  private active = 0;
+  private readonly limiter = new PhotoAnalysisLimiter();
   status() {
     return {
       enabled: process.env.PHOTO_MODERATION_MODE !== "off",
@@ -24,6 +21,8 @@ export class PhotoModerationService {
       provider: "local",
       model: MODEL,
       authenticityGuaranteed: false,
+      analysisRevision: "v2-performance-1",
+      load: this.limiter.status(),
     };
   }
   async check(
@@ -48,11 +47,7 @@ export class PhotoModerationService {
         "manual_review",
         "PDF: требуется ручная проверка всех страниц",
       );
-    if (this.active >= 2)
-      throw new ServiceUnavailableException(
-        "Проверка фото занята. Повторите загрузку через несколько секунд",
-      );
-    this.active++;
+    const release = await this.limiter.acquire();
     try {
       const input = sharp(buffer, {
         limitInputPixels: 40_000_000,
@@ -85,6 +80,12 @@ export class PhotoModerationService {
         .greyscale()
         .raw()
         .toBuffer({ resolveWithObject: true });
+      const metrics = analyzePixels(data, info.width, info.height);
+      // Isolated heuristic signals remain advisory; only combined enclosure + banding requires reshooting.
+      if (metrics.contrast < 2 && metrics.edgeFraction < 0.001)
+        throw new BadRequestException(
+          "На фото почти нет различимых деталей. Сфотографируйте документ заново",
+        );
       const rgb = await input
         .clone()
         .rotate()
@@ -108,12 +109,6 @@ export class PhotoModerationService {
         throw new BadRequestException(
           "Обнаружены совместные признаки экрана: тёмная рамка и повторяющиеся полосы. Сфотографируйте оригинал документа вне экрана другого устройства",
         );
-      const metrics = analyzePixels(data, info.width, info.height);
-      // Isolated heuristic signals remain advisory; only combined enclosure + banding requires reshooting.
-      if (metrics.contrast < 2 && metrics.edgeFraction < 0.001)
-        throw new BadRequestException(
-          "На фото почти нет различимых деталей. Сфотографируйте документ заново",
-        );
       const reasons = reviewReasons(metrics);
       if (evidence.enclosedDisplay)
         reasons.push(
@@ -135,7 +130,7 @@ export class PhotoModerationService {
         "Не удалось прочитать фотографию. Загрузите исправное изображение размером до 40 мегапикселей",
       );
     } finally {
-      this.active--;
+      release();
     }
   }
 }

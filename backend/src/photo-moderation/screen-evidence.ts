@@ -28,16 +28,22 @@ function enclosedDisplay(gray: Uint8Array, width: number, height: number) {
       maxX = Math.max(maxX, x);
       minY = Math.min(minY, y);
       maxY = Math.max(maxY, y);
-      for (const j of [
-        x > 0 ? i - 1 : -1,
-        x < width - 1 ? i + 1 : -1,
-        y > 0 ? i - width : -1,
-        y < height - 1 ? i + width : -1,
-      ]) {
-        if (j >= 0 && !seen[j] && gray[j] >= 120) {
-          seen[j] = 1;
-          queue[tail++] = j;
-        }
+      // Avoid allocating a neighbours array for every visited pixel.
+      if (x > 0 && !seen[i - 1] && gray[i - 1] >= 120) {
+        seen[i - 1] = 1;
+        queue[tail++] = i - 1;
+      }
+      if (x < width - 1 && !seen[i + 1] && gray[i + 1] >= 120) {
+        seen[i + 1] = 1;
+        queue[tail++] = i + 1;
+      }
+      if (y > 0 && !seen[i - width] && gray[i - width] >= 120) {
+        seen[i - width] = 1;
+        queue[tail++] = i - width;
+      }
+      if (y < height - 1 && !seen[i + width] && gray[i + width] >= 120) {
+        seen[i + width] = 1;
+        queue[tail++] = i + width;
       }
     }
     const w = maxX - minX + 1,
@@ -88,6 +94,20 @@ export function screenEvidence(
     gray[i] = Math.round(
       0.299 * rgb[i * 3] + 0.587 * rgb[i * 3 + 1] + 0.114 * rgb[i * 3 + 2],
     );
+  // The eligibility mask is independent of projection direction and patch location.
+  const eligible = new Uint8Array(gray.length);
+  for (let i = 0; i < gray.length; i++) {
+    if (gray[i] < 100) continue;
+    if (
+      i > width &&
+      i < gray.length - width &&
+      Math.abs(gray[i + 1] - gray[i - 1]) +
+        Math.abs(gray[i + width] - gray[i - width]) >
+        20
+    )
+      continue;
+    eligible[i] = 1;
+  }
   const enclosure = enclosedDisplay(gray, width, height);
   const enclosed = !!enclosure;
   const region = enclosure || { x: 0, y: 0, width, height };
@@ -101,6 +121,12 @@ export function screenEvidence(
       chromaVotes = 0;
     const cos = Math.cos(angle),
       sin = Math.sin(angle);
+    // Reuse one projection geometry across all four patches.
+    const bins = new Int16Array(size * size);
+    for (let y = 0; y < size; y++)
+      for (let x = 0; x < size; x++)
+        bins[y * size + x] =
+          Math.round((x - size / 2) * cos + (y - size / 2) * sin) + size;
     for (const [cx, cy] of [
       [0.38, 0.38],
       [0.62, 0.38],
@@ -114,19 +140,9 @@ export function screenEvidence(
         y0 = Math.round(region.y + region.height * cy - size / 2);
       for (let y = 0; y < size; y++)
         for (let x = 0; x < size; x++) {
-          const bin =
-            Math.round((x - size / 2) * cos + (y - size / 2) * sin) + size;
           const i = (y + y0) * width + x + x0;
-          // Compare smooth, light background regions: ink strokes, table rules and their antialiasing must not imitate moire.
-          if (gray[i] < 100) continue;
-          if (
-            i > width &&
-            i < gray.length - width &&
-            Math.abs(gray[i + 1] - gray[i - 1]) +
-              Math.abs(gray[i + width] - gray[i - width]) >
-              20
-          )
-            continue;
+          if (!eligible[i]) continue;
+          const bin = bins[y * size + x];
           count[bin]++;
           luma[bin] += gray[i];
           chroma[bin] += rgb[i * 3] - rgb[i * 3 + 1];
@@ -157,6 +173,8 @@ export function screenEvidence(
     }
     if (luminanceVotes >= 3) coherentBands = true;
     if (chromaVotes >= 3) colorBands = true;
+    // Both output flags are monotonic; later directions cannot add information.
+    if (coherentBands && colorBands) break;
   }
   return { enclosedDisplay: enclosed, coherentBands, colorBands };
 }
