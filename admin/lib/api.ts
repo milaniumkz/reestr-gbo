@@ -309,7 +309,7 @@ export type RegistryVehicle = {
     validUntil: string;
     inspection?: { organization?: Organization };
   }>;
-  cylinders?: Array<{ serialNumber: string; validUntil: string }>;
+  cylinders?: Array<{ serialNumber: string; validUntil: string; producedAt?: string }>;
   owners?: Array<{ fullName: string; iin?: string }>;
 };
 

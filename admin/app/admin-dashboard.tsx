@@ -2246,6 +2246,7 @@ function exportRows(active: string, data: ExportState): Array<Record<string, str
       organization: row.certificates?.[0]?.inspection?.organization?.name ?? '',
       cylinder: row.cylinders?.[0]?.serialNumber ?? '',
       cylinderValidUntil: row.cylinders?.[0]?.validUntil ?? '',
+      cylinderProducedAt: row.cylinders?.[0]?.producedAt ?? '',
     }));
   }
   if (active === 'Проверки свидетельств') {

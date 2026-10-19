@@ -92,6 +92,7 @@ export function XlsxImportsTable({
             ['ТС', selectedVehicle ? `${selectedVehicle.plateNumber} · ${selectedVehicle.vin}` : '-'],
             ['Владелец', selectedOwner ? `${selectedOwner.fullName ?? '-'} · ${selectedOwner.iin ?? '-'}` : '-'],
             ['Баллон', selectedCylinder ? `${selectedCylinder.serialNumber} · ${selectedCylinder.volumeLiters ?? '-'} л` : '-'],
+            ['Дата выпуска баллона', selectedCylinder?.producedAt ? new Date(selectedCylinder.producedAt).toLocaleDateString('ru-RU', {timeZone:'UTC'}) : '-'],
             ['Инспекция', selectedInspection?.id ?? '-'],
             ['ИО', selectedOrganization?.name ?? selected.organizationId ?? '-'],
           ]}

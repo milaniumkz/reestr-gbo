@@ -1355,6 +1355,8 @@ export class CertificatesService {
       this.row(doc, "Владелец", owner?.fullName ?? "-");
       this.row(doc, "ИИН", owner?.iin ?? "-");
       this.row(doc, "Баллон", cylinder?.serialNumber ?? "-");
+      this.row(doc, "Дата выпуска баллона", cylinder?.producedAt ? cylinder.producedAt.toISOString().slice(0,10).split("-").reverse().join(".") : "Не указана");
+      this.row(doc, "Тип газа", cylinder?.fuelType ?? "Не указан");
       this.row(
         doc,
         "Инспекционный орган",

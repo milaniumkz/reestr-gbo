@@ -73,8 +73,10 @@ Future<PickedLocalFile?> captureDocumentPhoto({
       final sourceWidth = widthInView / scale;
       final sourceHeight = sourceWidth / frameAspectRatio;
       final outputScale = math.min(1.0, 2200 / math.max(sourceWidth, sourceHeight));
-      final canvas = html.CanvasElement(width: (sourceWidth * outputScale).round(), height: (sourceHeight * outputScale).round());
-      canvas.context2D.drawImageScaledFromSource(video, (video.videoWidth - sourceWidth) / 2, (video.videoHeight - sourceHeight) / 2, sourceWidth, sourceHeight, canvas.width, canvas.height);
+      final outputWidth = (sourceWidth * outputScale).round();
+      final outputHeight = (sourceHeight * outputScale).round();
+      final canvas = html.CanvasElement(width: outputWidth, height: outputHeight);
+      canvas.context2D.drawImageScaledFromSource(video, (video.videoWidth - sourceWidth) / 2, (video.videoHeight - sourceHeight) / 2, sourceWidth, sourceHeight, 0, 0, outputWidth, outputHeight);
       final data = canvas.toDataUrl('image/jpeg', 0.82);
       if (!result.isCompleted) {
         result.complete(

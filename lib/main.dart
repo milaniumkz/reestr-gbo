@@ -1209,7 +1209,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       reducerName = _nonEmpty(data['reducerName'], reducerName);
       controlUnitName = _nonEmpty(data['controlUnitName'], controlUnitName);
       final producedAt = data['producedAt'] ?? '';
-      if (producedAt.length >= 10) cylinderProductionDate = producedAt.substring(0, 10);
+      if (producedAt.length >= 10) { cylinderProductionDate = producedAt.substring(0, 10); }
       draftInspectionId = null;
       draftVehicleId = null;
       protectedInspectionPhotosLocked = false;
@@ -1375,7 +1375,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
   }
 
   String _uploadErrorText(Object error) {
-    if (error is ApiException && [400, 413, 503].contains(error.statusCode)) return error.message;
+    if (error is ApiException && [400, 413, 503].contains(error.statusCode)) { return error.message; }
     final text = error.toString();
     if (text.contains('401')) return 'Сессия истекла, войдите заново';
     if (text.contains('403')) return 'Нет доступа к инспекционному органу';
@@ -5906,7 +5906,7 @@ class _VehicleStep extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _ProgressDots(step: 3),
+            _ProgressDots(step: 2),
             const SizedBox(height: 26),
             _Input(
               label: 'Государственный номер',
@@ -6002,7 +6002,7 @@ class _PhotoStep extends StatelessWidget {
             icon: locked ? Icons.lock_rounded : Icons.camera_alt_rounded,
             onTap: locked ? null : onCamera,
           ),
-          if (secondary != null) secondary!,
+          ?secondary,
           if (photoName != null || uploaded) ...[
             const SizedBox(height: 12),
             _PrimaryButton(
@@ -9426,28 +9426,7 @@ class _PhotoBox extends StatelessWidget {
                     fit: BoxFit.contain,
                     gaplessPlayback: true,
                   ),
-                  Positioned(
-                    left: 12,
-                    right: 12,
-                    bottom: 12,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.92),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Text(
-                        caption,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                        style: _bold,
-                      ),
-                    ),
-                  ),
+
                 ],
               ),
             )),
