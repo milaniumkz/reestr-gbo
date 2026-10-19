@@ -91,8 +91,15 @@ class _DocumentCameraScreenState extends State<DocumentCameraScreen>
     setState(() => _busy = true);
     try {
       final photo = await controller!.takePicture();
-      final cropped = await compute(cropDocumentPhoto, <String, Object>{'bytes': await photo.readAsBytes(), 'previewRatio': 1 / controller.value.aspectRatio, 'frameRatio': widget.frameAspectRatio});
-      final file = PickedLocalFile(name: 'document-${DateTime.now().millisecondsSinceEpoch}.jpg', bytes: cropped);
+      final cropped = await compute(cropDocumentPhoto, <String, Object>{
+        'bytes': await photo.readAsBytes(),
+        'previewRatio': 1 / controller.value.aspectRatio,
+        'frameRatio': widget.frameAspectRatio,
+      });
+      final file = PickedLocalFile(
+        name: 'document-${DateTime.now().millisecondsSinceEpoch}.jpg',
+        bytes: cropped,
+      );
       if (mounted) Navigator.of(context).pop(file);
     } catch (_) {
       if (mounted) {
@@ -141,17 +148,48 @@ class _DocumentCameraScreenState extends State<DocumentCameraScreen>
           : Column(
               children: [
                 Expanded(
-                  child: LayoutBuilder(builder: (context, constraints) {
-                    final ratio = 1 / controller!.value.aspectRatio;
-                    final width = constraints.maxWidth < constraints.maxHeight * ratio ? constraints.maxWidth : constraints.maxHeight * ratio;
-                    return Center(child: SizedBox(width: width, height: width / ratio,
-                      child: Stack(fit: StackFit.expand, children: [
-                        CameraPreview(controller),
-                        IgnorePointer(child: CustomPaint(painter: DocumentFramePainter(widget.frameAspectRatio))),
-                        const Positioned(left: 8, right: 8, bottom: 8, child: Text('В СНИМОК ПОПАДЁТ ТОЛЬКО ОБЛАСТЬ ВНУТРИ РАМКИ', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 12, backgroundColor: Colors.black54))),
-                      ]),
-                    ));
-                  }),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final ratio = 1 / controller!.value.aspectRatio;
+                      final width =
+                          constraints.maxWidth < constraints.maxHeight * ratio
+                          ? constraints.maxWidth
+                          : constraints.maxHeight * ratio;
+                      return Center(
+                        child: SizedBox(
+                          width: width,
+                          height: width / ratio,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              CameraPreview(controller),
+                              IgnorePointer(
+                                child: CustomPaint(
+                                  painter: DocumentFramePainter(
+                                    widget.frameAspectRatio,
+                                  ),
+                                ),
+                              ),
+                              const Positioned(
+                                left: 8,
+                                right: 8,
+                                bottom: 8,
+                                child: Text(
+                                  'В СНИМОК ПОПАДЁТ ТОЛЬКО ОБЛАСТЬ ВНУТРИ РАМКИ',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    backgroundColor: Colors.black54,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ),
                 SafeArea(
                   top: false,

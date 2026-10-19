@@ -39,7 +39,10 @@ const cardRadius = 18.0;
 bool _validCylinderProductionDate(String value) {
   if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(value)) return false;
   final date = DateTime.tryParse(value);
-  return date != null && date.year >= 1900 && !date.isAfter(DateTime.now()) && date.toIso8601String().startsWith(value);
+  return date != null &&
+      date.year >= 1900 &&
+      !date.isAfter(DateTime.now()) &&
+      date.toIso8601String().startsWith(value);
 }
 
 const protectedInspectionDocuments = <String>{
@@ -1209,7 +1212,9 @@ class _ErsiDemoState extends State<ErsiDemo> {
       reducerName = _nonEmpty(data['reducerName'], reducerName);
       controlUnitName = _nonEmpty(data['controlUnitName'], controlUnitName);
       final producedAt = data['producedAt'] ?? '';
-      if (producedAt.length >= 10) { cylinderProductionDate = producedAt.substring(0, 10); }
+      if (producedAt.length >= 10) {
+        cylinderProductionDate = producedAt.substring(0, 10);
+      }
       draftInspectionId = null;
       draftVehicleId = null;
       protectedInspectionPhotosLocked = false;
@@ -1330,7 +1335,11 @@ class _ErsiDemoState extends State<ErsiDemo> {
         final file = await Navigator.of(context).push<PickedLocalFile>(
           MaterialPageRoute(
             builder: (_) => DocumentCameraScreen(
-              title: kind == 'tech_passport' ? 'Фото техпаспорта' : kind == 'cylinder' ? 'Фото бирки баллона' : 'Фото автомобиля',
+              title: kind == 'tech_passport'
+                  ? 'Фото техпаспорта'
+                  : kind == 'cylinder'
+                  ? 'Фото бирки баллона'
+                  : 'Фото автомобиля',
               frameAspectRatio: 1.6,
             ),
           ),
@@ -1375,7 +1384,9 @@ class _ErsiDemoState extends State<ErsiDemo> {
   }
 
   String _uploadErrorText(Object error) {
-    if (error is ApiException && [400, 413, 503].contains(error.statusCode)) { return error.message; }
+    if (error is ApiException && [400, 413, 503].contains(error.statusCode)) {
+      return error.message;
+    }
     final text = error.toString();
     if (text.contains('401')) return 'Сессия истекла, войдите заново';
     if (text.contains('403')) return 'Нет доступа к инспекционному органу';
@@ -1400,12 +1411,23 @@ class _ErsiDemoState extends State<ErsiDemo> {
       PickedLocalFile? file;
       if (camera && !kIsWeb) {
         file = await Navigator.of(context).push<PickedLocalFile>(
-          MaterialPageRoute(builder: (_) => DocumentCameraScreen(title: label, frameAspectRatio: type == 'tech_passport_back' ? 1.6 : .71)),
+          MaterialPageRoute(
+            builder: (_) => DocumentCameraScreen(
+              title: label,
+              frameAspectRatio: type == 'tech_passport_back' ? 1.6 : .71,
+            ),
+          ),
         );
       } else {
-        final extensions = type == 'tech_passport_back' ? const ['jpg', 'jpeg', 'png'] : const ['pdf', 'jpg', 'jpeg', 'png'];
+        final extensions = type == 'tech_passport_back'
+            ? const ['jpg', 'jpeg', 'png']
+            : const ['pdf', 'jpg', 'jpeg', 'png'];
         file = kIsWeb
-            ? await pickLocalFile(extensions, camera: camera, frameAspectRatio: type == 'tech_passport_back' ? 1.6 : .71)
+            ? await pickLocalFile(
+                extensions,
+                camera: camera,
+                frameAspectRatio: type == 'tech_passport_back' ? 1.6 : .71,
+              )
             : await _pickPluginFile(extensions);
       }
       if (file == null) {
@@ -1459,8 +1481,10 @@ class _ErsiDemoState extends State<ErsiDemo> {
       if (vehicleVin.trim().isEmpty) 'VIN',
       if (cylinderNumber.trim().isEmpty) 'номер баллона',
       if (cylinderVolume.trim().isEmpty) 'объем баллона',
-      if (!_validCylinderProductionDate(cylinderProductionDate)) 'полную дату выпуска баллона',
-      if (!const ['СНГ', 'КПГ'].contains(cylinderFuel.trim())) 'тип газа (СНГ или КПГ)',
+      if (!_validCylinderProductionDate(cylinderProductionDate))
+        'полную дату выпуска баллона',
+      if (!const ['СНГ', 'КПГ'].contains(cylinderFuel.trim()))
+        'тип газа (СНГ или КПГ)',
       if (reducerName.trim().isEmpty) 'название редуктора',
       if (controlUnitName.trim().isEmpty)
         'название электронного блока управления',
@@ -1663,7 +1687,8 @@ class _ErsiDemoState extends State<ErsiDemo> {
       go(16);
       return;
     }
-    if (message.contains('тип газа') || message.contains('баллон') ||
+    if (message.contains('тип газа') ||
+        message.contains('баллон') ||
         message.contains('редуктор') ||
         message.contains('электронного блока')) {
       go(17);
@@ -1851,10 +1876,12 @@ class _ErsiDemoState extends State<ErsiDemo> {
 
   Future<void> _goCylinderNext() async {
     final missing = <String>[
-      if (!const ['СНГ', 'КПГ'].contains(cylinderFuel.trim())) 'тип газа (СНГ или КПГ)',
+      if (!const ['СНГ', 'КПГ'].contains(cylinderFuel.trim()))
+        'тип газа (СНГ или КПГ)',
       if (cylinderNumber.trim().isEmpty) 'номер баллона',
       if (cylinderVolume.trim().isEmpty) 'объем баллона',
-      if (!_validCylinderProductionDate(cylinderProductionDate)) 'полную дату выпуска баллона',
+      if (!_validCylinderProductionDate(cylinderProductionDate))
+        'полную дату выпуска баллона',
       if (reducerName.trim().isEmpty) 'название редуктора',
       if (controlUnitName.trim().isEmpty)
         'название электронного блока управления',
@@ -2013,12 +2040,16 @@ class _ErsiDemoState extends State<ErsiDemo> {
       if (!mounted) return;
       final fileTypes = detail.files.map((file) => file.type).toSet();
       final packageUploaded = <String, bool>{
-        for (final type in [...inspectionPackageDocuments.keys, 'tech_passport_back'])
+        for (final type in [
+          ...inspectionPackageDocuments.keys,
+          'tech_passport_back',
+        ])
           type: fileTypes.contains(type),
       };
       final packageNames = <String, String>{
         for (final file in detail.files)
-          if (inspectionPackageDocuments.containsKey(file.type) || file.type == 'tech_passport_back')
+          if (inspectionPackageDocuments.containsKey(file.type) ||
+              file.type == 'tech_passport_back')
             file.type: inspectionRequiredLabels[file.type] ?? file.type,
       };
       setState(() {
@@ -2276,7 +2307,13 @@ class _ErsiDemoState extends State<ErsiDemo> {
       15 => _OwnerStep(
         reviewFiles:
             selectedInspection?.files
-                .where((file) => ['applicant_application', 'tech_passport', 'tech_passport_back'].contains(file.type))
+                .where(
+                  (file) => [
+                    'applicant_application',
+                    'tech_passport',
+                    'tech_passport_back',
+                  ].contains(file.type),
+                )
                 .toList() ??
             const [],
         inspectionDate: inspectionIssuedAt,
@@ -2303,8 +2340,11 @@ class _ErsiDemoState extends State<ErsiDemo> {
         reviewFiles:
             selectedInspection?.files
                 .where(
-                  (file) =>
-                      ['tech_passport', 'tech_passport_back', 'vehicle_photo'].contains(file.type),
+                  (file) => [
+                    'tech_passport',
+                    'tech_passport_back',
+                    'vehicle_photo',
+                  ].contains(file.type),
                 )
                 .toList() ??
             const [],
@@ -2377,15 +2417,41 @@ class _ErsiDemoState extends State<ErsiDemo> {
         photoBytes: techPassportPhotoBytes,
         uploaded: techPassportPhotoUploaded,
         locked: protectedInspectionPhotosLocked && techPassportPhotoUploaded,
-        secondary: Column(children: [
-          const SizedBox(height: 16),
-          const Text('ОБРАТНАЯ СТОРОНА ТЕХПАСПОРТА — НЕОБЯЗАТЕЛЬНО', style: _section),
-          if (packageDocumentBytes['tech_passport_back'] != null)
-            _PhotoBox(caption: 'Обратная сторона техпаспорта', imageBytes: packageDocumentBytes['tech_passport_back'], onTap: () => _pickInspectionDocument('tech_passport_back', 'Обратная сторона техпаспорта', camera: true)),
-          for (final file in selectedInspection?.files.where((file) => file.type == 'tech_passport_back') ?? <InspectionFileInfo>[])
-            if (packageDocumentBytes['tech_passport_back'] == null) _InspectionFileCard(file: file),
-          _PrimaryButton(text: 'Сфотографировать вторую сторону', icon: Icons.camera_alt_rounded, onTap: () => _pickInspectionDocument('tech_passport_back', 'Обратная сторона техпаспорта', camera: true)),
-        ]),
+        secondary: Column(
+          children: [
+            const SizedBox(height: 16),
+            const Text(
+              'ОБРАТНАЯ СТОРОНА ТЕХПАСПОРТА — НЕОБЯЗАТЕЛЬНО',
+              style: _section,
+            ),
+            if (packageDocumentBytes['tech_passport_back'] != null)
+              _PhotoBox(
+                caption: 'Обратная сторона техпаспорта',
+                imageBytes: packageDocumentBytes['tech_passport_back'],
+                onTap: () => _pickInspectionDocument(
+                  'tech_passport_back',
+                  'Обратная сторона техпаспорта',
+                  camera: true,
+                ),
+              ),
+            for (final file
+                in selectedInspection?.files.where(
+                      (file) => file.type == 'tech_passport_back',
+                    ) ??
+                    <InspectionFileInfo>[])
+              if (packageDocumentBytes['tech_passport_back'] == null)
+                _InspectionFileCard(file: file),
+            _PrimaryButton(
+              text: 'Сфотографировать вторую сторону',
+              icon: Icons.camera_alt_rounded,
+              onTap: () => _pickInspectionDocument(
+                'tech_passport_back',
+                'Обратная сторона техпаспорта',
+                camera: true,
+              ),
+            ),
+          ],
+        ),
         onCamera: () => _captureInspectionPhoto('tech_passport'),
         onNext: () => go(21),
       ),
@@ -4494,8 +4560,11 @@ class _InspectionDetailScreen extends StatelessWidget {
               photoColumns: const ['applicant_application', 'tech_passport'],
               files: files
                   .where(
-                    (file) =>
-                        ['applicant_application', 'tech_passport', 'tech_passport_back'].contains(file.type),
+                    (file) => [
+                      'applicant_application',
+                      'tech_passport',
+                      'tech_passport_back',
+                    ].contains(file.type),
                   )
                   .toList(),
               child: _CertificateDetailsCard(
@@ -4588,7 +4657,9 @@ class _InspectionDetailScreen extends StatelessWidget {
                   (
                     Icons.event_rounded,
                     'ДАТА ВЫПУСКА БАЛЛОНА',
-                    item.cylinderProducedAt.isEmpty ? 'Не указана' : _displayDate(item.cylinderProducedAt),
+                    item.cylinderProducedAt.isEmpty
+                        ? 'Не указана'
+                        : _displayDate(item.cylinderProducedAt),
                   ),
                   (
                     Icons.event_rounded,
@@ -4665,27 +4736,48 @@ class _QualityDataWithPhotos extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (!files.any((file) => file.type == type))
-                _InfoBox(title: inspectionRequiredLabels[type] ?? type, text: 'Фото не загружено'),
-              for (final file in files.where((file) => file.type == type || (type == 'tech_passport' && file.type == 'tech_passport_back')))
-                Padding(padding: const EdgeInsets.only(bottom: 12), child: _InspectionFileCard(file: file)),
+                _InfoBox(
+                  title: inspectionRequiredLabels[type] ?? type,
+                  text: 'Фото не загружено',
+                ),
+              for (final file in files.where(
+                (file) =>
+                    file.type == type ||
+                    (type == 'tech_passport' &&
+                        file.type == 'tech_passport_back'),
+              ))
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _InspectionFileCard(file: file),
+                ),
             ],
           ),
       ];
-      return LayoutBuilder(builder: (context, constraints) {
-        final width = constraints.maxWidth < 900 ? 900.0 : constraints.maxWidth;
-        final row = SizedBox(width: width, child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (var index = 0; index < columns.length; index++) ...[
-              if (index > 0) const SizedBox(width: 16),
-              Expanded(child: columns[index]),
-            ],
-          ],
-        ));
-        return constraints.maxWidth < 900
-            ? SingleChildScrollView(scrollDirection: Axis.horizontal, child: row)
-            : row;
-      });
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth < 900
+              ? 900.0
+              : constraints.maxWidth;
+          final row = SizedBox(
+            width: width,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var index = 0; index < columns.length; index++) ...[
+                  if (index > 0) const SizedBox(width: 16),
+                  Expanded(child: columns[index]),
+                ],
+              ],
+            ),
+          );
+          return constraints.maxWidth < 900
+              ? SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: row,
+                )
+              : row;
+        },
+      );
     }
     if (files.isEmpty) return child;
     final photos = Column(
@@ -9416,20 +9508,22 @@ class _PhotoBox extends StatelessWidget {
                 if (tall) const SizedBox(height: 32),
               ],
             )
-          : DocumentImageFrame(image: MemoryImage(Uint8List.fromList(imageBytes!)), child: ClipRRect(
-              borderRadius: BorderRadius.circular(22),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Image.memory(
-                    Uint8List.fromList(imageBytes!),
-                    fit: BoxFit.contain,
-                    gaplessPlayback: true,
-                  ),
-
-                ],
+          : DocumentImageFrame(
+              image: MemoryImage(Uint8List.fromList(imageBytes!)),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(22),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Image.memory(
+                      Uint8List.fromList(imageBytes!),
+                      fit: BoxFit.contain,
+                      gaplessPlayback: true,
+                    ),
+                  ],
+                ),
               ),
-            )),
+            ),
     ),
   );
 }

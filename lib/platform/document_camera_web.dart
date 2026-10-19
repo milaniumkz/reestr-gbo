@@ -66,17 +66,39 @@ Future<PickedLocalFile?> captureDocumentPhoto({
   final captureSub = capture.onClick.listen((_) {
     try {
       final bounds = video.getBoundingClientRect();
-      final scale = math.min(bounds.width / video.videoWidth, bounds.height / video.videoHeight);
+      final scale = math.min(
+        bounds.width / video.videoWidth,
+        bounds.height / video.videoHeight,
+      );
       final visibleWidth = video.videoWidth * scale;
       final visibleHeight = video.videoHeight * scale;
-      final widthInView = math.min(visibleWidth * .9, visibleHeight * .82 * frameAspectRatio);
+      final widthInView = math.min(
+        visibleWidth * .9,
+        visibleHeight * .82 * frameAspectRatio,
+      );
       final sourceWidth = widthInView / scale;
       final sourceHeight = sourceWidth / frameAspectRatio;
-      final outputScale = math.min(1.0, 2200 / math.max(sourceWidth, sourceHeight));
+      final outputScale = math.min(
+        1.0,
+        2200 / math.max(sourceWidth, sourceHeight),
+      );
       final outputWidth = (sourceWidth * outputScale).round();
       final outputHeight = (sourceHeight * outputScale).round();
-      final canvas = html.CanvasElement(width: outputWidth, height: outputHeight);
-      canvas.context2D.drawImageScaledFromSource(video, (video.videoWidth - sourceWidth) / 2, (video.videoHeight - sourceHeight) / 2, sourceWidth, sourceHeight, 0, 0, outputWidth, outputHeight);
+      final canvas = html.CanvasElement(
+        width: outputWidth,
+        height: outputHeight,
+      );
+      canvas.context2D.drawImageScaledFromSource(
+        video,
+        (video.videoWidth - sourceWidth) / 2,
+        (video.videoHeight - sourceHeight) / 2,
+        sourceWidth,
+        sourceHeight,
+        0,
+        0,
+        outputWidth,
+        outputHeight,
+      );
       final data = canvas.toDataUrl('image/jpeg', 0.82);
       if (!result.isCompleted) {
         result.complete(
@@ -104,12 +126,19 @@ Future<PickedLocalFile?> captureDocumentPhoto({
     await video.play();
     void alignFrame() {
       final bounds = video.getBoundingClientRect();
-      final scale = math.min(bounds.width / video.videoWidth, bounds.height / video.videoHeight);
-      final width = math.min(video.videoWidth * scale * .9, video.videoHeight * scale * .82 * frameAspectRatio);
+      final scale = math.min(
+        bounds.width / video.videoWidth,
+        bounds.height / video.videoHeight,
+      );
+      final width = math.min(
+        video.videoWidth * scale * .9,
+        video.videoHeight * scale * .82 * frameAspectRatio,
+      );
       frame.style.width = '${width}px';
       frame.style.height = '${width / frameAspectRatio}px';
       frame.style.boxSizing = 'border-box';
     }
+
     alignFrame();
     resizeSub = html.window.onResize.listen((_) => alignFrame());
     capture.disabled = false;
