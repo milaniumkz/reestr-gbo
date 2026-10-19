@@ -24,6 +24,7 @@ on:
           - restore-confirmed-inspector
           - diagnose-members
           - configure-photo-moderation
+          - photo-moderation-status
           - status
           - logs
           - restart
@@ -156,6 +157,7 @@ jobs:
             restore-confirmed-inspector) bash ops/restore-confirmed-inspector.sh ;;
             diagnose-members) bash ops/diagnose-members.sh ;;
             configure-photo-moderation) python3 ops/configure-photo-moderation.py ;;
+            photo-moderation-status) bash ops/photo-moderation-status.sh ;;
             deploy-admin) DEPLOY_COMPONENTS=admin bash ops/deploy-production.sh "$(git rev-parse HEAD)" ;;
             deploy-services) DEPLOY_COMPONENTS=services bash ops/deploy-production.sh "$(git rev-parse HEAD)" ;;
             inventory-inspection-data) bash ops/purge-inspection-data.sh inventory ;;
