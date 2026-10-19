@@ -88,3 +88,9 @@ backend/.env.*
 admin/.env
 admin/.env.*
 !admin/.env.example
+
+# Private provisioning material and local technical-panel state
+.private/
+tech/.next/
+tech/node_modules/
+artifacts/private/

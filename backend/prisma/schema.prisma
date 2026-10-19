@@ -12,6 +12,7 @@ model User {
   phone       String    @unique
   email       String?
   fullName    String
+  residenceCity String?
   iin         String?
   isBlocked   Boolean   @default(false)
   passwordHash String @default("$2b$12$i.sS/wBAoDl.IRiJFeQjue1wpHeFFZ9dlER8f/EAmmreRVcVQAElq")
@@ -420,8 +421,174 @@ model AuditLog {
   action    String
   entity    String
   entityId  String?
+  requestId String?
+  sessionId String?
+  appVersion String?
   ipAddress String?
   metadata  Json?
   createdAt DateTime @default(now())
   actor     User?    @relation(fields: [actorId], references: [id])
+}
+
+model TechAccount {
+id String @id @default(uuid())
+login String @unique
+fullName String
+role String
+permissions String[] @default([])
+passwordHash String
+totpEncrypted String?
+totpConfirmedAt DateTime?
+lastTotpStep Int @default(-1)
+passwordChangedAt DateTime @default(now())
+version Int @default(0)
+active Boolean @default(true)
+failedAttempts Int @default(0)
+lockedUntil DateTime?
+createdAt DateTime @default(now())
+updatedAt DateTime @updatedAt
+sessions TechSession[]
+}
+
+model TechSession {
+id String @id @default(uuid())
+tokenHash String @unique
+accountId String
+account TechAccount @relation(fields:[accountId],references:[id],onDelete:Cascade)
+version Int
+mfaVerified Boolean @default(false)
+expiresAt DateTime
+idleExpiresAt DateTime
+reauthenticatedUntil DateTime?
+revokedAt DateTime?
+createdAt DateTime @default(now())
+@@index([accountId,revokedAt])
+}
+
+model TechnicalEvent {
+id String @id @default(uuid())
+createdAt DateTime @default(now())
+source String
+category String
+action String
+result String
+severity String @default("info")
+requestId String?
+actorId String?
+actorRole String?
+techActorId String?
+sessionId String?
+objectType String?
+objectId String?
+explanation String
+details Json?
+ipAddress String?
+device String?
+appVersion String?
+problemId String?
+expiresAt DateTime
+holdUntil DateTime?
+@@index([createdAt,id])
+@@index([category,createdAt])
+@@index([requestId])
+@@index([problemId,createdAt])
+@@index([actorId,createdAt])
+@@index([expiresAt])
+}
+
+model TechnicalProblem {
+id String @id @default(uuid())
+fingerprint String @unique
+title String
+severity String
+status String @default("new")
+source String
+code String
+route String
+firstSeenAt DateTime @default(now())
+lastSeenAt DateTime @default(now())
+occurrences Int @default(1)
+assignedTo String?
+resolvedVersion String?
+verificationMethod String?
+verificationResult String?
+verifiedAt DateTime?
+lastRequestId String?
+details Json?
+comments TechnicalComment[]
+}
+
+model TechnicalComment {
+id String @id @default(uuid())
+problemId String
+problem TechnicalProblem @relation(fields:[problemId],references:[id],onDelete:Cascade)
+accountId String
+note String
+kind String @default("comment")
+createdAt DateTime @default(now())
+}
+
+model TechnicalAlert {
+id String @id @default(uuid())
+dedupKey String @unique
+title String
+explanation String
+severity String
+category String
+problemId String?
+repetitions Int @default(1)
+firstSeenAt DateTime @default(now())
+lastSeenAt DateTime @default(now())
+acknowledgedBy String?
+acknowledgedAt DateTime?
+assignedTo String?
+mutedUntil DateTime?
+muteReason String?
+}
+
+model TechnicalRule {
+category String @id
+enabled Boolean @default(true)
+threshold Int @default(5)
+windowMinutes Int @default(15)
+cooldownMinutes Int @default(30)
+quietStart Int?
+quietEnd Int?
+recipients String[] @default(["owner","engineer"])
+updatedAt DateTime @updatedAt
+}
+
+model TechnicalSetting {
+key String @id
+value Json
+updatedBy String
+reason String
+updatedAt DateTime @updatedAt
+}
+
+model TechnicalSnapshot {
+key String @id
+source String
+value Json
+observedAt DateTime
+expiresAt DateTime
+}
+
+model PasswordRecovery {
+id String @id @default(uuid())
+tokenHash String @unique
+userId String
+issuedBy String
+reason String
+expiresAt DateTime
+usedAt DateTime?
+createdAt DateTime @default(now())
+@@index([userId,createdAt])
+}
+
+model TechnicalRateLimit {
+key String @id
+count Int @default(1)
+expiresAt DateTime
+@@index([expiresAt])
 }

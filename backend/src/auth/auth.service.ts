@@ -29,7 +29,7 @@ export class AuthService {
         const failed = await this.prisma.user.update({where:{id:user.id},data:{failedPasswordAttempts:{increment:1}}});
         if (failed.failedPasswordAttempts >= 5) await this.prisma.user.update({where:{id:user.id},data:{passwordLockedUntil:new Date(Date.now()+15*60_000)}});
       }
-      await this.audit.log('auth.password_failed','auth',normalized,user?.id,undefined,ipAddress);
+      await this.audit.log('auth.password_failed','auth',undefined,user?.id,{verified:false},ipAddress);
       throw new UnauthorizedException('Неверный телефон или пароль');
     }
     await this.assertAccess(user,role,input.bin);

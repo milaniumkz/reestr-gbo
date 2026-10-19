@@ -1,8 +1,11 @@
-import { CreateBucketCommand, HeadBucketCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {BadRequestException} from '@nestjs/common';
+import {mediaGrant} from './media-security';
+import {requestContext} from '../observability/request-context';
+import { CreateBucketCommand, HeadBucketCommand, PutObjectCommand, GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile,readFile,realpath } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -34,6 +37,9 @@ export class StorageService {
     contentType?: string;
     createdById?: string;
   }) {
+    this.assertKey(input.key);
+    const b=input.body;
+    input.contentType=b.subarray(0,5).toString()==='%PDF-'?'application/pdf':b.subarray(0,3).equals(Buffer.from([255,216,255]))?'image/jpeg':b.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))?'image/png':b.subarray(0,3).toString()==='GIF'?'image/gif':b.subarray(0,4).toString()==='RIFF'&&b.subarray(8,12).toString()==='WEBP'?'image/webp':'application/octet-stream';
     if (this.config.get<string>('STORAGE_DRIVER') === 'local') {
       const root = this.config.get<string>('LOCAL_STORAGE_PATH') ?? '/opt/reestr/storage';
       const objectPath = join(root, this.bucket, input.key);
@@ -53,6 +59,13 @@ export class StorageService {
   }
 
   objectUrl(objectKey: string) {
+    if(process.env.MEDIA_SIGNING_ENABLED==='true'){
+      const actor=requestContext.getStore()?.request.user;
+      const grant=mediaGrant({key:objectKey,actorId:actor?.sub,sid:actor?.sid});
+      const origin=this.config.get<string>('MEDIA_PUBLIC_ORIGIN')??'https://89-207-255-42.sslip.io';
+      return {objectKey,url:`${origin}/api/v1/media/view?grant=${grant}`};
+    }
+
     const publicUrl = this.config.get<string>('S3_PUBLIC_URL');
     return {
       objectKey,
@@ -60,6 +73,18 @@ export class StorageService {
         ? `${publicUrl}/${this.bucket}/${objectKey}`
         : `/storage/${this.bucket}/${objectKey}`,
     };
+  }
+
+  private assertKey(key:string){if(!key||key.includes('\\')||key.includes('\0')||key.startsWith('/')||key.split('/').some(part=>part==='..'||part==='.'||!part))throw new BadRequestException('Недопустимый путь файла');}
+  async readObject(key:string){
+    this.assertKey(key);
+    if(this.config.get<string>('STORAGE_DRIVER')==='local'){
+      const root=await realpath(join(this.config.get<string>('LOCAL_STORAGE_PATH')??'/opt/reestr/storage',this.bucket));
+      const path=await realpath(join(root,key));if(!path.startsWith(root+'/'))throw new BadRequestException('Файл вне закрытого хранилища');
+      return readFile(path);
+    }
+    const response=await this.client.send(new GetObjectCommand({Bucket:this.bucket,Key:key}));
+    if(!response.Body)throw new BadRequestException('Файл недоступен');return Buffer.from(await response.Body.transformToByteArray());
   }
 
   private async ensureBucket() {

@@ -98,7 +98,7 @@ export class OrganizationsController {
   addMember(
     @CurrentUser() user: RequestUser,
     @Param('id') id: string,
-    @Body() body: { userId?: string; role: string; fullName?: string; phone?: string; iin?: string },
+    @Body() body: { userId?: string; role: string; fullName?: string; phone?: string; iin?: string; residenceCity?: string },
   ) {
     return this.organizations.addMember(user, id, body);
   }

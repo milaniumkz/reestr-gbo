@@ -9,5 +9,6 @@ import { InspectionsService } from './inspections.service';
   imports: [CertificatesModule, StorageModule],
   controllers: [InspectionsController],
   providers: [InspectionsService, PhotoModerationService],
+  exports: [PhotoModerationService],
 })
 export class InspectionsModule {}

@@ -1,0 +1,23 @@
+[Unit]
+Description=ERSI separate technical panel
+After=network.target reestr-backend.service
+[Service]
+Type=simple
+User=reestr-tech
+Group=reestr-tech
+WorkingDirectory=/opt/reestr/app/tech
+Environment=NODE_ENV=production
+Environment=PORT=3002
+ExecStart=/usr/bin/npm run start
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/reestr/app/tech/.next/cache
+UMask=0027
+StandardOutput=append:/var/log/reestr/tech.log
+StandardError=append:/var/log/reestr/tech.log
+[Install]
+WantedBy=multi-user.target

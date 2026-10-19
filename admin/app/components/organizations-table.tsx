@@ -30,6 +30,7 @@ type OrganizationsTableProps = {
   memberName?: string;
   memberPhone?: string;
   memberIin?: string;
+  memberResidence?: string;
   statusFilter?: string;
   regionFilter?: string;
   onName?: (value: string) => void;
@@ -46,6 +47,7 @@ type OrganizationsTableProps = {
   onMemberName?: (value: string) => void;
   onMemberPhone?: (value: string) => void;
   onMemberIin?: (value: string) => void;
+  onMemberResidence?: (value: string) => void;
   onStatusFilter?: (value: string) => void;
   onRegionFilter?: (value: string) => void;
   onApplyFilters?: () => void;
@@ -81,6 +83,7 @@ export function OrganizationsTable({
   memberName = '',
   memberPhone = '',
   memberIin = '',
+  memberResidence = '',
   statusFilter = 'all',
   regionFilter = '',
   onName,
@@ -97,6 +100,7 @@ export function OrganizationsTable({
   onMemberName,
   onMemberPhone,
   onMemberIin,
+  onMemberResidence,
   onStatusFilter,
   onRegionFilter,
   onApplyFilters,
@@ -172,6 +176,7 @@ export function OrganizationsTable({
             disabled={Boolean(memberUserId)}
             onChange={(event) => onMemberPhone?.(normalizeKzPhone(event.target.value))}
           />
+          <input placeholder="Город проживания сотрудника" value={memberResidence} disabled={Boolean(memberUserId)} onChange={event=>onMemberResidence?.(event.target.value)} maxLength={70}/>
           <input
             placeholder="ИИН нового участника"
             value={memberIin}

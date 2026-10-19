@@ -4,6 +4,14 @@ After=network.target postgresql.service redis-server.service
 
 [Service]
 Type=simple
+User=reestr-backend
+Group=reestr-backend
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/reestr/storage
+UMask=0027
 WorkingDirectory=/opt/reestr/app/backend
 Environment=NODE_ENV=production
 Environment=HOST=127.0.0.1

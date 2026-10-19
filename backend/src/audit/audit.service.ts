@@ -1,3 +1,4 @@
+import {safeDetails} from '../observability/safe-data';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -7,7 +8,7 @@ export class AuditService {
 
   log(action: string, entity: string, entityId?: string, actorId?: string, metadata?: object, ipAddress?: string) {
     return this.prisma.auditLog.create({
-      data: { action, entity, entityId, actorId, metadata: metadata ?? undefined, ipAddress },
+      data: { action, entity, entityId, actorId, metadata: metadata ? safeDetails(metadata) : undefined, ipAddress },
     });
   }
 }

@@ -39,7 +39,7 @@ nginx -t
 systemctl daemon-reload
 systemctl restart reestr-backend reestr-admin nginx
 for attempt in 1 2 3 4 5 6 7 8 9 10; do
-  if curl -fsS http://127.0.0.1:3000/api/v1/health/deep; then
+  if curl -fsS http://127.0.0.1:3000/api/v1/health; then
     exit 0
   fi
   sleep 1

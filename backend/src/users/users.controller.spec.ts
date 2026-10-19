@@ -152,7 +152,7 @@ describe('UsersController.create role assignment', () => {
 
 describe('UsersController system role management', () => {
   it('adds a valid system role and writes audit', async () => {
-    const db = {
+    const db: any = {
       userRole: {
         upsert: jest.fn(async () => ({ userId: 'user_1', role: 'government' })),
       },
@@ -160,6 +160,7 @@ describe('UsersController system role management', () => {
         create: jest.fn(async () => ({})),
       },
     };
+    db.$transaction=jest.fn(async (operation:any)=>operation(db));
     const controller = new UsersController(db as never);
 
     await controller.addRole(

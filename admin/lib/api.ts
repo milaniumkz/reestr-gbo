@@ -629,6 +629,7 @@ export function addOrganizationMember(token: string, organizationId: string, inp
   fullName?: string;
   phone?: string;
   iin?: string;
+  residenceCity?: string;
 }) {
   return post<Organization>(`/organizations/${organizationId}/members`, input, token);
 }

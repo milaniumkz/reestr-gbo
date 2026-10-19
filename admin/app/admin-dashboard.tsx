@@ -237,6 +237,7 @@ export default function AdminDashboard() {
   const [memberName, setMemberName] = useState('');
   const [memberPhone, setMemberPhone] = useState('');
   const [memberIin, setMemberIin] = useState('');
+  const [memberResidence, setMemberResidence] = useState('');
   const [controlOrgName, setControlOrgName] = useState('');
   const [controlOrgBin, setControlOrgBin] = useState('');
   const [controlOrgId, setControlOrgId] = useState('');
@@ -1113,6 +1114,7 @@ export default function AdminDashboard() {
             fullName: memberName,
             phone: memberPhone,
             iin: memberIin,
+            residenceCity: memberResidence,
           }));
       setMemberOrgId('');
       setMemberUserId('');
@@ -1120,6 +1122,7 @@ export default function AdminDashboard() {
       setMemberName('');
       setMemberPhone('');
       setMemberIin('');
+      setMemberResidence('');
       await refresh(session.token);
     });
   }
@@ -1341,6 +1344,7 @@ export default function AdminDashboard() {
     fullName?: string;
     phone?: string;
     iin?: string;
+    residenceCity?: string;
   }) {
     if (!token || !selectedOrganization) return;
     if (!input.userId && (!input.fullName?.trim() || !input.phone?.trim())) {
@@ -1800,6 +1804,7 @@ export default function AdminDashboard() {
             memberName={memberName}
             memberPhone={memberPhone}
             memberIin={memberIin}
+            memberResidence={memberResidence}
             statusFilter={orgStatusFilter}
             regionFilter={orgRegionFilter}
             onName={setOrgName}
@@ -1816,6 +1821,7 @@ export default function AdminDashboard() {
             onMemberName={setMemberName}
             onMemberPhone={setMemberPhone}
             onMemberIin={setMemberIin}
+            onMemberResidence={setMemberResidence}
             onStatusFilter={setOrgStatusFilter}
             onRegionFilter={setOrgRegionFilter}
             onApplyFilters={applyOrganizationFilters}

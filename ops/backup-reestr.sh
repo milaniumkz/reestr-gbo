@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
 
 APP_DIR="${APP_DIR:-/opt/reestr/app}"
 BACKUP_DIR="${BACKUP_DIR:-/opt/reestr/backups}"
@@ -17,6 +18,7 @@ source "$ENV_FILE"
 set +a
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+install -d -m 0700 "$BACKUP_DIR"
 target="$BACKUP_DIR/$timestamp"
 mkdir -p "$target"
 

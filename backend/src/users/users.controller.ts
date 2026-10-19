@@ -1,3 +1,4 @@
+import {safeDetails} from '../observability/safe-data';
 import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../common/roles.decorator';
@@ -155,7 +156,7 @@ export class UsersController {
         take: 50,
       }),
     ]);
-    return { audit, created, submitted, approved };
+    return { audit:audit.map(item=>({...item,metadata:safeDetails(item.metadata)})), created, submitted, approved };
   }
 
   @Post()
@@ -165,7 +166,8 @@ export class UsersController {
     if (body.role && !this.canAssignRole(actor, body.role)) {
       throw new ForbiddenException('Недостаточно прав для назначения роли');
     }
-    const user = await this.prisma.user.upsert({
+    return this.prisma.$transaction(async tx=>{
+    const user = await tx.user.upsert({
       where: { phone: body.phone },
       update: {
         fullName: body.fullName,
@@ -179,13 +181,13 @@ export class UsersController {
       include: { roles: true },
     });
     if (body.role) {
-      await this.prisma.userRole.upsert({
+      await tx.userRole.upsert({
         where: { userId_role: { userId: user.id, role: body.role } },
         update: {},
         create: { userId: user.id, role: body.role },
       });
     }
-    await this.prisma.auditLog.create({
+    await tx.auditLog.create({
       data: {
         actorId: actor.sub,
         action: user.createdAt.getTime() === user.updatedAt.getTime() ? 'user.create' : 'user.update',
@@ -194,7 +196,8 @@ export class UsersController {
         metadata: { phone: user.phone, role: body.role ?? null },
       },
     });
-    return this.prisma.user.findUniqueOrThrow({ where: { id: user.id }, include: { roles: true } });
+    return tx.user.findUniqueOrThrow({ where: { id: user.id }, include: { roles: true } });
+    });
   }
 
   @Patch(':id/block')
@@ -209,12 +212,13 @@ export class UsersController {
     if (isBlocked && !trimmedReason) {
       throw new BadRequestException('Укажите причину блокировки');
     }
-    const user = await this.prisma.user.update({
+    return this.prisma.$transaction(async tx=>{
+    const user = await tx.user.update({
       where: { id },
       data: { isBlocked },
       include: { roles: true },
     });
-    await this.prisma.auditLog.create({
+    await tx.auditLog.create({
       data: {
         actorId: actor.sub,
         action: isBlocked ? 'user.block' : 'user.unblock',
@@ -224,18 +228,20 @@ export class UsersController {
       },
     });
     return user;
+    });
   }
 
   @Post(':id/roles')
   @Roles('super_admin')
   async addRole(@CurrentUser() actor: RequestUser, @Param('id') id: string, @Body('role') role: Role) {
     this.assertSystemRole(role);
-    const result = await this.prisma.userRole.upsert({
+    return this.prisma.$transaction(async tx=>{
+    const result = await tx.userRole.upsert({
       where: { userId_role: { userId: id, role } },
       update: {},
       create: { userId: id, role },
     });
-    await this.prisma.auditLog.create({
+    await tx.auditLog.create({
       data: {
         actorId: actor.sub,
         action: 'user.role.add',
@@ -245,16 +251,18 @@ export class UsersController {
       },
     });
     return result;
+    });
   }
 
   @Delete(':id/roles/:role')
   @Roles('super_admin')
   async removeRole(@CurrentUser() actor: RequestUser, @Param('id') id: string, @Param('role') role: Role) {
     this.assertSystemRole(role);
-    const result = await this.prisma.userRole.delete({
+    return this.prisma.$transaction(async tx=>{
+    const result = await tx.userRole.delete({
       where: { userId_role: { userId: id, role } },
     });
-    await this.prisma.auditLog.create({
+    await tx.auditLog.create({
       data: {
         actorId: actor.sub,
         action: 'user.role.remove',
@@ -264,6 +272,7 @@ export class UsersController {
       },
     });
     return result;
+    });
   }
 
   private canAssignRole(actor: RequestUser, role: Role) {

@@ -42,6 +42,7 @@ export class PhotoModerationService {
       moderationReason: reason,
     });
     // No PDF renderer: never claim that embedded images or all pages were checked.
+    if (buffer.subarray(0, 5).toString() === "%PDF-" && ["vehicle_photo","cylinder_label"].includes(_type)) throw new BadRequestException("В этом поле нужна фотография объекта, а не PDF-документ");
     if (buffer.subarray(0, 5).toString() === "%PDF-")
       return result(
         "manual_review",

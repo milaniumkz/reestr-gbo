@@ -30,6 +30,7 @@ mkdir -p '$REMOTE_RELEASE'
 "
 
 rsync -az --delete "${BUILD_EXCLUDES[@]}" \
+  --exclude '.private' \
   --exclude '.git' \
   --exclude '.dart_tool' \
   --include 'build/' \
@@ -69,15 +70,21 @@ if [ -f .env ]; then
   . ./.env
   set +a
 fi
-npm ci
+npm ci --include=dev
 npx prisma migrate deploy
 npx prisma generate
 npm run build
 npm test -- --runInBand
 fi
 
+if [ -f '$REMOTE_RELEASE/tech/package-lock.json' ]; then
+cd '$REMOTE_RELEASE/tech'
+npm ci --include=dev
+npm run build
+fi
+
 cd '$REMOTE_RELEASE/admin'
-npm ci
+npm ci --include=dev
 NEXT_PUBLIC_API_URL='${PUBLIC_ORIGIN}/api/v1' npm run build
 
 cd '$REMOTE_RELEASE'
@@ -107,11 +114,21 @@ if [ '$DEPLOY_COMPONENTS' != admin ]; then
   rsync -a --delete '$REMOTE_RELEASE/backend/' '${APP_DIR}/backend/'
 fi
 rsync -a --delete '$REMOTE_RELEASE/admin/' '${APP_DIR}/admin/'
+if [ -d '$REMOTE_RELEASE/tech/.next' ]; then
+  mkdir -p '${APP_DIR}/tech'
+  rsync -a --delete '$REMOTE_RELEASE/tech/' '${APP_DIR}/tech/'
+fi
 rsync -a --delete '$REMOTE_RELEASE/ops/' '${APP_DIR}/ops/'
 if [ '$DEPLOY_COMPONENTS' = all ]; then
   rsync -a --delete '$REMOTE_RELEASE/build/web/' '${APP_DIR}/build/web/'
 fi
 printf '%s\n' '$COMMIT_SHA' > '${APP_DIR}/VERSION'
+if ! id reestr-backend >/dev/null 2>&1; then
+  useradd --system --home /nonexistent --shell /usr/sbin/nologin reestr-backend
+  chown -R reestr-backend:reestr-backend /opt/reestr/storage
+fi
+chown root:reestr-backend '${APP_DIR}/backend/.env'
+chmod 0640 '${APP_DIR}/backend/.env'
 install -m 0644 '${APP_DIR}/ops/reestr-backend.service' /etc/systemd/system/reestr-backend.service
 install -m 0644 '${APP_DIR}/ops/reestr-admin.service' /etc/systemd/system/reestr-admin.service
 nginx -t
@@ -120,6 +137,10 @@ if [ '$DEPLOY_COMPONENTS' = admin ]; then
   systemctl restart reestr-admin
 else
   systemctl restart reestr-backend reestr-admin
+fi
+if systemctl is-enabled reestr-tech >/dev/null 2>&1; then
+  chown -R reestr-tech:reestr-tech '${APP_DIR}/tech/.next/cache'
+  systemctl restart reestr-tech
 fi
 systemctl reload nginx
 for attempt in 1 2 3 4 5 6 7 8 9 10; do

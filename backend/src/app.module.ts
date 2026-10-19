@@ -1,3 +1,6 @@
+import {TechnicalModule} from './technical/technical.module';
+import {ObservabilityModule} from './observability/observability.module';
+import {PasswordRecoveryModule} from './technical/password-recovery.module';
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -31,6 +34,9 @@ import { VehiclesModule } from './vehicles/vehicles.module';
       }),
     }),
     PrismaModule,
+    ObservabilityModule,
+    PasswordRecoveryModule,
+    TechnicalModule,
     StorageModule,
     AuditModule,
     BannersModule,

@@ -30,6 +30,7 @@ type OrganizationDetailPanelProps = {
     fullName?: string;
     phone?: string;
     iin?: string;
+    residenceCity?: string;
   }) => void;
   onRemoveMember?: (organization: Organization, memberId: string) => void;
   onDelete?: (organization: Organization) => void;
@@ -69,6 +70,7 @@ export function OrganizationDetailPanel({
   const [memberName, setMemberName] = useState('');
   const [memberPhone, setMemberPhone] = useState('');
   const [memberIin, setMemberIin] = useState('');
+  const [memberResidence, setMemberResidence] = useState('');
 
   useEffect(() => {
     setMemberUserId('');
@@ -87,6 +89,7 @@ export function OrganizationDetailPanel({
           fullName: memberName,
           phone: memberPhone,
           iin: memberIin,
+          residenceCity: memberResidence,
         });
   }
 
@@ -156,6 +159,7 @@ export function OrganizationDetailPanel({
             disabled={Boolean(memberUserId)}
             onChange={(event) => setMemberPhone(normalizeKzPhone(event.target.value))}
           />
+          <input placeholder="Город проживания сотрудника" value={memberResidence} disabled={Boolean(memberUserId)} onChange={event=>setMemberResidence(event.target.value)} maxLength={70}/>
           <input
             placeholder="ИИН сотрудника"
             value={memberIin}

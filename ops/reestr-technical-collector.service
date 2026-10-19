@@ -1,0 +1,11 @@
+[Unit]
+Description=Read-only ERSI technical metrics collector
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/reestr/app/ops/technical-collector.py
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/reestr/monitor

@@ -1,0 +1,14 @@
+[Unit]
+Description=Archive expired technical events with legal hold protection
+After=reestr-backend.service
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/reestr/app/backend
+EnvironmentFile=/opt/reestr/app/backend/.env
+ExecStart=/opt/reestr/app/backend/node_modules/.bin/tsx scripts/archive-technical-events.ts
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/reestr/archives

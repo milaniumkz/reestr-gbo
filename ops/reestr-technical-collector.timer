@@ -1,0 +1,8 @@
+[Unit]
+Description=Refresh technical server metrics
+[Timer]
+OnBootSec=20s
+OnUnitActiveSec=30s
+AccuracySec=3s
+[Install]
+WantedBy=timers.target

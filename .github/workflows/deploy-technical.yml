@@ -1,0 +1,39 @@
+name: Deploy technical panel
+on:
+  workflow_dispatch:
+    inputs:
+      delivery_public_key:
+        description: Base64 RSA 3072-bit public key for encrypted owner credentials
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+      - name: Trust configured server
+        env:
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+      - name: Backup and deploy tested services and technical UI
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DELIVERY_PUBLIC_KEY: ${{ inputs.delivery_public_key }}
+        run: |
+          set -euo pipefail
+          [[ "$DELIVERY_PUBLIC_KEY" =~ ^[A-Za-z0-9+/=]+$ ]]
+          DEPLOY_COMPONENTS=services bash ops/deploy-production.sh "$(git rev-parse HEAD)"
+          ssh "${DEPLOY_USER:-root}@${DEPLOY_HOST}" "bash /opt/reestr/app/ops/deploy-technical-server.sh '$DELIVERY_PUBLIC_KEY'"

@@ -1,3 +1,4 @@
+import {safeDetails} from '../observability/safe-data';
 import { Body, Controller, Get, Post, Query, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { CurrentUser, RequestUser } from "../common/current-user";
@@ -106,7 +107,7 @@ export class AuditController {
       }),
       this.prisma.auditLog.count({ where }),
     ]);
-    return listResponse(items, total, page, limit);
+    return listResponse(items.map(item=>({...item,metadata:safeDetails(item.metadata)})), total, page, limit);
   }
 
   private async organizationInspectionIds(organizationIds: string[]) {
@@ -157,7 +158,7 @@ export class AuditController {
       }),
       this.prisma.auditLog.count({ where }),
     ]);
-    return listResponse(items, total, page, limit);
+    return listResponse(items.map(item=>({...item,metadata:safeDetails(item.metadata)})), total, page, limit);
   }
 
   @Post("view")

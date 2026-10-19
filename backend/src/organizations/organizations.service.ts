@@ -1,3 +1,4 @@
+import { residenceCity as parseResidenceCity } from '../technical/city-risk';
 import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
 import { hasGlobalAccess, userOrganizationIds } from "../common/access-scope";
 import { RequestUser } from "../common/current-user";
@@ -300,6 +301,7 @@ export class OrganizationsService {
     fullName?: string;
     phone?: string;
     iin?: string;
+    residenceCity?: string;
   }) {
     const organization = await this.prisma.organization.findUniqueOrThrow({
       where: { id: organizationId },
@@ -354,19 +356,23 @@ export class OrganizationsService {
     return { accreditationValidFrom, accreditationValidUntil };
   }
 
-  private async createMemberUser(input: { fullName?: string; phone?: string; iin?: string }) {
+  private async createMemberUser(input: { fullName?: string; phone?: string; iin?: string; residenceCity?: string }) {
     const phone = this.requiredOptionalText(input.phone, "Телефон сотрудника");
     const fullName = this.requiredOptionalText(input.fullName, "ФИО сотрудника");
+    const residenceCity=input.residenceCity?.trim()?parseResidenceCity(input.residenceCity):undefined;
+    if(input.residenceCity?.trim()&&!residenceCity)throw new BadRequestException('Укажите город проживания сотрудника');
     return this.prisma.user.upsert({
       where: { phone },
       update: {
         fullName,
         iin: this.optionalText(input.iin),
+        ...(residenceCity?{residenceCity}:{}),
       },
       create: {
         phone,
         fullName,
         iin: this.optionalText(input.iin),
+        ...(residenceCity?{residenceCity}:{}),
       },
     });
   }
