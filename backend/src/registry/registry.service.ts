@@ -18,7 +18,7 @@ export class RegistryService {
         inspection: {
           ...certificate.inspection,
           photos: certificate.inspection.photos
-            .filter(photo => !observer || ["certificate_document", "tech_passport"].includes(photo.type))
+            .filter(photo => !observer || ["certificate_document", "tech_passport", "tech_passport_back"].includes(photo.type))
             .map(photo => ({
             ...photo,
             viewUrl: this.storage.objectUrl(photo.objectKey).url,

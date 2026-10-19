@@ -201,13 +201,15 @@ export type Inspection = {
     cylinders?: Array<{
       serialNumber?: string;
       manufacturer?: string;
+      producedAt?: string;
+      fuelType?: string;
       volumeLiters?: number;
       reducerName?: string;
       controlUnitName?: string;
       validUntil?: string;
     }>;
   };
-  photos?: Array<{ id: string; type: string; objectKey: string; viewUrl?: string }>;
+  photos?: Array<{ id: string; type: string; objectKey: string; viewUrl?: string; moderationStatus?: string }>;
   certificate?: { number: string; status: string; validUntil: string };
   createdBy?: { id: string; phone: string; fullName: string; lastLoginAt?: string };
   submittedBy?: { id: string; phone: string; fullName: string; lastLoginAt?: string };
@@ -235,10 +237,12 @@ export type CertificateRow = {
     make: string;
     model: string;
     year?: number;
-    owners?: Array<{ fullName?: string; iin?: string; address?: string; user?: { phone?: string } }>;
+    owners?: Array<{ fullName?: string; iin?: string; address?: string; phone?: string; user?: { phone?: string } }>;
     cylinders?: Array<{
       serialNumber: string;
       manufacturer?: string;
+      producedAt?: string;
+      fuelType?: string;
       volumeLiters?: number;
       reducerName?: string;
       controlUnitName?: string;
@@ -252,7 +256,7 @@ export type CertificateRow = {
     lat?: number;
     lng?: number;
     organization?: Organization;
-    photos?: Array<{ id: string; type: string; objectKey: string; viewUrl?: string }>;
+    photos?: Array<{ id: string; type: string; objectKey: string; viewUrl?: string; moderationStatus?: string }>;
     createdBy?: { id: string; phone: string; fullName: string; lastLoginAt?: string };
     submittedBy?: { id: string; phone: string; fullName: string; lastLoginAt?: string };
     qualityConfirmedBy?: { id: string; phone: string; fullName: string; lastLoginAt?: string };

@@ -8,6 +8,7 @@ export type MediaItem = {
   type: string;
   objectKey: string;
   viewUrl?: string;
+  moderationStatus?: string;
 };
 
 export function MediaViewer({ items }: { items: MediaItem[] }) {
@@ -25,7 +26,8 @@ export function MediaViewer({ items }: { items: MediaItem[] }) {
           onClick={() => setActive(item)}
         >
           <span>{fileTypeLabel(item.type)}</span>
-          <small>{item.objectKey}</small>
+          {item.viewUrl && isImage(item.viewUrl, item.objectKey) && <img src={item.viewUrl} alt={fileTypeLabel(item.type)} loading="lazy" draggable={false} />}
+          <small>{item.moderationStatus === 'approved' ? 'ФОТОПРОВЕРКА: ПРОЙДЕНА' : 'ФОТОПРОВЕРКА: НЕ ВЫПОЛНЕНА'}</small>
         </button>
       ))}
       {active && (

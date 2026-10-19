@@ -1,3 +1,5 @@
+import { cylinderProducedAt } from '../common/cylinder-date';
+import { PhotoModerationService } from '../photo-moderation/photo-moderation.service';
 import { ownerPhone as normalizeOwnerPhone } from '../common/owner-phone';
 import { QualityReviewData } from './quality-review-data';
 import { inspectionPeriod } from '../common/inspection-period';
@@ -36,6 +38,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
     private readonly certificates: CertificatesService,
+    private readonly photoModeration: PhotoModerationService = new PhotoModerationService(),
   ) {}
 
   onModuleInit() {
@@ -362,8 +365,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(input.inspectionDate ?? "")) throw new BadRequestException("Укажите дату инспекции");
     const period = inspectionPeriod(text(input.cylinder.fuelType,"тип газа"),input.inspectionDate);
     if (period.inspectedAt.toISOString().slice(0,10) !== input.inspectionDate) throw new BadRequestException("Некорректная дата инспекции");
-    const producedAt = input.cylinder.producedAt ? new Date(input.cylinder.producedAt) : undefined;
-    if (producedAt && Number.isNaN(producedAt.getTime())) throw new BadRequestException("Некорректная дата выпуска баллона");
+    const producedAt = cylinderProducedAt(input.cylinder.producedAt);
     const year = input.vehicle.year;
     if (year != null && (!Number.isInteger(year) || year < 1900 || year > 2100)) throw new BadRequestException("Некорректный год автомобиля");
     await this.prisma.$transaction(async tx => {
@@ -539,6 +541,8 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
     }));
   }
 
+  moderationStatus() { return this.photoModeration.status(); }
+
   async uploadPhoto(
     id: string,
     type: string,
@@ -547,6 +551,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
     location: { lat?: number | string; lng?: number | string } = {},
   ) {
     const inspection = await this.assertInspectionAccess(id, user);
+    if (!["cylinder_label","vehicle_photo","tech_passport","tech_passport_back","applicant_application","applicant_questionnaire","gas_work_record","cylinder_work_record","gas_inspection_report","cylinder_inspection_report","certificate_document","photo"].includes(type)) throw new BadRequestException("Неизвестный тип документа");
     if (["gas_work_record","cylinder_work_record","gas_inspection_report","cylinder_inspection_report"].includes(type)) {
       const qualityMember = await this.prisma.organizationMember.findFirst({where:{organizationId:inspection.organizationId,userId:user?.sub,role:"quality_control"}});
       if (qualityMember) throw new ForbiddenException("Контроль качества не может изменять рабочие записи и отчеты инспекции");
@@ -554,12 +559,13 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
     if (type === "certificate_document") {
       await this.claimQualityReview(user,id);
       if (inspection.status !== "submitted") throw new BadRequestException("Свидетельство загружается на этапе контроля качества");
-    } else if (inspection.status === "submitted" && ["cylinder_label", "vehicle_photo", "tech_passport", "applicant_application", "applicant_questionnaire"].includes(type)) {
+    } else if (inspection.status === "submitted" && ["cylinder_label", "vehicle_photo", "tech_passport", "tech_passport_back", "applicant_application", "applicant_questionnaire"].includes(type)) {
       await this.claimQualityReview(user,id);
     } else if (!["draft", "rejected"].includes(inspection.status)) {
       throw new BadRequestException("Документы инспектора зафиксированы. Верните инспекцию на исправление");
     }
     if (!file?.buffer?.length) throw new BadRequestException("Выберите непустой файл");
+    const moderation = await this.photoModeration.check(file.buffer,file.originalname,type);
     const lat = this.coordinate(location.lat, -90, 90);
     const lng = this.coordinate(location.lng, -180, 180);
     const extension =
@@ -573,6 +579,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
     });
     const photoData = {
         inspectionId: id,
+        ...moderation,
         type,
         objectKey,
         checksum,

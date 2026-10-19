@@ -1,3 +1,4 @@
+import { cylinderProducedAt } from '../common/cylinder-date';
 import { ownerPhone as normalizeOwnerPhone } from '../common/owner-phone';
 import { hasGlobalAccess } from '../common/access-scope';
 import { inspectionPeriod } from '../common/inspection-period';
@@ -81,6 +82,7 @@ export class VehiclesService {
       }
     }
     const period = inspectionPeriod(input.cylinder.fuelType ?? "", input.cylinder.inspectedAt ?? new Date());
+    const producedAt = cylinderProducedAt(input.cylinder.producedAt);
     const ownerPhone = normalizeOwnerPhone(input.owner.phone);
     return this.prisma.vehicle
       .upsert({
@@ -152,9 +154,7 @@ export class VehiclesService {
               volumeLiters: input.cylinder.volumeLiters,
               reducerName: input.cylinder.reducerName,
               controlUnitName: input.cylinder.controlUnitName,
-              producedAt: input.cylinder.producedAt
-                ? new Date(input.cylinder.producedAt)
-                : undefined,
+              producedAt,
               ...(period ?? { validUntil: new Date(input.cylinder.validUntil) }),
             },
           });
@@ -166,9 +166,7 @@ export class VehiclesService {
               volumeLiters: input.cylinder.volumeLiters,
               reducerName: input.cylinder.reducerName,
               controlUnitName: input.cylinder.controlUnitName,
-              producedAt: input.cylinder.producedAt
-                ? new Date(input.cylinder.producedAt)
-                : undefined,
+              producedAt,
               ...(period ?? { validUntil: new Date(input.cylinder.validUntil) }),
             },
           });

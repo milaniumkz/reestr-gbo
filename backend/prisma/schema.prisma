@@ -228,6 +228,10 @@ model InspectionPhoto {
   inspectionId String
   type         String
   objectKey    String
+  moderationStatus String @default("not_checked")
+  moderationModel String?
+  moderationCheckedAt DateTime?
+  moderationReason String?
   checksum     String?
   lat          Float?
   lng          Float?

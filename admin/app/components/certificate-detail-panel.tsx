@@ -42,8 +42,10 @@ export function CertificateDetailPanel({
         <Info label="Владелец" value={owner?.fullName ?? '-'} />
         <Info label="ИИН/БИН владельца" value={owner?.iin ?? '-'} />
         <Info label="Адрес владельца" value={owner?.address ?? '-'} />
-        <Info label="Телефон владельца" value={owner?.user?.phone ?? '-'} />
+        <Info label="Телефон владельца" value={owner?.phone ?? owner?.user?.phone ?? '-'} />
         <Info label="Баллон" value={cylinder?.serialNumber ?? '-'} />
+        <Info label="Дата выпуска баллона" value={cylinder?.producedAt ? new Date(cylinder.producedAt).toLocaleDateString('ru-RU', { timeZone: 'UTC' }) : '-'} />
+        <Info label="Тип газа" value={cylinder?.fuelType ?? '-'} />
         <Info label="Производитель" value={cylinder?.manufacturer ?? '-'} />
         <Info label="Объем" value={cylinder?.volumeLiters ? `${cylinder.volumeLiters} л` : '-'} />
         <Info label="Редуктор" value={cylinder?.reducerName ?? '-'} />

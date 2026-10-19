@@ -37,6 +37,8 @@ export function InspectionDetailPanel({
         <Info label="ИИН/БИН владельца" value={owner?.iin ?? '-'} />
         <Info label="Адрес проживания" value={owner?.address ?? '-'} />
         <Info label="Баллон" value={cylinder?.serialNumber ?? '-'} />
+        <Info label="Дата выпуска баллона" value={cylinder?.producedAt ? new Date(cylinder.producedAt).toLocaleDateString('ru-RU', { timeZone: 'UTC' }) : '-'} />
+        <Info label="Тип газа" value={cylinder?.fuelType ?? '-'} />
         <Info label="Производитель баллона" value={cylinder?.manufacturer ?? '-'} />
         <Info label="Объем баллона" value={cylinder?.volumeLiters ? `${cylinder.volumeLiters} л` : '-'} />
         <Info label="Срок баллона" value={cylinder?.validUntil ? new Date(cylinder.validUntil).toLocaleDateString('ru-RU') : '-'} />

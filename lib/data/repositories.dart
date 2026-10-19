@@ -413,7 +413,7 @@ class InspectionRepository {
     required String cylinderSerial,
     required String cylinderManufacturer,
     required int volumeLiters,
-    required String producedYear,
+    required String producedDate,
     required String fuelType,
     required String inspectionDate,
     required String reducerName,
@@ -421,7 +421,7 @@ class InspectionRepository {
   }) async {
     if (AppEnvironment.isDemo) return 'demo-vehicle';
     final inspectedAt = DateTime.parse(inspectionDate);
-    final produced = int.tryParse(producedYear);
+
     final targetYear = inspectedAt.year + (fuelType == 'СНГ' ? 2 : 3);
     final lastDay = DateTime(targetYear, inspectedAt.month + 1, 0).day;
     final validUntil = DateTime(
@@ -449,7 +449,7 @@ class InspectionRepository {
         'volumeLiters': volumeLiters,
         'reducerName': reducerName,
         'controlUnitName': controlUnitName,
-        if (produced != null) 'producedAt': '$produced-01-01',
+        'producedAt': producedDate,
         'validUntil': validUntil.toIso8601String().split('T').first,
       },
     });

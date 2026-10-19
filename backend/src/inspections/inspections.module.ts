@@ -1,3 +1,4 @@
+import { PhotoModerationService } from '../photo-moderation/photo-moderation.service';
 import { Module } from '@nestjs/common';
 import { CertificatesModule } from '../certificates/certificates.module';
 import { StorageModule } from '../storage/storage.module';
@@ -7,6 +8,6 @@ import { InspectionsService } from './inspections.service';
 @Module({
   imports: [CertificatesModule, StorageModule],
   controllers: [InspectionsController],
-  providers: [InspectionsService],
+  providers: [InspectionsService, PhotoModerationService],
 })
 export class InspectionsModule {}

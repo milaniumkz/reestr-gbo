@@ -1,0 +1,1 @@
+ALTER TABLE "InspectionPhoto" ADD COLUMN "moderationStatus" TEXT NOT NULL DEFAULT 'not_checked', ADD COLUMN "moderationModel" TEXT, ADD COLUMN "moderationCheckedAt" TIMESTAMP(3), ADD COLUMN "moderationReason" TEXT;

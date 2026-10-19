@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:html' as html;
 import 'local_file.dart';
+import 'dart:math' as math;
 
 Future<PickedLocalFile?> captureDocumentPhoto({
   double frameAspectRatio = 0.71,
@@ -32,12 +33,12 @@ Future<PickedLocalFile?> captureDocumentPhoto({
     ..style.cssText =
         'width:100%;height:calc(100% - 80px);object-fit:contain;flex:1;min-height:0';
   final capture = html.ButtonElement()
-    ..text = 'Сделать фото'
+    ..text = 'СДЕЛАТЬ ФОТО'
     ..disabled = true
     ..style.cssText =
         'padding:14px;border:0;border-radius:12px;background:#007a4d;color:white;font-size:16px;flex:1';
   final cancel = html.ButtonElement()
-    ..text = 'Отмена'
+    ..text = 'ОТМЕНА'
     ..style.cssText =
         'padding:14px;border:0;border-radius:12px;background:white;color:#123;font-size:16px;flex:1';
   final controls = html.DivElement()
@@ -50,7 +51,7 @@ Future<PickedLocalFile?> captureDocumentPhoto({
     ..style.cssText =
         'position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(90%,${frameAspectRatio * 70}vh);aspect-ratio:$frameAspectRatio;border:3px solid white;border-radius:12px;box-shadow:0 0 0 999px rgba(0,0,0,.35);pointer-events:none';
   final hint = html.DivElement()
-    ..text = 'Уместите документ целиком в рамку'
+    ..text = 'В СНИМОК ПОПАДЁТ ТОЛЬКО ОБЛАСТЬ ВНУТРИ РАМКИ'
     ..style.cssText =
         'position:absolute;bottom:12px;left:12px;right:12px;text-align:center;color:white;font-size:16px';
   preview.children.addAll([video, frame, hint]);
@@ -61,13 +62,19 @@ Future<PickedLocalFile?> captureDocumentPhoto({
   final keySub = html.window.onKeyDown.listen((event) {
     if (event.key == 'Escape' && !result.isCompleted) result.complete(null);
   });
+  StreamSubscription<html.Event>? resizeSub;
   final captureSub = capture.onClick.listen((_) {
     try {
-      final ratio = video.videoWidth > 1800 ? 1800 / video.videoWidth : 1.0;
-      final width = (video.videoWidth * ratio).round();
-      final height = (video.videoHeight * ratio).round();
-      final canvas = html.CanvasElement(width: width, height: height);
-      canvas.context2D.drawImageScaled(video, 0, 0, width, height);
+      final bounds = video.getBoundingClientRect();
+      final scale = math.min(bounds.width / video.videoWidth, bounds.height / video.videoHeight);
+      final visibleWidth = video.videoWidth * scale;
+      final visibleHeight = video.videoHeight * scale;
+      final widthInView = math.min(visibleWidth * .9, visibleHeight * .82 * frameAspectRatio);
+      final sourceWidth = widthInView / scale;
+      final sourceHeight = sourceWidth / frameAspectRatio;
+      final outputScale = math.min(1.0, 2200 / math.max(sourceWidth, sourceHeight));
+      final canvas = html.CanvasElement(width: (sourceWidth * outputScale).round(), height: (sourceHeight * outputScale).round());
+      canvas.context2D.drawImageScaledFromSource(video, (video.videoWidth - sourceWidth) / 2, (video.videoHeight - sourceHeight) / 2, sourceWidth, sourceHeight, canvas.width, canvas.height);
       final data = canvas.toDataUrl('image/jpeg', 0.82);
       if (!result.isCompleted) {
         result.complete(
@@ -93,6 +100,16 @@ Future<PickedLocalFile?> captureDocumentPhoto({
       return await result.future;
     }
     await video.play();
+    void alignFrame() {
+      final bounds = video.getBoundingClientRect();
+      final scale = math.min(bounds.width / video.videoWidth, bounds.height / video.videoHeight);
+      final width = math.min(video.videoWidth * scale * .9, video.videoHeight * scale * .82 * frameAspectRatio);
+      frame.style.width = '${width}px';
+      frame.style.height = '${width / frameAspectRatio}px';
+      frame.style.boxSizing = 'border-box';
+    }
+    alignFrame();
+    resizeSub = html.window.onResize.listen((_) => alignFrame());
     capture.disabled = false;
     return await result.future.timeout(
       const Duration(minutes: 5),
@@ -106,6 +123,7 @@ Future<PickedLocalFile?> captureDocumentPhoto({
     await cancelSub.cancel();
     await keySub.cancel();
     await captureSub.cancel();
+    await resizeSub?.cancel();
     overlay.remove();
   }
 }

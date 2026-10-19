@@ -243,9 +243,10 @@ describe('Inspection quality control workflow', () => {
     };
     const storage={putObject:jest.fn(async()=>({})),objectUrl:jest.fn((key:string)=>({url:`https://example.test/${key}`}))};
     const certificates={issueForInspection:jest.fn(async()=>({id:'certificate_1'}))};
-    const service=new InspectionsService(prisma as never,storage as never,certificates as never);
+    const moderation={check:jest.fn(async()=>({moderationStatus:'approved'})),status:()=>({enabled:true,configured:true})};
+    const service=new InspectionsService(prisma as never,storage as never,certificates as never,moderation as never);
     const user=(id:string)=>({sub:id,phone:'test',roles:['inspection_org']});
-    return {state,prisma,storage,certificates,service,user};
+    return {state,prisma,storage,certificates,service,user,moderation};
   }
   it('prevents submission when the saved cylinder has no gas type',async()=>{
     const f=fixture();f.state.vehicle.cylinders[0].fuelType='';
@@ -253,11 +254,16 @@ describe('Inspection quality control workflow', () => {
     await expect(f.service.setStatus(f.user('inspector'),'inspection_1','submitted')).rejects.toThrow('Не хватает данных');
     expect(f.prisma.inspection.update).not.toHaveBeenCalled();
   });
+  it('does not store or attach a photo rejected by moderation',async()=>{
+    const f=fixture();f.moderation.check.mockRejectedValue(new BadRequestException('Фото экрана другого телефона'));
+    await expect(f.service.uploadPhoto('inspection_1','tech_passport',{originalname:'phone.jpg',buffer:Buffer.from('photo')},f.user('inspector'))).rejects.toThrow('Фото экрана');
+    expect(f.storage.putObject).not.toHaveBeenCalled();expect(f.prisma.inspectionPhoto.create).not.toHaveBeenCalled();
+  });
   const corrected = {
     certificateNumber:'TEST-1',inspectionDate:'2026-10-13',
     owner:{fullName:'Исправленный владелец',address:'Астана',phone:'+77001234567',iin:'123456789012'},
     vehicle:{vin:'VIN000000123',plateNumber:'123 ABC 01',make:'Toyota',model:'Camry',year:2020},
-    cylinder:{serialNumber:'CYL-1',manufacturer:'Atiker',volumeLiters:54,fuelType:'СНГ',reducerName:'Alaska',controlUnitName:'Atiker'},
+    cylinder:{serialNumber:'CYL-1',manufacturer:'Atiker',volumeLiters:54,producedAt:'2024-07-15',fuelType:'СНГ',reducerName:'Alaska',controlUnitName:'Atiker'},
   };
   it('allows assigned quality control to correct business data while keeping original reports',async()=>{
     const f=fixture();f.state.status='submitted';

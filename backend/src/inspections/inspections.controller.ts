@@ -136,9 +136,13 @@ export class InspectionsController {
     return this.inspections.photos(id, user);
   }
 
+  @Get("photo-moderation/status")
+  @Roles("inspection_org", "operator", "super_admin")
+  moderationStatus() { return this.inspections.moderationStatus(); }
+
   @Post(":id/photos")
   @Roles("inspection_org", "operator", "super_admin")
-  @UseInterceptors(FileInterceptor("file"))
+  @UseInterceptors(FileInterceptor("file", { limits: { fileSize: 12 * 1024 * 1024 } }))
   uploadPhoto(
     @Param("id") id: string,
     @CurrentUser() user: RequestUser,

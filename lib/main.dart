@@ -1,12 +1,13 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
+import 'widgets/uppercase_text.dart';
+import 'widgets/document_image_frame.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 import 'package:url_launcher/url_launcher.dart';
 
@@ -35,6 +36,12 @@ const designWidth = 430.0;
 const designHeight = 932.0;
 const pagePadding = 22.0;
 const cardRadius = 18.0;
+bool _validCylinderProductionDate(String value) {
+  if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(value)) return false;
+  final date = DateTime.tryParse(value);
+  return date != null && date.year >= 1900 && !date.isAfter(DateTime.now()) && date.toIso8601String().startsWith(value);
+}
+
 const protectedInspectionDocuments = <String>{
   'gas_work_record',
   'cylinder_work_record',
@@ -56,6 +63,7 @@ const inspectionRequiredLabels = <String, String>{
   ...inspectionPackageDocuments,
   'certificate_document': 'Свидетельство (рус./каз.)',
   'gas_cylinder': 'данные баллона',
+  'tech_passport_back': 'Техпаспорт — обратная сторона',
   'fuel_type': 'тип газа (СНГ или КПГ)',
   'vehicle_owner': 'данные владельца',
 };
@@ -472,7 +480,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
   String cylinderNumber = '';
   String cylinderMaker = '';
   String cylinderVolume = '';
-  String cylinderYear = '';
+  String cylinderProductionDate = '';
   String cylinderFuel = '';
   String reducerName = '';
   String controlUnitName = '';
@@ -1201,7 +1209,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       reducerName = _nonEmpty(data['reducerName'], reducerName);
       controlUnitName = _nonEmpty(data['controlUnitName'], controlUnitName);
       final producedAt = data['producedAt'] ?? '';
-      if (producedAt.length >= 4) cylinderYear = producedAt.substring(0, 4);
+      if (producedAt.length >= 10) cylinderProductionDate = producedAt.substring(0, 10);
       draftInspectionId = null;
       draftVehicleId = null;
       protectedInspectionPhotosLocked = false;
@@ -1308,7 +1316,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         final file = await pickLocalFile(
           const ['jpg', 'jpeg', 'png', 'heic', 'webp'],
           camera: true,
-          frameAspectRatio: kind == 'tech_passport' ? 1.6 : 0.71,
+          frameAspectRatio: 1.6,
         );
         final pickedBytes = file?.bytes;
         if (file == null || pickedBytes == null || pickedBytes.isEmpty) {
@@ -1317,12 +1325,12 @@ class _ErsiDemoState extends State<ErsiDemo> {
         }
         filename = file.name;
         bytes = pickedBytes;
-      } else if (kind == 'tech_passport') {
+      } else {
         if (!mounted) return;
         final file = await Navigator.of(context).push<PickedLocalFile>(
           MaterialPageRoute(
-            builder: (_) => const DocumentCameraScreen(
-              title: 'Фото техпаспорта',
+            builder: (_) => DocumentCameraScreen(
+              title: kind == 'tech_passport' ? 'Фото техпаспорта' : kind == 'cylinder' ? 'Фото бирки баллона' : 'Фото автомобиля',
               frameAspectRatio: 1.6,
             ),
           ),
@@ -1330,18 +1338,6 @@ class _ErsiDemoState extends State<ErsiDemo> {
         if (file == null) return;
         filename = file.name;
         bytes = file.bytes;
-      } else {
-        final photo = await ImagePicker().pickImage(
-          source: ImageSource.camera,
-          imageQuality: 82,
-          maxWidth: 1800,
-        );
-        if (photo == null) {
-          if (mounted) setState(() => apiState = 'Фото не выбрано');
-          return;
-        }
-        filename = photo.name;
-        bytes = await photo.readAsBytes();
       }
       if (!mounted) return;
       final position = initialPosition ?? await _tryCurrentPosition();
@@ -1379,6 +1375,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
   }
 
   String _uploadErrorText(Object error) {
+    if (error is ApiException && [400, 413, 503].contains(error.statusCode)) return error.message;
     final text = error.toString();
     if (text.contains('401')) return 'Сессия истекла, войдите заново';
     if (text.contains('403')) return 'Нет доступа к инспекционному органу';
@@ -1403,17 +1400,13 @@ class _ErsiDemoState extends State<ErsiDemo> {
       PickedLocalFile? file;
       if (camera && !kIsWeb) {
         file = await Navigator.of(context).push<PickedLocalFile>(
-          MaterialPageRoute(builder: (_) => DocumentCameraScreen(title: label)),
+          MaterialPageRoute(builder: (_) => DocumentCameraScreen(title: label, frameAspectRatio: type == 'tech_passport_back' ? 1.6 : .71)),
         );
       } else {
+        final extensions = type == 'tech_passport_back' ? const ['jpg', 'jpeg', 'png'] : const ['pdf', 'jpg', 'jpeg', 'png'];
         file = kIsWeb
-            ? await pickLocalFile(const [
-                'pdf',
-                'jpg',
-                'jpeg',
-                'png',
-              ], camera: camera)
-            : await _pickPluginFile(const ['pdf', 'jpg', 'jpeg', 'png']);
+            ? await pickLocalFile(extensions, camera: camera, frameAspectRatio: type == 'tech_passport_back' ? 1.6 : .71)
+            : await _pickPluginFile(extensions);
       }
       if (file == null) {
         if (mounted) setState(() => apiState = 'Документ не выбран');
@@ -1466,6 +1459,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       if (vehicleVin.trim().isEmpty) 'VIN',
       if (cylinderNumber.trim().isEmpty) 'номер баллона',
       if (cylinderVolume.trim().isEmpty) 'объем баллона',
+      if (!_validCylinderProductionDate(cylinderProductionDate)) 'полную дату выпуска баллона',
       if (!const ['СНГ', 'КПГ'].contains(cylinderFuel.trim())) 'тип газа (СНГ или КПГ)',
       if (reducerName.trim().isEmpty) 'название редуктора',
       if (controlUnitName.trim().isEmpty)
@@ -1503,8 +1497,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
             'fuelType': cylinderFuel,
             'reducerName': reducerName.trim(),
             'controlUnitName': controlUnitName.trim(),
-            if (int.tryParse(cylinderYear.trim()) != null)
-              'producedAt': '${cylinderYear.trim()}-01-01',
+            'producedAt': cylinderProductionDate.trim(),
           },
         },
       );
@@ -1540,7 +1533,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
           ? 'Не указано'
           : cylinderMaker.trim(),
       volumeLiters: int.tryParse(cylinderVolume.trim()) ?? 0,
-      producedYear: cylinderYear.trim(),
+      producedDate: cylinderProductionDate.trim(),
       fuelType: cylinderFuel.trim(),
       inspectionDate: _dateOnly(inspectionIssuedAt),
       reducerName: reducerName.trim(),
@@ -1861,6 +1854,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       if (!const ['СНГ', 'КПГ'].contains(cylinderFuel.trim())) 'тип газа (СНГ или КПГ)',
       if (cylinderNumber.trim().isEmpty) 'номер баллона',
       if (cylinderVolume.trim().isEmpty) 'объем баллона',
+      if (!_validCylinderProductionDate(cylinderProductionDate)) 'полную дату выпуска баллона',
       if (reducerName.trim().isEmpty) 'название редуктора',
       if (controlUnitName.trim().isEmpty)
         'название электронного блока управления',
@@ -1870,7 +1864,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       return;
     }
     setState(() => apiState = '');
-    go(cylinderPhotoUploaded || cylinderPhotoBytes != null ? 19 : 18);
+    go(18);
   }
 
   void _startNewInspection() {
@@ -1892,7 +1886,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       cylinderNumber = '';
       cylinderMaker = '';
       cylinderVolume = '';
-      cylinderYear = '';
+      cylinderProductionDate = '';
       cylinderFuel = '';
       reducerName = '';
       controlUnitName = '';
@@ -1916,7 +1910,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       packageDocumentUploaded = const {};
       protectedInspectionPhotosLocked = false;
     });
-    go(18);
+    go(15);
   }
 
   String get _roleCode {
@@ -2019,12 +2013,12 @@ class _ErsiDemoState extends State<ErsiDemo> {
       if (!mounted) return;
       final fileTypes = detail.files.map((file) => file.type).toSet();
       final packageUploaded = <String, bool>{
-        for (final type in inspectionPackageDocuments.keys)
+        for (final type in [...inspectionPackageDocuments.keys, 'tech_passport_back'])
           type: fileTypes.contains(type),
       };
       final packageNames = <String, String>{
         for (final file in detail.files)
-          if (inspectionPackageDocuments.containsKey(file.type))
+          if (inspectionPackageDocuments.containsKey(file.type) || file.type == 'tech_passport_back')
             file.type: inspectionRequiredLabels[file.type] ?? file.type,
       };
       setState(() {
@@ -2061,7 +2055,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         reducerName = detail.reducerName;
         controlUnitName = detail.controlUnitName;
         cylinderFuel = detail.cylinderFuelType;
-        cylinderYear = detail.cylinderProducedAt.split('-').first;
+        cylinderProductionDate = detail.cylinderProducedAt;
         cylinderPhotoUploaded = fileTypes.contains('cylinder_label');
         vehiclePhotoUploaded = fileTypes.contains('vehicle_photo');
         techPassportPhotoUploaded = fileTypes.contains('tech_passport');
@@ -2282,7 +2276,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       15 => _OwnerStep(
         reviewFiles:
             selectedInspection?.files
-                .where((file) => ['applicant_application', 'tech_passport'].contains(file.type))
+                .where((file) => ['applicant_application', 'tech_passport', 'tech_passport_back'].contains(file.type))
                 .toList() ??
             const [],
         inspectionDate: inspectionIssuedAt,
@@ -2310,7 +2304,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
             selectedInspection?.files
                 .where(
                   (file) =>
-                      ['tech_passport', 'vehicle_photo'].contains(file.type),
+                      ['tech_passport', 'tech_passport_back', 'vehicle_photo'].contains(file.type),
                 )
                 .toList() ??
             const [],
@@ -2335,7 +2329,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         number: cylinderNumber,
         maker: cylinderMaker,
         volume: cylinderVolume,
-        year: cylinderYear,
+        year: cylinderProductionDate,
         fuel: cylinderFuel,
         reducerName: reducerName,
         controlUnitName: controlUnitName,
@@ -2346,7 +2340,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         onNumber: (value) => setState(() => cylinderNumber = value),
         onMaker: (value) => setState(() => cylinderMaker = value),
         onVolume: (value) => setState(() => cylinderVolume = value),
-        onYear: (value) => setState(() => cylinderYear = value),
+        onYear: (value) => setState(() => cylinderProductionDate = value),
         onFuel: (value) => setState(() => cylinderFuel = value),
         onReducerName: (value) => setState(() => reducerName = value),
         onControlUnitName: (value) => setState(() => controlUnitName = value),
@@ -2354,7 +2348,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         onNext: _goCylinderNext,
       ),
       18 => _PhotoStep(
-        step: 1,
+        step: 4,
         title: 'Фото бирки баллона',
         caption: 'Поместите бирку в рамку',
         photoName: cylinderPhotoName,
@@ -2362,7 +2356,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         uploaded: cylinderPhotoUploaded,
         locked: protectedInspectionPhotosLocked && cylinderPhotoUploaded,
         onCamera: () => _captureInspectionPhoto('cylinder'),
-        onNext: () => go(15),
+        onNext: () => go(19),
       ),
       19 => _PhotoStep(
         step: 5,
@@ -2383,6 +2377,15 @@ class _ErsiDemoState extends State<ErsiDemo> {
         photoBytes: techPassportPhotoBytes,
         uploaded: techPassportPhotoUploaded,
         locked: protectedInspectionPhotosLocked && techPassportPhotoUploaded,
+        secondary: Column(children: [
+          const SizedBox(height: 16),
+          const Text('ОБРАТНАЯ СТОРОНА ТЕХПАСПОРТА — НЕОБЯЗАТЕЛЬНО', style: _section),
+          if (packageDocumentBytes['tech_passport_back'] != null)
+            _PhotoBox(caption: 'Обратная сторона техпаспорта', imageBytes: packageDocumentBytes['tech_passport_back'], onTap: () => _pickInspectionDocument('tech_passport_back', 'Обратная сторона техпаспорта', camera: true)),
+          for (final file in selectedInspection?.files.where((file) => file.type == 'tech_passport_back') ?? <InspectionFileInfo>[])
+            if (packageDocumentBytes['tech_passport_back'] == null) _InspectionFileCard(file: file),
+          _PrimaryButton(text: 'Сфотографировать вторую сторону', icon: Icons.camera_alt_rounded, onTap: () => _pickInspectionDocument('tech_passport_back', 'Обратная сторона техпаспорта', camera: true)),
+        ]),
         onCamera: () => _captureInspectionPhoto('tech_passport'),
         onNext: () => go(21),
       ),
@@ -4052,10 +4055,10 @@ class _Certificate extends StatelessWidget {
                 ),
                 (
                   Icons.event_rounded,
-                  'ГОД / ДАТА ВЫПУСКА',
+                  'ДАТА ВЫПУСКА БАЛЛОНА',
                   item.cylinderProducedAt.isEmpty
                       ? 'Не указано'
-                      : item.cylinderProducedAt,
+                      : _displayDate(item.cylinderProducedAt),
                 ),
                 (
                   Icons.settings_input_component_rounded,
@@ -4492,7 +4495,7 @@ class _InspectionDetailScreen extends StatelessWidget {
               files: files
                   .where(
                     (file) =>
-                        ['applicant_application', 'tech_passport'].contains(file.type),
+                        ['applicant_application', 'tech_passport', 'tech_passport_back'].contains(file.type),
                   )
                   .toList(),
               child: _CertificateDetailsCard(
@@ -4584,6 +4587,11 @@ class _InspectionDetailScreen extends StatelessWidget {
                   ),
                   (
                     Icons.event_rounded,
+                    'ДАТА ВЫПУСКА БАЛЛОНА',
+                    item.cylinderProducedAt.isEmpty ? 'Не указана' : _displayDate(item.cylinderProducedAt),
+                  ),
+                  (
+                    Icons.event_rounded,
                     'СРОК БАЛЛОНА',
                     item.cylinderValidUntil.isEmpty
                         ? 'Не указан'
@@ -4620,6 +4628,7 @@ class _InspectionDetailScreen extends StatelessWidget {
                       'certificate_document',
                       'applicant_application',
                       'tech_passport',
+                      'tech_passport_back',
                       'cylinder_label',
                     ].contains(file.type),
               ))
@@ -4657,7 +4666,7 @@ class _QualityDataWithPhotos extends StatelessWidget {
             children: [
               if (!files.any((file) => file.type == type))
                 _InfoBox(title: inspectionRequiredLabels[type] ?? type, text: 'Фото не загружено'),
-              for (final file in files.where((file) => file.type == type))
+              for (final file in files.where((file) => file.type == type || (type == 'tech_passport' && file.type == 'tech_passport_back')))
                 Padding(padding: const EdgeInsets.only(bottom: 12), child: _InspectionFileCard(file: file)),
             ],
           ),
@@ -4768,8 +4777,8 @@ class _InspectionFileCard extends StatelessWidget {
               onTap: () => _openFullScreenImage(context, url, title),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(14),
-                child: AspectRatio(
-                  aspectRatio: 1.55,
+                child: DocumentImageFrame(
+                  image: NetworkImage(url),
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
@@ -4863,8 +4872,8 @@ class _CertificateDocumentCard extends StatelessWidget {
               onTap: () => _openFullScreenImage(context, url, title),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(14),
-                child: AspectRatio(
-                  aspectRatio: 1.45,
+                child: DocumentImageFrame(
+                  image: NetworkImage(url),
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
@@ -5655,7 +5664,7 @@ class _OwnerStep extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _ProgressDots(step: 2),
+            _ProgressDots(step: 1),
             const SizedBox(height: 12),
             _Pills(
               values: const ['Физлицо', 'Компания'],
@@ -5803,11 +5812,11 @@ class _CylinderStep extends StatelessWidget {
               keyboardType: TextInputType.number,
               onChanged: onVolume,
             ),
-            _Input(
-              label: 'Год выпуска',
+            _DateFilterInput(
+              label: 'Дата выпуска баллона (обязательно)',
               value: year,
-              hint: 'Введите год',
-              keyboardType: TextInputType.number,
+              firstDate: DateTime(1900),
+              lastDate: DateTime.now(),
               onChanged: onYear,
             ),
             Padding(
@@ -5897,7 +5906,7 @@ class _VehicleStep extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _ProgressDots(step: 4),
+            _ProgressDots(step: 3),
             const SizedBox(height: 26),
             _Input(
               label: 'Государственный номер',
@@ -5943,6 +5952,7 @@ class _PhotoStep extends StatelessWidget {
     required this.photoBytes,
     required this.uploaded,
     this.locked = false,
+    this.secondary,
     required this.onCamera,
     required this.onNext,
   });
@@ -5953,6 +5963,7 @@ class _PhotoStep extends StatelessWidget {
   final List<int>? photoBytes;
   final bool uploaded;
   final bool locked;
+  final Widget? secondary;
   final VoidCallback onCamera;
   final VoidCallback onNext;
 
@@ -5960,7 +5971,7 @@ class _PhotoStep extends StatelessWidget {
   Widget build(BuildContext context) {
     return _AppScreen(
       title: title,
-      subtitle: 'Автоматическое распознавание',
+      subtitle: 'Фото оригинала',
       activeNav: 1,
       leadingBack: true,
       paymentNav: true,
@@ -5991,6 +6002,7 @@ class _PhotoStep extends StatelessWidget {
             icon: locked ? Icons.lock_rounded : Icons.camera_alt_rounded,
             onTap: locked ? null : onCamera,
           ),
+          if (secondary != null) secondary!,
           if (photoName != null || uploaded) ...[
             const SizedBox(height: 12),
             _PrimaryButton(
@@ -7374,19 +7386,23 @@ class _DateFilterInput extends StatelessWidget {
     required this.label,
     required this.value,
     required this.onChanged,
+    this.firstDate,
+    this.lastDate,
   });
 
   final String label;
   final String value;
   final ValueChanged<String> onChanged;
+  final DateTime? firstDate;
+  final DateTime? lastDate;
 
   Future<void> _pick(BuildContext context) async {
     final initial = DateTime.tryParse(value) ?? DateTime.now();
     final picked = await showDatePicker(
       context: context,
       initialDate: initial,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2035),
+      firstDate: firstDate ?? DateTime(2020),
+      lastDate: lastDate ?? DateTime(2035),
     );
     if (picked == null) return;
     onChanged(_formatDate(picked));
@@ -8333,8 +8349,8 @@ class _InputState extends State<_Input> {
         onChanged: widget.onChanged,
         style: const TextStyle(color: ink, fontWeight: FontWeight.w800),
         decoration: InputDecoration(
-          labelText: widget.label,
-          hintText: widget.hint,
+          labelText: widget.label.toUpperCase(),
+          hintText: widget.hint?.toUpperCase(),
           suffixText: widget.suffix,
           prefixIcon: const Icon(Icons.lock_outline_rounded, size: 18),
           filled: true,
@@ -8409,7 +8425,7 @@ class _EquipmentPickerState extends State<_EquipmentPicker> {
             initialValue: dropdownValue,
             isExpanded: true,
             decoration: InputDecoration(
-              labelText: widget.label,
+              labelText: widget.label.toUpperCase(),
               prefixIcon: const Icon(Icons.tune_rounded, size: 18),
               filled: true,
               fillColor: Colors.white,
@@ -9366,7 +9382,7 @@ class _PhotoBox extends StatelessWidget {
   Widget build(BuildContext context) => GestureDetector(
     onTap: onTap,
     child: Container(
-      height: tall ? 400 : 300,
+      height: imageBytes == null ? (tall ? 400 : 300) : null,
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -9400,7 +9416,7 @@ class _PhotoBox extends StatelessWidget {
                 if (tall) const SizedBox(height: 32),
               ],
             )
-          : ClipRRect(
+          : DocumentImageFrame(image: MemoryImage(Uint8List.fromList(imageBytes!)), child: ClipRRect(
               borderRadius: BorderRadius.circular(22),
               child: Stack(
                 fit: StackFit.expand,
@@ -9434,7 +9450,7 @@ class _PhotoBox extends StatelessWidget {
                   ),
                 ],
               ),
-            ),
+            )),
     ),
   );
 }
