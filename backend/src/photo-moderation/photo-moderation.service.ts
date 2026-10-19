@@ -4,6 +4,7 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common";
 import sharp from "sharp";
+import { screenEvidence, shouldReshoot } from "./screen-evidence";
 import { analyzePixels, reviewReasons } from "./local-photo-analysis";
 export type PhotoCheck = {
   moderationStatus: string;
@@ -11,7 +12,7 @@ export type PhotoCheck = {
   moderationCheckedAt?: Date;
   moderationReason?: string;
 };
-const MODEL = "local-screening-v1";
+const MODEL = "local-screening-v2";
 @Injectable()
 export class PhotoModerationService {
   private active = 0;
@@ -72,6 +73,7 @@ export class PhotoModerationService {
           "Слишком маленькое фото. Короткая сторона должна быть от 240, длинная от 480 пикселей",
         );
       const { data, info } = await input
+        .clone()
         .rotate()
         .flatten({ background: "#ffffff" })
         .resize({
@@ -83,13 +85,44 @@ export class PhotoModerationService {
         .greyscale()
         .raw()
         .toBuffer({ resolveWithObject: true });
+      const rgb = await input
+        .clone()
+        .rotate()
+        .flatten({ background: "#ffffff" })
+        .resize({
+          width: 480,
+          height: 480,
+          fit: "inside",
+          withoutEnlargement: true,
+        })
+        .toColourspace("srgb")
+        .removeAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+      const evidence = screenEvidence(
+        rgb.data,
+        rgb.info.width,
+        rgb.info.height,
+      );
+      if (shouldReshoot(evidence, _type))
+        throw new BadRequestException(
+          "Обнаружены совместные признаки экрана: тёмная рамка и повторяющиеся полосы. Сфотографируйте оригинал документа вне экрана другого устройства",
+        );
       const metrics = analyzePixels(data, info.width, info.height);
-      // Reject unusable frames only. Screen-related signals always require a human decision.
+      // Isolated heuristic signals remain advisory; only combined enclosure + banding requires reshooting.
       if (metrics.contrast < 2 && metrics.edgeFraction < 0.001)
         throw new BadRequestException(
           "На фото почти нет различимых деталей. Сфотографируйте документ заново",
         );
       const reasons = reviewReasons(metrics);
+      if (evidence.enclosedDisplay)
+        reasons.push(
+          "Внутренняя рамка вокруг светлой области: возможен экран устройства",
+        );
+      if (evidence.coherentBands)
+        reasons.push("Повторяющиеся полосы в нескольких участках изображения");
+      if (evidence.colorBands)
+        reasons.push("Цветные периодические полосы: возможен муар экрана");
       return reasons.length
         ? result("manual_review", reasons.join("; "))
         : result(

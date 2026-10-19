@@ -8,7 +8,7 @@ export type LocalImageMetrics = {
   periodicColumns: boolean;
   darkFrame: boolean;
 };
-function periodic(profile: number[]) {
+export function periodic(profile: number[], threshold = 0.55, step = 1) {
   const n = profile.length,
     mean = profile.reduce((a, b) => a + b, 0) / n,
     variance = profile.reduce((a, b) => a + (b - mean) ** 2, 0) / n;
@@ -23,20 +23,23 @@ function periodic(profile: number[]) {
     return false;
   let strongest = 0;
   // Exclude broad lighting gradients; require at least four repeating bands.
-  for (let k = 4; k <= Math.min(64, Math.floor(n / 4)); k++) {
-    let re = 0,
-      im = 0;
-    for (let i = 0; i < n; i++) {
-      const phase = (2 * Math.PI * k * i) / n;
-      re += (profile[i] - mean) * Math.cos(phase);
-      im += (profile[i] - mean) * Math.sin(phase);
+  for (let k = 4; k <= Math.min(64, Math.floor(n / 4)); k += step) {
+    // Goertzel recurrence supports fractional frequencies without one trig call per pixel.
+    const coefficient = 2 * Math.cos((2 * Math.PI * k) / n);
+    let previous = 0,
+      previous2 = 0;
+    for (const value of profile) {
+      const current = value - mean + coefficient * previous - previous2;
+      previous2 = previous;
+      previous = current;
     }
-    strongest = Math.max(
-      strongest,
-      (2 * (re * re + im * im)) / (n * n * variance),
-    );
+    const power =
+      previous * previous +
+      previous2 * previous2 -
+      coefficient * previous * previous2;
+    strongest = Math.max(strongest, (2 * power) / (n * n * variance));
   }
-  return strongest > 0.55;
+  return strongest > threshold;
 }
 export function analyzePixels(
   gray: Uint8Array,
