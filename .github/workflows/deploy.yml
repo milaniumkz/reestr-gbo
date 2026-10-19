@@ -124,7 +124,6 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           APP_DIR: /opt/reestr/app
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           PUBLIC_ORIGIN: https://89-207-255-42.sslip.io
 
       - name: Verify public APK download
@@ -167,6 +166,7 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           APP_DIR: /opt/reestr/app
+          OPENAI_API_KEY: ${{ github.event.inputs.operation == 'configure-photo-moderation' && secrets.OPENAI_API_KEY || '' }}
 
       - name: Record data operation result
         if: success() && contains(github.event.inputs.operation, 'inspection-data')
