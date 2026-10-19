@@ -1,8 +1,9 @@
-import { afterEach, describe, expect, it, jest } from "@jest/globals";
+import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
 import sharp from "sharp";
 import { PhotoModerationService } from "./photo-moderation.service";
 import { analyzePixels } from "./local-photo-analysis";
 const saved = process.env.PHOTO_MODERATION_MODE;
+beforeEach(() => { delete process.env.PHOTO_MODERATION_MODE; });
 afterEach(() => {
   jest.restoreAllMocks();
   if (saved === undefined) delete process.env.PHOTO_MODERATION_MODE;
