@@ -68,6 +68,7 @@ const inspectionRequiredLabels = <String, String>{
   'gas_cylinder': 'данные баллона',
   'tech_passport_back': 'Техпаспорт — обратная сторона',
   'fuel_type': 'тип газа (СНГ или КПГ)',
+  'cylinder_produced_at': 'дату выпуска баллона',
   'vehicle_owner': 'данные владельца',
 };
 const lawExtractTitle = 'Приказ №600 от 18 ноября 2021 года';
@@ -1256,6 +1257,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       'model': 'модель',
       'cylinderSerial': 'номер баллона',
       'cylinderManufacturer': 'производитель баллона',
+      'producedAt': 'полная дата выпуска баллона',
       'volumeLiters': 'объем баллона',
       'reducerName': 'название редуктора',
       'controlUnitName': 'название ЭБУ',

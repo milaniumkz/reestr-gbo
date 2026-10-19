@@ -4,7 +4,7 @@
 
 ## Настройка
 
-В защищённом `/opt/reestr/app/backend/.env` задайте `OPENAI_API_KEY` и `PHOTO_MODERATION_MODEL=gpt-4.1-mini`. Ключ не добавлять в Git, APK, браузерные переменные или чат. Серверу требуется исходящий HTTPS к `api.openai.com`. Перезапустите службу backend (имя службы: см. `ops/systemd`).
+В защищённом `/opt/reestr/app/backend/.env` задайте `OPENAI_API_KEY` и `PHOTO_MODERATION_MODEL=gpt-4.1-mini`. Ключ не добавлять в Git, APK, браузерные переменные или чат. Серверу требуется исходящий HTTPS к `api.openai.com`. Перезапустите backend: `sudo systemctl restart reestr-backend` (см. `ops/reestr-backend.service`).
 
 `PHOTO_MODERATION_MODE`:
 

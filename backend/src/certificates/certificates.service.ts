@@ -1002,9 +1002,7 @@ export class CertificatesService {
     const validUntil =
       this.parseMonthYear(cell("F101") || cell("F137")) ??
       this.plusYears(issuedAt, 2);
-    const cylinderProducedAt = this.parseMonthYearStart(
-      cell("H90") || cell("H126"),
-    );
+    const cylinderProducedAt = this.parseFullCylinderDate(cell("H90") || cell("H126"));
 
     const parsed = {
       reportNumber,
@@ -1045,6 +1043,7 @@ export class CertificatesService {
             "model",
             "cylinderSerial",
             "cylinderManufacturer",
+            "producedAt",
             "volumeLiters",
             "reducerName",
             "controlUnitName",
@@ -1239,10 +1238,19 @@ export class CertificatesService {
     return new Date(Date.UTC(year, month, 0, 23, 59, 59));
   }
 
-  private parseMonthYearStart(value: string) {
-    const match = value.match(/(\d{1,2})[./-](\d{4})/);
-    if (!match) return undefined;
-    return new Date(Date.UTC(Number(match[2]), Number(match[1]) - 1, 1));
+  private parseFullCylinderDate(value: string) {
+    const text = value.trim();
+    const localized = text.match(/^(\d{2})[./](\d{2})[./](\d{4})$/);
+    const iso = localized ? `${localized[3]}-${localized[2]}-${localized[1]}` : text;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+      const date = new Date(`${iso}T00:00:00.000Z`);
+      return !Number.isNaN(date.getTime()) && date.toISOString().slice(0,10) === iso && date.getUTCFullYear() >= 1900 && date <= new Date() ? date : undefined;
+    }
+    if (/^\d{5}(?:\.\d+)?$/.test(text)) {
+      const date = this.parseDate(text);
+      return date && date.getUTCFullYear() >= 1900 && date <= new Date() ? date : undefined;
+    }
+    return undefined; // Do not invent day 1 for a month/year-only date.
   }
 
   private plusYears(date: Date, years: number) {

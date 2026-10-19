@@ -209,7 +209,7 @@ describe('Inspection quality control workflow', () => {
       vehicleId:'vehicle_1',
       photos: ['applicant_application','applicant_questionnaire','cylinder_label','vehicle_photo','tech_passport','gas_work_record','cylinder_work_record','gas_inspection_report','cylinder_inspection_report'].map(type => ({ id:type, type, objectKey:type })),
       requireApplicantPhotos: false,
-      vehicle: { cylinders:[{id:'cylinder_1',fuelType:'СНГ'}], owners:[{id:'owner_1',userId:'owner_user',user:{phone:'+77001234567'}}] },
+      vehicle: { cylinders:[{id:'cylinder_1',fuelType:'СНГ',producedAt:new Date('2024-07-15') as Date|null}], owners:[{id:'owner_1',userId:'owner_user',user:{phone:'+77001234567'}}] },
     };
     const prisma = {
       inspection: {
@@ -258,6 +258,11 @@ describe('Inspection quality control workflow', () => {
     const f=fixture();f.moderation.check.mockRejectedValue(new BadRequestException('Фото экрана другого телефона'));
     await expect(f.service.uploadPhoto('inspection_1','tech_passport',{originalname:'phone.jpg',buffer:Buffer.from('photo')},f.user('inspector'))).rejects.toThrow('Фото экрана');
     expect(f.storage.putObject).not.toHaveBeenCalled();expect(f.prisma.inspectionPhoto.create).not.toHaveBeenCalled();
+  });
+  it('requires a cylinder production date before sending an old draft',async()=>{
+    const f=fixture();f.state.vehicle.cylinders[0].producedAt=null;
+    expect((await f.service.readiness('inspection_1',f.user('inspector'))).missing).toContain('cylinder_produced_at');
+    await expect(f.service.setStatus(f.user('inspector'),'inspection_1','submitted')).rejects.toThrow('Не хватает данных');
   });
   const corrected = {
     certificateNumber:'TEST-1',inspectionDate:'2026-10-13',

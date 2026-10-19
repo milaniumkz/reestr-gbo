@@ -364,3 +364,14 @@ describe('Inspector XLSX imports preserve review workflow',()=>{
     expect(prisma.user.upsert).not.toHaveBeenCalled();
   });
 });
+
+
+describe('Full cylinder production date in Excel',()=>{
+  const parser = new CertificatesService({} as never, {} as never) as unknown as {parseFullCylinderDate(value:string):Date|undefined};
+  it.each(['2024','07.2024','2024-02-30','15.13.2024'])('requires a full valid date instead of inventing a day: %s',value=>{
+    expect(parser.parseFullCylinderDate(value)).toBeUndefined();
+  });
+  it.each(['15.07.2024','2024-07-15'])('preserves day, month and year: %s',value=>{
+    expect(parser.parseFullCylinderDate(value)?.toISOString()).toBe('2024-07-15T00:00:00.000Z');
+  });
+});

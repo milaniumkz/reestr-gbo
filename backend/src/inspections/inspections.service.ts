@@ -479,6 +479,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       ...required.filter((type) => !photoTypes.has(type)),
       ...(inspection.vehicle.cylinders.length ? [] : ["gas_cylinder"]),
       ...(inspection.vehicle.owners.length ? [] : ["vehicle_owner"]),
+      ...(inspection.vehicle.cylinders.length && !inspection.vehicle.cylinders[0].producedAt ? ["cylinder_produced_at"] : []),
       ...(inspection.vehicle.cylinders.length && !["СНГ", "КПГ", "LPG", "CNG"].includes(inspection.vehicle.cylinders[0].fuelType?.trim().toUpperCase() ?? "") ? ["fuel_type"] : []),
     ];
     return {

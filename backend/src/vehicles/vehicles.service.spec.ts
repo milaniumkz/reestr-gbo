@@ -19,6 +19,7 @@ describe('Inspection vehicle owner data', () => {
     await new VehiclesService(prisma as never).create({vin:'VIN',plateNumber:'123',make:'Toyota',model:'Camry',owner:{phone:'8 (701) 111-22-33',fullName:'Владелец',address:'Адрес'},cylinder:{serialNumber:'CYL',manufacturer:'Atiker',volumeLiters:54,producedAt:'2024-07-15',fuelType:'СНГ',validUntil:'2028-10-13'}});
     const write = existing ? prisma.vehicleOwner.update : prisma.vehicleOwner.create;
     expect(write).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({phone:'+77011112233',fullName:'Владелец',address:'Адрес'})}));
+    expect(prisma.gasCylinder.create).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({producedAt:new Date('2024-07-15T00:00:00.000Z')})}));
     expect(prisma.user.upsert).not.toHaveBeenCalled();
     expect(prisma.user.create).not.toHaveBeenCalled();
     expect(prisma.user.update).not.toHaveBeenCalled();
