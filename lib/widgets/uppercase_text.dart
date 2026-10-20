@@ -1,3 +1,4 @@
+import '../l10n/app_language.dart';
 import 'package:flutter/material.dart' as material;
 
 /// Uppercase presentation only; stored values and editable input are unchanged.
@@ -21,7 +22,7 @@ class Text extends material.Text {
   });
   @override
   material.Widget build(material.BuildContext context) => material.Text(
-    data!.toUpperCase(),
+    tr(context, data!).toUpperCase(),
     style: style,
     strutStyle: strutStyle,
     textAlign: textAlign,
@@ -31,7 +32,9 @@ class Text extends material.Text {
     overflow: overflow,
     textScaler: textScaler,
     maxLines: maxLines,
-    semanticsLabel: semanticsLabel?.toUpperCase(),
+    semanticsLabel: semanticsLabel == null
+        ? null
+        : tr(context, semanticsLabel!).toUpperCase(),
     textWidthBasis: textWidthBasis,
     textHeightBehavior: textHeightBehavior,
     selectionColor: selectionColor,

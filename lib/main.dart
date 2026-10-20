@@ -1,3 +1,4 @@
+import 'l10n/app_language.dart';
 import 'inspection_input.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'data/client_telemetry.dart';
@@ -440,9 +441,7 @@ class ErsiGboApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'ЕРСИ ГБО',
+    return LocalizedApp(
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(seedColor: green),
@@ -553,7 +552,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
   bool promoted = true;
   bool authBusy = false;
   bool bootstrapping = true;
-  String language = 'Русский';
+
   Timer? _qualityQueueTimer;
 
   @override
@@ -992,12 +991,27 @@ class _ErsiDemoState extends State<ErsiDemo> {
     setState(() => authBusy = true);
     try {
       final consentPreferences = await SharedPreferences.getInstance();
-      if (consentPreferences.getBool('diagnosticLocationAsked') != true && mounted) {
-        final allow = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
-          title: const Text('Геолокация для технической поддержки'),
-          content: const Text('Разрешить сохранять координаты при входе и действиях в системе? Это поможет разобраться с ошибками и местом инспекции. Отказ не мешает входу.'),
-          actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Не сейчас')), TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Разрешить'))],
-        ));
+      if (consentPreferences.getBool('diagnosticLocationAsked') != true &&
+          mounted) {
+        final allow = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Геолокация для технической поддержки'),
+            content: const Text(
+              'Разрешить сохранять координаты при входе и действиях в системе? Это поможет разобраться с ошибками и местом инспекции. Отказ не мешает входу.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Не сейчас'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Разрешить'),
+              ),
+            ],
+          ),
+        );
         await consentPreferences.setBool('diagnosticLocationAsked', true);
         if (allow == true) await ClientTelemetry.allowLocation();
       }
@@ -2202,6 +2216,12 @@ class _ErsiDemoState extends State<ErsiDemo> {
                       ),
                     ),
                   ),
+                  if (screen <= 2)
+                    const Positioned(
+                      top: 12,
+                      right: 16,
+                      child: SafeArea(bottom: false, child: LanguageSwitch()),
+                    ),
                   if (widget.showStepper)
                     Positioned(
                       right: 12,
@@ -2217,7 +2237,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
                     Positioned(
                       left: 18,
                       right: 18,
-                      top: 16,
+                      top: screen <= 2 ? 82 : 16,
                       child: _AppAlertBanner(
                         text: apiState,
                         onClose: () => setState(() => apiState = ''),
@@ -2636,8 +2656,12 @@ class _ErsiDemoState extends State<ErsiDemo> {
         onEmployeeDateTo: (value) =>
             setState(() => employeeActivityDateTo = value),
         onReloadHistory: _loadViewHistory,
-        language: language,
-        onLanguage: (value) => setState(() => language = value),
+        language: Localizations.localeOf(context).languageCode == 'kk'
+            ? 'Қазақша'
+            : 'Русский',
+        onLanguage: (value) => AppLanguage.maybeOf(
+          context,
+        )?.setLocale(Locale(value == 'Қазақша' ? 'kk' : 'ru')),
       ),
       _ => _InspectionDetailScreen(
         inspection: selectedInspection,
@@ -2824,6 +2848,7 @@ class _AppAlertBanner extends StatelessWidget {
     final normalized = value.toLowerCase();
     const routine = {
       'api connecting',
+      'api online',
       'organizations loaded',
       'инспекции загружены',
       'реестр загружен',
@@ -5687,7 +5712,7 @@ class _InspectorHome extends StatelessWidget {
               children: [
                 const Expanded(child: Text('Мои инспекции', style: _section)),
                 IconButton(
-                  tooltip: 'Обновить',
+                  tooltip: tr(context, 'Обновить'),
                   onPressed: onReload,
                   icon: const Icon(Icons.refresh_rounded, color: green),
                 ),
@@ -8497,7 +8522,13 @@ class _InputState extends State<_Input> {
         obscureText: widget.obscureText,
         onTap: widget.onTap,
         keyboardType: widget.keyboardType,
-        hintLocales: inspectionText ? const [Locale('ru', 'RU')] : null,
+        hintLocales: inspectionText
+            ? [
+                Localizations.localeOf(context).languageCode == 'kk'
+                    ? const Locale('kk', 'KZ')
+                    : const Locale('ru', 'RU'),
+              ]
+            : null,
         textCapitalization: inspectionText
             ? TextCapitalization.characters
             : TextCapitalization.none,
@@ -8508,8 +8539,10 @@ class _InputState extends State<_Input> {
         onChanged: widget.onChanged,
         style: const TextStyle(color: ink, fontWeight: FontWeight.w800),
         decoration: InputDecoration(
-          labelText: widget.label.toUpperCase(),
-          hintText: widget.hint?.toUpperCase(),
+          labelText: tr(context, widget.label).toUpperCase(),
+          hintText: widget.hint == null
+              ? null
+              : tr(context, widget.hint!).toUpperCase(),
           suffixText: widget.suffix,
           prefixIcon: const Icon(Icons.lock_outline_rounded, size: 18),
           filled: true,
@@ -8584,7 +8617,7 @@ class _EquipmentPickerState extends State<_EquipmentPicker> {
             initialValue: dropdownValue,
             isExpanded: true,
             decoration: InputDecoration(
-              labelText: widget.label.toUpperCase(),
+              labelText: tr(context, widget.label).toUpperCase(),
               prefixIcon: const Icon(Icons.tune_rounded, size: 18),
               filled: true,
               fillColor: Colors.white,
@@ -8640,7 +8673,7 @@ class _SearchBarCard extends StatelessWidget {
             child: Icon(Icons.search_rounded, color: green, size: 28),
           ),
           prefixIconConstraints: const BoxConstraints(minWidth: 56),
-          hintText: hint,
+          hintText: tr(context, hint),
           hintStyle: const TextStyle(
             color: muted,
             fontSize: 13,

@@ -55,6 +55,7 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      - run: python3 scripts/check_localization.py
       - run: flutter build web --release --pwa-strategy=none --dart-define=API_BASE_URL=https://89-207-255-42.sslip.io/api/v1 --dart-define=APP_MODE=production --dart-define=APP_VERSION="1.0.0+$(git rev-parse --short HEAD)"
       - uses: actions/setup-java@v4
         if: github.event.inputs.operation != 'deploy-web'
