@@ -102,6 +102,8 @@ export function traceMiddleware(ledger: EventLedger) {
         };
         if (
           status >= 500 ||
+          status === 400 ||
+          status === 422 ||
           status === 401 ||
           status === 403 ||
           status === 429

@@ -275,6 +275,9 @@ export class TechnicalController {
   @Get("events/export") export(@Req() r: any, @Query() q: any) {
     return this.data.exportEvents(r.tech, q);
   }
+  @Get("journey") journey(@Req() r: any, @Query() q: any) {
+    return this.data.journey(r.tech, q);
+  }
   @Get("problems") problems(@Req() r: any, @Query() q: any) {
     return this.data.problems(r.tech, q);
   }

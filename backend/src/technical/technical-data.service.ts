@@ -8,6 +8,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  NotFoundException,
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { EventLedger } from "../observability/event-ledger.service";
@@ -350,6 +351,71 @@ export class TechnicalData {
       total,
       page: page.page,
       limit: page.limit,
+    };
+  }
+  async journey(principal: TechnicalPrincipal, q: any) {
+    this.auth.require(principal, "events.read");
+    this.auth.require(principal, "people.read");
+    this.auth.require(principal, "security.read");
+    let anchor;
+    if (q.alertId) {
+      const alert = await this.prisma.technicalAlert.findFirst({
+        where: { id: String(q.alertId), ...(await this.alertScope(principal)) },
+      });
+      if (!alert) throw new NotFoundException("Уведомление не найдено");
+      const requestId = /Обращение: ([a-f0-9-]{36})/i.exec(
+        alert.explanation,
+      )?.[1];
+      anchor = await this.prisma.technicalEvent.findFirst({
+        where: {
+          action: "inspection.photo.rejected",
+          OR: [
+            { id: alert.dedupKey.replace(/^photo-rejected:/, "") },
+            ...(requestId ? [{ requestId }] : []),
+          ],
+        },
+        orderBy: { createdAt: "asc" },
+      });
+    } else if (q.eventId)
+      anchor = await this.prisma.technicalEvent.findUnique({
+        where: { id: String(q.eventId) },
+      });
+    if (!anchor)
+      throw new NotFoundException(
+        "Исходное событие не найдено. История не восстанавливается предположением.",
+      );
+    // Never correlate people by IP, proximity in time, or device fingerprints.
+    const where: any =
+      anchor.actorId && anchor.sessionId
+        ? { actorId: anchor.actorId, sessionId: anchor.sessionId }
+        : anchor.actorId && anchor.objectId
+          ? { actorId: anchor.actorId, objectId: anchor.objectId }
+          : anchor.requestId
+            ? { requestId: anchor.requestId }
+            : { id: anchor.id };
+    const page = pageInput({ ...q, limit: "50" });
+    const [rows, total] = await Promise.all([
+      this.prisma.technicalEvent.findMany({
+        where,
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        skip: page.skip,
+        take: page.limit,
+      }),
+      this.prisma.technicalEvent.count({ where }),
+    ]);
+    return {
+      anchorId: anchor.id,
+      events: await this.activity.enrich(rows, principal),
+      total,
+      page: page.page,
+      limit: page.limit,
+      scope:
+        anchor.actorId && anchor.sessionId
+          ? "Действия этого сотрудника в том же сеансе входа"
+          : anchor.actorId && anchor.objectId
+            ? "Действия этого сотрудника с тем же объектом"
+            : "События одного обращения",
+      note: "События показаны по времени от первого к последнему, включая неудачные запросы и незавершённое оформление. Это сохранённые обращения к серверу; действия без отправки запроса и прежние незаписанные действия здесь не видны.",
     };
   }
   async problem(principal: TechnicalPrincipal, id: string, q: any = {}) {

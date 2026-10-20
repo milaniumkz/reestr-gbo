@@ -235,13 +235,28 @@ function readableDevice(value: string) {
             : null;
   return [browser, os].filter(Boolean).join(" · ");
 }
-function ActivityTimeline({ events }: { events: any[] }) {
+function ActivityTimeline({
+  events,
+  openJourney,
+}: {
+  events: any[];
+  openJourney?: (event: any) => void;
+}) {
   return (
     <div className="activity-timeline">
       {events.map((event) => (
         <article className="activity-event" key={event.id}>
           <header>
             <strong>{date(event.createdAt)}</strong>
+            {openJourney && (
+              <button
+                type="button"
+                className="textbutton"
+                onClick={() => openJourney(event)}
+              >
+                Порядок действий сотрудника
+              </button>
+            )}
             <Badge
               value={event.result}
               text={event.display?.outcomeLabel ?? label(event.result)}
@@ -1182,6 +1197,23 @@ export default function Panel() {
                     data={data}
                     has={has}
                     action={async (kind, value) => {
+                      if (kind === "journey" || kind === "event-journey") {
+                        try {
+                          setDialog({
+                            kind: "journey",
+                            value: await api(
+                              "/journey?" +
+                                (kind === "event-journey"
+                                  ? "eventId="
+                                  : "alertId=") +
+                                value.id,
+                            ),
+                          });
+                        } catch (e) {
+                          displayError(e);
+                        }
+                        return;
+                      }
                       if (kind === "problem") {
                         try {
                           setDialog({
@@ -1286,27 +1318,29 @@ export default function Panel() {
       {dialog && (
         <Modal
           title={
-            dialog.kind === "problem"
-              ? "Расследование проблемы"
-              : dialog.kind === "reauth"
-                ? "Повторное подтверждение личности"
-                : dialog.kind === "account"
-                  ? "Новый технический сотрудник"
-                  : dialog.kind === "residence"
-                    ? "Город проживания инспектора"
-                    : dialog.kind === "recovery"
-                      ? "Восстановление доступа пользователя"
-                      : dialog.kind === "recovery-result"
-                        ? "Одноразовая ссылка восстановления"
-                        : dialog.kind === "rule"
-                          ? "Правило уведомлений"
-                          : dialog.kind === "mute"
-                            ? "Временно приглушить уведомление"
-                            : dialog.kind === "export"
-                              ? "Безопасный экспорт"
-                              : dialog.kind === "instructions"
-                                ? "Инструкции обслуживания"
-                                : "Подробности"
+            dialog.kind === "journey"
+              ? "Порядок действий сотрудника"
+              : dialog.kind === "problem"
+                ? "Расследование проблемы"
+                : dialog.kind === "reauth"
+                  ? "Повторное подтверждение личности"
+                  : dialog.kind === "account"
+                    ? "Новый технический сотрудник"
+                    : dialog.kind === "residence"
+                      ? "Город проживания инспектора"
+                      : dialog.kind === "recovery"
+                        ? "Восстановление доступа пользователя"
+                        : dialog.kind === "recovery-result"
+                          ? "Одноразовая ссылка восстановления"
+                          : dialog.kind === "rule"
+                            ? "Правило уведомлений"
+                            : dialog.kind === "mute"
+                              ? "Временно приглушить уведомление"
+                              : dialog.kind === "export"
+                                ? "Безопасный экспорт"
+                                : dialog.kind === "instructions"
+                                  ? "Инструкции обслуживания"
+                                  : "Подробности"
           }
           close={() => setDialog(null)}
         >
@@ -1340,6 +1374,48 @@ export default function Panel() {
             </>
           ) : (
             <form onSubmit={submitDialog}>
+              {dialog.kind === "journey" && (
+                <>
+                  <h3>{dialog.value.scope}</h3>
+                  <p>{dialog.value.note}</p>
+                  <p>
+                    Событий: {dialog.value.total}. Страница {dialog.value.page}.
+                  </p>
+                  <ActivityTimeline events={dialog.value.events ?? []} />
+                  <div className="actions">
+                    {[dialog.value.page - 1, dialog.value.page + 1]
+                      .filter(
+                        (p) =>
+                          p > 0 &&
+                          (p - 1) * dialog.value.limit < dialog.value.total,
+                      )
+                      .map((p) => (
+                        <button
+                          type="button"
+                          className="secondary"
+                          key={p}
+                          onClick={async () => {
+                            try {
+                              setDialog({
+                                kind: "journey",
+                                value: await api(
+                                  "/journey?eventId=" +
+                                    dialog.value.anchorId +
+                                    "&page=" +
+                                    p,
+                                ),
+                              });
+                            } catch (e) {
+                              displayError(e);
+                            }
+                          }}
+                        >
+                          Страница {p}
+                        </button>
+                      ))}
+                  </div>
+                </>
+              )}
               {dialog.kind === "user-password" && (
                 <>
                   <h3>
@@ -1537,7 +1613,19 @@ export default function Panel() {
                   <section className="problem-context">
                     <h3>Что произошло и когда</h3>
                     <p className="muted">{dialog.value.historyNote}</p>
-                    <ActivityTimeline events={dialog.value.events ?? []} />
+                    <ActivityTimeline
+                      events={dialog.value.events ?? []}
+                      openJourney={async (event) => {
+                        try {
+                          setDialog({
+                            kind: "journey",
+                            value: await api("/journey?eventId=" + event.id),
+                          });
+                        } catch (e) {
+                          displayError(e);
+                        }
+                      }}
+                    />
                     {!dialog.value.events?.length && (
                       <p>
                         Связанные события не найдены. Доступно только сводное
@@ -2004,24 +2092,25 @@ export default function Panel() {
                   </p>
                 </div>
               )}
-              {(dialog.kind !== "problem" || has("issues.manage")) && (
-                <div className="actions section-spacer">
-                  <button className="primary" disabled={busy}>
-                    {busy
-                      ? "Сохраняем…"
-                      : dialog.kind === "recovery"
-                        ? "Выдать одноразовую ссылку"
-                        : "Подтвердить"}
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary"
-                    onClick={() => setDialog(null)}
-                  >
-                    Отмена
-                  </button>
-                </div>
-              )}
+              {dialog.kind !== "journey" &&
+                (dialog.kind !== "problem" || has("issues.manage")) && (
+                  <div className="actions section-spacer">
+                    <button className="primary" disabled={busy}>
+                      {busy
+                        ? "Сохраняем…"
+                        : dialog.kind === "recovery"
+                          ? "Выдать одноразовую ссылку"
+                          : "Подтвердить"}
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => setDialog(null)}
+                    >
+                      Отмена
+                    </button>
+                  </div>
+                )}
             </form>
           )}
           {error && (
@@ -2419,6 +2508,12 @@ function DataTable({
                 details: r.details,
               }}
             />
+            <button
+              className="secondary"
+              onClick={() => action("event-journey", r)}
+            >
+              Порядок действий сотрудника
+            </button>
             {has("settings.manage") && (
               <button className="textbutton" onClick={() => action("hold", r)}>
                 Сохранить для расследования
@@ -2696,6 +2791,14 @@ function DataTable({
         render: (r) => (
           <>
             <strong>{r.title}</strong>
+            {r.photoRejection && (
+              <button
+                className="secondary"
+                onClick={() => action("journey", r)}
+              >
+                Порядок действий сотрудника
+              </button>
+            )}
             {r.photoRejection ? (
               <>
                 <div className="notice warning">
