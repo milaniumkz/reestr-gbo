@@ -9,7 +9,7 @@ export type PhotoCheck = {
   moderationCheckedAt?: Date;
   moderationReason?: string;
 };
-const MODEL = "local-screening-v3";
+const MODEL = "local-screening-v3.1";
 @Injectable()
 export class PhotoModerationService {
   private readonly limiter = new PhotoAnalysisLimiter();
@@ -21,7 +21,7 @@ export class PhotoModerationService {
       provider: "local",
       model: MODEL,
       authenticityGuaranteed: false,
-      analysisRevision: "v3-document-sharpness",
+      analysisRevision: "v3.1-tolerant-documents",
       load: this.limiter.status(),
     };
   }
@@ -42,7 +42,13 @@ export class PhotoModerationService {
       moderationReason: reason,
     });
     // No PDF renderer: never claim that embedded images or all pages were checked.
-    if (buffer.subarray(0, 5).toString() === "%PDF-" && ["vehicle_photo","cylinder_label"].includes(_type)) throw new BadRequestException("В этом поле нужна фотография объекта, а не PDF-документ");
+    if (
+      buffer.subarray(0, 5).toString() === "%PDF-" &&
+      ["vehicle_photo", "cylinder_label"].includes(_type)
+    )
+      throw new BadRequestException(
+        "В этом поле нужна фотография объекта, а не PDF-документ",
+      );
     if (buffer.subarray(0, 5).toString() === "%PDF-")
       return result(
         "manual_review",
@@ -68,8 +74,10 @@ export class PhotoModerationService {
         throw new BadRequestException(
           "Слишком маленькое фото. Короткая сторона должна быть от 240, длинная от 480 пикселей",
         );
-      const document = !['vehicle_photo','cylinder_label','photo'].includes(_type);
-      if(document && (Math.min(width,height)<720 || Math.max(width,height)<1000))throw new BadRequestException('Документ снят с недостаточным разрешением: нужно минимум 720×1000 пикселей. Снимите оригинал ближе, без размытия');
+      const document = !["vehicle_photo", "cylinder_label", "photo"].includes(
+        _type,
+      );
+
       const { data, info } = await input
         .clone()
         .rotate()
@@ -112,12 +120,39 @@ export class PhotoModerationService {
         throw new BadRequestException(
           "Обнаружены совместные признаки экрана: тёмная рамка и повторяющиеся полосы. Сфотографируйте оригинал документа вне экрана другого устройства",
         );
-      if(document){
-        const native=await input.clone().rotate().flatten({background:'#ffffff'}).resize({width:1500,height:1500,fit:'inside',withoutEnlargement:true}).greyscale().raw().toBuffer({resolveWithObject:true});
-        const focus=analyzePixels(native.data,native.info.width,native.info.height);
-        if(focus.laplacianVariance<28 && focus.edgeFraction<0.025)throw new BadRequestException('Документ размыт: мелкий текст недостаточно различим. Протрите камеру, наведите резкость и переснимите оригинал');
-      }
       const reasons = reviewReasons(metrics);
+      if (document) {
+        const native = await input
+          .clone()
+          .rotate()
+          .flatten({ background: "#ffffff" })
+          .resize({
+            width: 1500,
+            height: 1500,
+            fit: "inside",
+            withoutEnlargement: true,
+          })
+          .greyscale()
+          .raw()
+          .toBuffer({ resolveWithObject: true });
+        const focus = analyzePixels(
+          native.data,
+          native.info.width,
+          native.info.height,
+        );
+        if (focus.laplacianVariance < 8 && focus.edgeFraction < 0.003)
+          throw new BadRequestException(
+            "На документе почти не различимы детали. Наведите резкость и переснимите оригинал",
+          );
+        if (focus.laplacianVariance < 28 && focus.edgeFraction < 0.025)
+          reasons.push(
+            "Возможное размытие: контроль качества должен проверить читаемость",
+          );
+        if (Math.min(width, height) < 720 || Math.max(width, height) < 1000)
+          reasons.push(
+            "Невысокое разрешение: контроль качества должен проверить читаемость",
+          );
+      }
       if (evidence.enclosedDisplay)
         reasons.push(
           "Внутренняя рамка вокруг светлой области: возможен экран устройства",

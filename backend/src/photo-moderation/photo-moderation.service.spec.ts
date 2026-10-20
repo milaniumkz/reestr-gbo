@@ -41,7 +41,7 @@ describe("local photo screening", () => {
       "screenshot.png",
       "tech_passport",
     );
-    expect(result.moderationModel).toBe("local-screening-v3");
+    expect(result.moderationModel).toBe("local-screening-v3.1");
     expect(result.moderationStatus).toBe("local_checked");
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -167,13 +167,55 @@ describe("local photo screening", () => {
       (await service.check(png, "file.pdf", "tech_passport")).moderationStatus,
     ).toBe("local_checked");
   });
-  it('rejects low-resolution document originals even with strong borders',async()=>{
-    const low=await sharp(documentSvg()).resize(648,913,{fit:'fill'}).jpeg().toBuffer();
-    await expect(new PhotoModerationService().check(low,'record.jpg','cylinder_work_record')).rejects.toThrow('720×1000');
+  it.each([
+    "tech_passport",
+    "applicant_application",
+    "cylinder_work_record",
+    "gas_inspection_report",
+  ])(
+    "accepts ordinary compressed phone documents (%s) without a 1000px requirement",
+    async (type) => {
+      const low = await sharp(documentSvg())
+        .resize(480, 640, { fit: "fill" })
+        .jpeg({ quality: 60 })
+        .toBuffer();
+      const result = await new PhotoModerationService().check(
+        low,
+        "record.jpg",
+        type,
+      );
+      expect(result).toMatchObject({
+        moderationStatus: "manual_review",
+        moderationReason: expect.stringContaining("Невысокое разрешение"),
+      });
+    },
+  );
+  it("accepts a 648×913 document for quality review", async () => {
+    const low = await sharp(documentSvg())
+      .resize(648, 913, { fit: "fill" })
+      .jpeg()
+      .toBuffer();
+    await expect(
+      new PhotoModerationService().check(
+        low,
+        "record.jpg",
+        "cylinder_work_record",
+      ),
+    ).resolves.toMatchObject({ moderationStatus: "manual_review" });
   });
-  it('rejects high-resolution blurred text instead of treating table edges as legibility',async()=>{
-    const blurred=await sharp(documentSvg()).resize(1200,1600,{fit:'fill'}).blur(6).jpeg().toBuffer();
-    await expect(new PhotoModerationService().check(blurred,'record.jpg','gas_work_record')).rejects.toThrow(/размыт|деталей/);
+  it("rejects high-resolution blurred text instead of treating table edges as legibility", async () => {
+    const blurred = await sharp(documentSvg())
+      .resize(1200, 1600, { fit: "fill" })
+      .blur(6)
+      .jpeg()
+      .toBuffer();
+    await expect(
+      new PhotoModerationService().check(
+        blurred,
+        "record.jpg",
+        "gas_work_record",
+      ),
+    ).rejects.toThrow(/различим|деталей/);
   });
   it("respects explicit off mode without reporting a successful check", async () => {
     process.env.PHOTO_MODERATION_MODE = "off";

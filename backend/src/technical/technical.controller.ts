@@ -164,7 +164,7 @@ export class TechnicalController {
       assessment = {
         moderationStatus: "require_reshoot",
         moderationReason: error.message,
-        moderationModel: "local-screening-v3",
+        moderationModel: this.moderation.status().model,
         moderationCheckedAt: new Date(),
       };
     }
