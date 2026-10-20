@@ -504,8 +504,23 @@ export default function Panel() {
         status: string;
         from: string;
         to: string;
+        organizationId?: string;
+        employeeId?: string;
+        organization?: any;
+        employee?: any;
       }[]
     >([]);
+  const [organizationFilter, setOrganizationFilter] = useState(""),
+    [employeeFilter, setEmployeeFilter] = useState(""),
+    [organizationQuery, setOrganizationQuery] = useState(""),
+    [employeeQuery, setEmployeeQuery] = useState("");
+  const [filterOptions, setFilterOptions] = useState<any>({
+      organizations: [],
+      employees: [],
+    }),
+    [filterError, setFilterError] = useState("");
+  const [selectedOrganization, setSelectedOrganization] = useState<any>(null),
+    [selectedEmployee, setSelectedEmployee] = useState<any>(null);
   const [accountFilter, setAccountFilter] = useState<{
     id: string;
     kind: string;
@@ -557,6 +572,34 @@ export default function Panel() {
       history.replaceState(null, "", location.pathname);
     }
   }, [stage, displayError]);
+  useEffect(() => {
+    if (stage !== "ready" || !has("people.read")) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      const params = new URLSearchParams({
+        organizationId: organizationFilter,
+        organizationQuery,
+        employeeQuery,
+      });
+      void api("/filter-options?" + params)
+        .then((value) => {
+          if (!cancelled) {
+            setFilterOptions(value);
+            setFilterError("");
+          }
+        })
+        .catch((e) => {
+          if (!cancelled)
+            setFilterError(
+              e instanceof Error ? e.message : "Не удалось загрузить списки",
+            );
+        });
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [stage, user, organizationFilter, organizationQuery, employeeQuery]);
   function switchTheme() {
     const t = theme === "light" ? "dark" : "light";
     setTheme(t);
@@ -566,6 +609,8 @@ export default function Panel() {
   const endpoint = useCallback(() => {
     const p = new URLSearchParams({ page: String(page), limit: "25" });
     if (q) p.set("q", q);
+    if (organizationFilter) p.set("organizationId", organizationFilter);
+    if (employeeFilter) p.set("employeeId", employeeFilter);
     if (accountFilter)
       p.set(
         accountFilter.kind === "technical" ? "techActorId" : "actorId",
@@ -602,6 +647,8 @@ export default function Panel() {
     hours,
     problemFilter,
     accountFilter,
+    organizationFilter,
+    employeeFilter,
   ]);
   const load = useCallback(
     async (background = false) => {
@@ -779,7 +826,18 @@ export default function Panel() {
     const name = window.prompt("Название набора фильтров");
     if (!name?.trim()) return;
     const next = [
-      { name: name.trim().slice(0, 60), section, q, status, from, to },
+      {
+        name: name.trim().slice(0, 60),
+        section,
+        q,
+        status,
+        from,
+        to,
+        organizationId: organizationFilter,
+        employeeId: employeeFilter,
+        organization: selectedOrganization,
+        employee: selectedEmployee,
+      },
       ...saved,
     ].slice(0, 20);
     setSaved(next);
@@ -1070,6 +1128,20 @@ export default function Panel() {
             >
               Подозрительные события
             </button>
+            {(organizationFilter || employeeFilter) &&
+              [
+                "overview",
+                "services",
+                "backups",
+                "releases",
+                "settings",
+              ].includes(section) && (
+                <div className="notice">
+                  Состояние сервера и системные настройки показаны целиком.
+                  Выбор ИО и сотрудника сохранён для разделов с
+                  пользовательскими записями.
+                </div>
+              )}
             {has("people.read") && (
               <>
                 <button
@@ -1120,17 +1192,173 @@ export default function Panel() {
             )}
           </div>
         )}
-        {["events", "problems", "security", "files", "alerts"].includes(
-          section,
-        ) ||
+        {has("people.read") &&
+          [
+            "events",
+            "problems",
+            "security",
+            "files",
+            "alerts",
+            "accounts",
+            "deviations",
+          ].includes(section) &&
+          !(section === "accounts" && tab !== "people") && (
+            <section
+              className="panel-card"
+              style={{ padding: 16, marginBottom: 16 }}
+            >
+              <h3>Инспекционный орган и сотрудник</h3>
+              <div className="filters">
+                <label>
+                  Найти ИО по названию или БИН
+                  <input
+                    aria-label="Найти ИО"
+                    value={organizationQuery}
+                    onChange={(e) => setOrganizationQuery(e.target.value)}
+                    placeholder="Название или БИН"
+                  />
+                </label>
+                <label>
+                  Инспекционный орган
+                  <select
+                    aria-label="Инспекционный орган"
+                    value={organizationFilter}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      setFilterOptions((previous: any) => ({
+                        ...previous,
+                        employees: [],
+                      }));
+                      setOrganizationFilter(id);
+                      setSelectedOrganization(
+                        filterOptions.organizations.find(
+                          (o: any) => o.id === id,
+                        ) ?? null,
+                      );
+                      setEmployeeFilter("");
+                      setSelectedEmployee(null);
+                      setEmployeeQuery("");
+                      setAccountFilter(null);
+                      setPage(1);
+                    }}
+                  >
+                    <option value="">Все инспекционные органы</option>
+                    {selectedOrganization &&
+                      !filterOptions.organizations.some(
+                        (o: any) => o.id === selectedOrganization.id,
+                      ) && (
+                        <option value={selectedOrganization.id}>
+                          {selectedOrganization.name}
+                        </option>
+                      )}
+                    {filterOptions.organizations.map((o: any) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name} · БИН {o.bin}
+                        {o.status !== "active" ? " · " + label(o.status) : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Найти сотрудника
+                  <input
+                    aria-label="Найти сотрудника"
+                    value={employeeQuery}
+                    onChange={(e) => setEmployeeQuery(e.target.value)}
+                    placeholder="Фамилия, имя или телефон"
+                  />
+                </label>
+                <label>
+                  Сотрудник
+                  <select
+                    aria-label="Сотрудник ИО"
+                    value={employeeFilter}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      setEmployeeFilter(id);
+                      setSelectedEmployee(
+                        filterOptions.employees.find((u: any) => u.id === id) ??
+                          null,
+                      );
+                      setAccountFilter(null);
+                      setPage(1);
+                    }}
+                  >
+                    <option value="">
+                      Все сотрудники{" "}
+                      {organizationFilter ? "выбранного ИО" : "всех ИО"}
+                    </option>
+                    {selectedEmployee &&
+                      !filterOptions.employees.some(
+                        (u: any) => u.id === selectedEmployee.id,
+                      ) && (
+                        <option value={selectedEmployee.id}>
+                          {selectedEmployee.fullName}
+                        </option>
+                      )}
+                    {filterOptions.employees.map((u: any) => (
+                      <option key={u.id} value={u.id}>
+                        {u.fullName || "ФИО не указано"} · {u.phoneMasked} ·{" "}
+                        {u.memberships
+                          .map(
+                            (m: any) =>
+                              m.organization.name + " / " + label(m.role),
+                          )
+                          .join("; ")}
+                        {u.isBlocked ? " · Заблокирован" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  className="secondary"
+                  onClick={() => {
+                    setOrganizationFilter("");
+                    setEmployeeFilter("");
+                    setOrganizationQuery("");
+                    setEmployeeQuery("");
+                    setSelectedOrganization(null);
+                    setSelectedEmployee(null);
+                    setAccountFilter(null);
+                    setPage(1);
+                  }}
+                >
+                  Сбросить ИО и сотрудника
+                </button>
+              </div>
+              {filterError && <p className="notice warning">{filterError}</p>}
+              {(filterOptions.organizationTotal > 100 ||
+                filterOptions.employeeTotal > 100) && (
+                <p>
+                  В списке первые 100 совпадений. Уточните название или ФИО,
+                  чтобы найти любую запись.
+                </p>
+              )}
+              {(organizationFilter || employeeFilter) && (
+                <p>
+                  Выбрано: {selectedOrganization?.name ?? "Все ИО"} ·{" "}
+                  {selectedEmployee?.fullName ?? "Все сотрудники"}. Выбор
+                  сохраняется при переходах между разделами.
+                </p>
+              )}
+            </section>
+          )}
+        {[
+          "events",
+          "problems",
+          "security",
+          "files",
+          "alerts",
+          "deviations",
+        ].includes(section) ||
         (section === "accounts" && tab === "people") ? (
           <div className="filters">
-            {section !== "files" && (
+            {true && (
               <input
                 aria-label="Поиск"
                 placeholder={
                   section === "accounts"
-                    ? "Телефон пользователя"
+                    ? "ФИО или телефон пользователя"
                     : "Поиск в разделе"
                 }
                 value={q}
@@ -1181,7 +1409,7 @@ export default function Panel() {
                 ))}
               </select>
             )}
-            {(section === "events" ||
+            {(["events", "problems", "files", "alerts"].includes(section) ||
               (section === "security" && tab === "events")) && (
               <>
                 <label>
@@ -1219,6 +1447,10 @@ export default function Panel() {
                   onChange={(e) => {
                     const f = saved[Number(e.target.value)];
                     if (f) {
+                      setOrganizationFilter(f.organizationId ?? "");
+                      setEmployeeFilter(f.employeeId ?? "");
+                      setSelectedOrganization(f.organization ?? null);
+                      setSelectedEmployee(f.employee ?? null);
                       setQ(f.q);
                       setStatus(f.status);
                       setFrom(f.from);

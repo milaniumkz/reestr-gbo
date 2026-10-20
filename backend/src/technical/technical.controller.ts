@@ -1,3 +1,4 @@
+import { technicalScope, filterIds } from "./technical-filters";
 import { TechnicalPush } from "./technical-push.service";
 import { PhotoModerationService } from "../photo-moderation/photo-moderation.service";
 import { TechnicalSupport } from "./technical-support.service";
@@ -485,7 +486,28 @@ export class TechnicalController {
   ) {
     const page = Math.max(1, Math.min(100000, parseInt(q.page) || 1)),
       limit = 25;
-    const where = { ...(q.status ? { status: String(q.status) } : {}) };
+    const inspectionScope = await technicalScope(this.prisma, q, "inspections");
+    const scoped =
+      q.organizationId || q.employeeId
+        ? await this.prisma.inspection.findMany({
+            where: inspectionScope,
+            select: { id: true },
+          })
+        : [];
+    const where = {
+      ...(q.q
+        ? {
+            explanation: {
+              contains: String(q.q).slice(0, 100),
+              mode: "insensitive" as const,
+            },
+          }
+        : {}),
+      ...(q.status ? { status: String(q.status) } : {}),
+      ...(q.organizationId || q.employeeId
+        ? { inspectionId: { in: scoped.map((i) => i.id) } }
+        : {}),
+    };
     const [rows, total] = await Promise.all([
       this.prisma.inspectionDeviation.findMany({
         where,
@@ -564,6 +586,87 @@ export class TechnicalController {
       return { ok: true };
     });
   }
+  @Get("filter-options")
+  @TechnicalPermission("people.read")
+  async filterOptions(@Query() q: any) {
+    const { organizationId } = filterIds(q);
+    const orgText = String(q.organizationQuery ?? "")
+        .trim()
+        .slice(0, 100),
+      employeeText = String(q.employeeQuery ?? "")
+        .trim()
+        .slice(0, 100);
+    const orgWhere: any = {
+      type: "inspection_org",
+      ...(orgText
+        ? {
+            OR: [
+              { name: { contains: orgText, mode: "insensitive" } },
+              { bin: { contains: orgText } },
+            ],
+          }
+        : {}),
+    };
+    const userWhere: any = {
+      memberships: {
+        some: {
+          ...(organizationId ? { organizationId } : {}),
+          organization: { type: "inspection_org" },
+        },
+      },
+      ...(employeeText
+        ? {
+            AND: employeeText.split(/\s+/).map((word) => ({
+              OR: [
+                { fullName: { contains: word, mode: "insensitive" } },
+                { phone: { contains: word } },
+              ],
+            })),
+          }
+        : {}),
+    };
+    const [organizations, organizationTotal, employees, employeeTotal] =
+      await Promise.all([
+        this.prisma.organization.findMany({
+          where: orgWhere,
+          select: { id: true, name: true, bin: true, status: true },
+          orderBy: [{ name: "asc" }, { id: "asc" }],
+          take: 100,
+        }),
+        this.prisma.organization.count({ where: orgWhere }),
+        this.prisma.user.findMany({
+          where: userWhere,
+          select: {
+            id: true,
+            fullName: true,
+            phone: true,
+            isBlocked: true,
+            memberships: {
+              where: {
+                ...(organizationId ? { organizationId } : {}),
+                organization: { type: "inspection_org" },
+              },
+              select: {
+                role: true,
+                organization: { select: { id: true, name: true } },
+              },
+            },
+          },
+          orderBy: [{ fullName: "asc" }, { id: "asc" }],
+          take: 100,
+        }),
+        this.prisma.user.count({ where: userWhere }),
+      ]);
+    return {
+      organizations,
+      organizationTotal,
+      employees: employees.map(({ phone, ...user }) => ({
+        ...user,
+        phoneMasked: "••••" + phone.slice(-4),
+      })),
+      employeeTotal,
+    };
+  }
   @Get("organizations") @TechnicalPermission("people.read") async organizations(
     @Query() q: any,
   ) {
@@ -571,6 +674,7 @@ export class TechnicalController {
       limit = 25;
     const where = {
       type: "inspection_org",
+      ...(await technicalScope(this.prisma, q, "organizations")),
       ...(q.q
         ? {
             name: {
@@ -637,6 +741,7 @@ export class TechnicalController {
             ],
           }
         : {};
+    Object.assign(where, await technicalScope(this.prisma, q, "inspections"));
     const [rows, total] = await Promise.all([
       this.prisma.inspection.findMany({
         where,

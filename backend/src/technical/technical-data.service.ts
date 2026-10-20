@@ -1,3 +1,4 @@
+import { technicalScope } from "./technical-filters";
 import {
   photoRejectionReason,
   legacyPhotoRejectionReason,
@@ -180,6 +181,15 @@ export class TechnicalData {
           },
     };
   }
+  private async filterScope(
+    principal: TechnicalPrincipal,
+    q: any,
+    kind: Parameters<typeof technicalScope>[2],
+  ) {
+    if (q.organizationId || q.employeeId)
+      this.auth.require(principal, "people.read");
+    return technicalScope(this.prisma, q, kind);
+  }
   async events(principal: TechnicalPrincipal, q: any) {
     this.auth.require(
       principal,
@@ -193,6 +203,7 @@ export class TechnicalData {
     if (!category && !principal.permissions.includes("security.read"))
       q.excludeSecurity = true;
     const where: any = {
+      ...(await this.filterScope(principal, q, "events")),
       ...(category
         ? { category }
         : q.excludeSecurity
@@ -326,6 +337,8 @@ export class TechnicalData {
     this.auth.require(principal, "issues.read");
     const page = pageInput(q),
       where = {
+        ...(dateRange(q) ? { lastSeenAt: dateRange(q) } : {}),
+        ...(await this.filterScope(principal, q, "problems")),
         ...(q.status ? { status: String(q.status) } : {}),
         ...(q.severity ? { severity: String(q.severity) } : {}),
         ...(q.q
@@ -702,6 +715,54 @@ export class TechnicalData {
     this.auth.require(principal, "files.read");
     const page = pageInput(q),
       where = {
+        ...(q.q
+          ? {
+              OR: [
+                {
+                  type: {
+                    contains: String(q.q).slice(0, 100),
+                    mode: "insensitive" as const,
+                  },
+                },
+                {
+                  moderationReason: {
+                    contains: String(q.q).slice(0, 100),
+                    mode: "insensitive" as const,
+                  },
+                },
+                {
+                  inspection: {
+                    OR: [
+                      {
+                        certificateNumber: {
+                          contains: String(q.q).slice(0, 100),
+                          mode: "insensitive" as const,
+                        },
+                      },
+                      {
+                        vehicle: {
+                          plateNumber: {
+                            contains: String(q.q).slice(0, 100),
+                            mode: "insensitive" as const,
+                          },
+                        },
+                      },
+                      {
+                        organization: {
+                          name: {
+                            contains: String(q.q).slice(0, 100),
+                            mode: "insensitive" as const,
+                          },
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            }
+          : {}),
+        ...(dateRange(q) ? { createdAt: dateRange(q) } : {}),
+        ...(await this.filterScope(principal, q, "files")),
         ...(q.status ? { moderationStatus: String(q.status) } : {}),
         ...(q.type ? { type: String(q.type) } : {}),
       };
@@ -913,6 +974,8 @@ export class TechnicalData {
     this.auth.require(principal, "alerts.read");
     const page = pageInput(q),
       where = {
+        ...(dateRange(q) ? { lastSeenAt: dateRange(q) } : {}),
+        ...(await this.filterScope(principal, q, "alerts")),
         ...(await this.alertScope(principal)),
         ...(q.state === "new" ? { acknowledgedAt: null } : {}),
         ...(q.q
@@ -1158,7 +1221,26 @@ export class TechnicalData {
     this.auth.require(principal, "people.read");
     const page = pageInput(q);
     const digits = String(q.phone ?? "").replace(/\D/g, "");
-    const where = digits ? { phone: { endsWith: digits.slice(-10) } } : {};
+    const personScope: any = await this.filterScope(principal, q, "people");
+    const term = String(q.q ?? q.phone ?? "")
+      .trim()
+      .slice(0, 100);
+    const where: any = {
+      ...personScope,
+      ...(term
+        ? {
+            AND: [
+              ...(personScope.AND ?? []),
+              ...term.split(/\s+/).map((word) => ({
+                OR: [
+                  { fullName: { contains: word, mode: "insensitive" } },
+                  { phone: { contains: word } },
+                ],
+              })),
+            ],
+          }
+        : {}),
+    };
     const [items, total] = await Promise.all([
       this.prisma.user.findMany({
         where,
