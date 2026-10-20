@@ -353,6 +353,141 @@ export class TechnicalData {
       limit: page.limit,
     };
   }
+  async eventFiles(principal: TechnicalPrincipal, eventId: string) {
+    this.auth.require(principal, "events.read");
+    this.auth.require(principal, "files.read");
+    this.auth.require(principal, "people.read");
+    this.auth.require(principal, "security.read");
+    const event = await this.prisma.technicalEvent.findUnique({
+      where: { id: eventId },
+    });
+    if (!event) throw new NotFoundException("Событие не найдено");
+    const exact: any[] = [
+      { id: event.id },
+      ...(event.requestId ? [{ requestId: event.requestId }] : []),
+    ];
+    const [audits, refusals] = await Promise.all([
+      this.prisma.auditLog.findMany({
+        where: { action: "inspection.photo.upload", OR: exact },
+        take: 50,
+      }),
+      this.prisma.technicalEvent.findMany({
+        where: { action: "inspection.photo.rejected", OR: exact },
+        take: 50,
+      }),
+    ]);
+    const references: any[] = [
+      event.details,
+      ...audits.map((r) => r.metadata),
+      ...refusals.map((r) => r.details),
+    ].filter(Boolean);
+    const ids = (field: string) => [
+      ...new Set(
+        references
+          .map((r) => r[field])
+          .filter((id): id is string => typeof id === "string"),
+      ),
+    ];
+    const photos = await this.prisma.inspectionPhoto.findMany({
+      where: { id: { in: ids("photoId") } },
+      take: 50,
+    });
+    const inspectionId =
+      photos[0]?.inspectionId ??
+      (event.objectType === "inspection" || event.action.includes("inspections")
+        ? event.objectId
+        : null);
+    const inspection = inspectionId
+      ? await this.prisma.inspection.findUnique({
+          where: { id: inspectionId },
+          select: {
+            id: true,
+            status: true,
+            certificateNumber: true,
+            address: true,
+            lat: true,
+            lng: true,
+            notes: true,
+            createdAt: true,
+            submittedAt: true,
+            qualityConfirmedAt: true,
+            approvedAt: true,
+            organization: { select: { name: true } },
+            vehicle: {
+              select: {
+                plateNumber: true,
+                vin: true,
+                make: true,
+                model: true,
+                year: true,
+                owners: { select: { fullName: true, address: true } },
+                cylinders: true,
+              },
+            },
+            photos: { orderBy: { createdAt: "asc" }, take: 100 },
+          },
+        })
+      : null;
+    const allPhotos = [...photos, ...(inspection?.photos ?? [])];
+    const objects = await this.prisma.storageObject.findMany({
+      where: {
+        OR: [
+          { id: { in: ids("fileId") } },
+          { objectKey: { in: allPhotos.map((p) => p.objectKey) } },
+        ],
+      },
+      take: 200,
+    });
+    const profiles = await this.activity.profiles(
+      objects.map((o) => o.createdById).filter((id): id is string => !!id),
+      [],
+      principal,
+    );
+    const files = objects.map((o) => {
+      const photo = allPhotos.find((p) => p.objectKey === o.objectKey);
+      const rejected =
+        refusals.find((r) => (r.details as any)?.fileId === o.id) ??
+        (event.action === "inspection.photo.rejected" &&
+        (event.details as any)?.fileId === o.id
+          ? event
+          : null);
+      return {
+        id: o.id,
+        photoId: photo?.id ?? null,
+        type: photo?.type ?? (rejected?.details as any)?.type ?? null,
+        forEvent:
+          ids("fileId").includes(o.id) ||
+          photos.some((p) => p.objectKey === o.objectKey),
+        rejected: !!rejected,
+        moderationStatus: rejected
+          ? "rejected"
+          : (photo?.moderationStatus ?? null),
+        moderationReason: rejected
+          ? (rejected.details as any)?.reason
+          : photo?.moderationReason,
+        moderationModel: rejected
+          ? (rejected.details as any)?.moderationModel
+          : photo?.moderationModel,
+        createdAt: o.createdAt,
+        contentType: o.contentType,
+        sizeBytes: o.sizeBytes,
+        checksum: o.checksum,
+        uploader: profiles.get("app:" + o.createdById) ?? null,
+        originalUrl: principal.permissions.includes("files.original")
+          ? `/api/v1/technical/events/${event.id}/files/${o.id}/original`
+          : null,
+      };
+    });
+    const enriched = (await this.activity.enrich([event], principal))[0];
+    return {
+      event: enriched,
+      inspection: inspection ? { ...inspection, photos: undefined } : null,
+      files,
+      note: files.some((f) => f.forEvent)
+        ? "Файлы этого действия связаны по идентификаторам записи или обращения. Остальные фото показаны отдельно как текущие материалы инспекции."
+        : "Сам файл этой попытки не сохранён или уже недоступен. Текущие фотографии инспекции не означают, что их загрузили в этой попытке.",
+    };
+  }
   async journey(principal: TechnicalPrincipal, q: any) {
     this.auth.require(principal, "events.read");
     this.auth.require(principal, "people.read");

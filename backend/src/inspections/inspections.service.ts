@@ -569,14 +569,26 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
     if (!file?.buffer?.length) throw new BadRequestException("Выберите непустой файл");
     let moderation:Awaited<ReturnType<PhotoModerationService['check']>>;
     try{moderation=await this.photoModeration.check(file.buffer,file.originalname,type);}
-    catch(error){if(error instanceof BadRequestException)await this.prisma.$transaction(tx=>notifyPhotoRejection(tx,id,type,error.message,user?.sub,this.photoModeration.status().model));throw error;}
+    catch(error){
+      if(error instanceof BadRequestException){
+        let evidenceFileId:string|undefined;
+        try {
+          if(file.buffer.length<=12*1024*1024){
+            const stored=await this.storage.putObject({key:`technical-rejections/${randomUUID()}.bin`,body:file.buffer,createdById:user?.sub});
+            evidenceFileId=stored.id;
+          }
+        } catch { /* Record the refusal even when evidence storage is unavailable. */ }
+        await this.prisma.$transaction(tx=>notifyPhotoRejection(tx,id,type,error.message,user?.sub,this.photoModeration.status().model,evidenceFileId));
+      }
+      throw error;
+    }
     const lat = this.coordinate(location.lat, -90, 90);
     const lng = this.coordinate(location.lng, -180, 180);
     const extension =
       file.originalname.split(".").pop()?.toLowerCase() ?? "bin";
     const objectKey = `inspections/${id}/${type}-${randomUUID()}.${extension}`;
     const checksum = createHash("sha256").update(file.buffer).digest("hex");
-    await this.storage.putObject({
+    const storedObject=await this.storage.putObject({
       key: objectKey,
       body: file.buffer,
       contentType: file.mimetype,
@@ -600,7 +612,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       }else await tx.inspection.update({where:{id},data:{updatedAt:new Date()}});
       const saved=await tx.inspectionPhoto.create({data:photoData});
       if(moderation.moderationStatus==='manual_review')await notifyPhotoReview(tx,id,user?.sub);
-      await tx.auditLog.create({data:{actorId:user?.sub,action:"inspection.photo.upload",entity:"inspection",entityId:id,metadata:{photoId:saved.id,type,objectKey,lat,lng}}});
+      await tx.auditLog.create({data:{actorId:user?.sub,action:"inspection.photo.upload",entity:"inspection",entityId:id,metadata:{photoId:saved.id,fileId:storedObject.id,type,objectKey,lat,lng}}});
       return saved;
     });
     return photo;

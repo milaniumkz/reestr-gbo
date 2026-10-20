@@ -23,6 +23,7 @@ export class MediaController {
     @Res() res: any,
   ) {
     const grant = verifyMediaGrant(String(token ?? ""));
+    if(grant.key.startsWith("technical-rejections/")) throw new UnauthorizedException("Материалы отказа доступны только через техническую панель");
     const file = await this.prisma.inspectionPhoto.findFirst({
       where: { objectKey: grant.key },
       select: { id: true },

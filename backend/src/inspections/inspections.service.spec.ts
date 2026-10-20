@@ -254,13 +254,13 @@ describe('Inspection quality control workflow', () => {
     await expect(f.service.setStatus(f.user('inspector'),'inspection_1','submitted')).rejects.toThrow('Не хватает данных');
     expect(f.prisma.inspection.update).not.toHaveBeenCalled();
   });
-  it('does not store or attach a photo rejected by moderation',async()=>{
+  it('retains rejected evidence privately without attaching it to inspection',async()=>{
     const f=fixture();
     Object.assign(f.prisma.inspection,{findUniqueOrThrow:jest.fn(async()=>({organizationId:'org_1',organization:{name:'ИО тест'},vehicle:{plateNumber:'TEST01'}}))});
     Object.assign(f.prisma,{notification:{create:jest.fn(async()=>({}))},technicalAlert:{create:jest.fn(async()=>({}))},technicalEvent:{create:jest.fn(async()=>({}))}});
     f.moderation.check.mockRejectedValue(new BadRequestException('Фото экрана другого телефона'));
     await expect(f.service.uploadPhoto('inspection_1','tech_passport',{originalname:'phone.jpg',buffer:Buffer.from('photo')},f.user('inspector'))).rejects.toThrow('Фото экрана');
-    expect(f.storage.putObject).not.toHaveBeenCalled();expect(f.prisma.inspectionPhoto.create).not.toHaveBeenCalled();
+    expect(f.storage.putObject).toHaveBeenCalledWith(expect.objectContaining({key:expect.stringMatching(/^technical-rejections\//)}));expect(f.prisma.inspectionPhoto.create).not.toHaveBeenCalled();
     expect((f.prisma as any).notification.create).toHaveBeenCalledTimes(3);expect((f.prisma as any).technicalAlert.create).toHaveBeenCalledTimes(1);
   });
   it('requires a cylinder production date before sending an old draft',async()=>{

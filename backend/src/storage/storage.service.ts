@@ -104,7 +104,7 @@ export class StorageService {
     createdById?: string;
   }) {
     const result = this.objectUrl(input.key);
-    await this.prisma.storageObject.upsert({
+    const recorded=await this.prisma.storageObject.upsert({
       where: { objectKey: input.key },
       update: {
         bucket: this.bucket,
@@ -122,6 +122,6 @@ export class StorageService {
         createdById: input.createdById,
       },
     });
-    return result;
+    return {...result,id:recorded.id};
   }
 }

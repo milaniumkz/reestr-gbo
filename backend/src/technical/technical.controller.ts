@@ -272,6 +272,49 @@ export class TechnicalController {
       return { ok: true, holdUntil: until };
     });
   }
+  @Get("events/:id/files") eventFiles(@Req() r: any, @Param("id") id: string) {
+    return this.data.eventFiles(r.tech, id);
+  }
+  @Get("events/:id/files/:fileId/original")
+  @TechnicalPermission("files.original")
+  async eventOriginal(
+    @Req() r: any,
+    @Param("id") id: string,
+    @Param("fileId") fileId: string,
+    @Res() res: any,
+  ) {
+    const context = await this.data.eventFiles(r.tech, id);
+    if (!context.files.some((file) => file.id === fileId))
+      throw new BadRequestException("Файл не связан с этим событием");
+    const file = await this.prisma.storageObject.findUniqueOrThrow({
+      where: { id: fileId },
+    });
+    await this.ledger.write({
+      category: "audit",
+      action: "technical.file.original",
+      result: "success",
+      techActorId: r.tech.account.id,
+      objectType: "file",
+      objectId: fileId,
+      explanation: "Просмотр материала события в техническом расследовании",
+      details: { requestId: context.event.requestId, source: id },
+    });
+    const bytes = await this.storage.readObject(file.objectKey);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    const contentType = /^(image\/(jpeg|png|webp|gif)|application\/pdf)$/.test(
+      file.contentType ?? "",
+    )
+      ? file.contentType
+      : "application/octet-stream";
+    res.setHeader("Content-Type", contentType);
+    if (contentType === "application/octet-stream")
+      res.setHeader(
+        "Content-Disposition",
+        'attachment; filename="evidence.bin"',
+      );
+    res.send(bytes);
+  }
   @Get("events/export") export(@Req() r: any, @Query() q: any) {
     return this.data.exportEvents(r.tech, q);
   }

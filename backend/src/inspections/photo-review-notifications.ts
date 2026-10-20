@@ -139,6 +139,7 @@ export async function notifyPhotoRejection(
   reason: string,
   actorId?: string,
   model?: string,
+  fileId?: string,
 ) {
   const inspection = await tx.inspection.findUniqueOrThrow({
     where: { id: inspectionId },
@@ -214,6 +215,7 @@ export async function notifyPhotoRejection(
       explanation: safeText(reason, 500),
       details: {
         type,
+        fileId,
         moderationModel: model,
         reasonCode: photoRejectionReason(reason).code,
         reason: safeText(reason, 500),

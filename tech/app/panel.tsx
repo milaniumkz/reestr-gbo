@@ -235,6 +235,154 @@ function readableDevice(value: string) {
             : null;
   return [browser, os].filter(Boolean).join(" · ");
 }
+function EventEvidence({
+  id,
+  initiallyOpen = false,
+}: {
+  id: string;
+  initiallyOpen?: boolean;
+}) {
+  const [data, setData] = useState<any>(null),
+    [error, setError] = useState(""),
+    [loading, setLoading] = useState(false);
+  async function load() {
+    setLoading(true);
+    setError("");
+    try {
+      setData(await api("/events/" + id + "/files"));
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Не удалось получить материалы",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => {
+    if (initiallyOpen) void load();
+  }, [id, initiallyOpen]);
+  const fileCard = (file: any) => (
+    <article className="activity-event" key={file.id}>
+      <h4>
+        {fileNames[file.type] ?? file.type ?? "Файл"} ·{" "}
+        {file.rejected ? "Отклонённая попытка" : label(file.moderationStatus)}
+      </h4>
+      <p>
+        Загружено: {date(file.createdAt)} · {bytes(file.sizeBytes)} ·{" "}
+        {file.contentType}
+      </p>
+      {file.uploader && <ActorSummary actor={file.uploader} />}
+      {file.moderationReason && (
+        <div className="notice warning">
+          Причина проверки: {file.moderationReason}
+        </div>
+      )}
+      {file.originalUrl ? (
+        <>
+          {file.contentType?.startsWith("image/") && (
+            <img
+              src={file.originalUrl}
+              alt={fileNames[file.type] ?? "Материал проверки"}
+              loading="lazy"
+              style={{
+                display: "block",
+                width: "100%",
+                maxHeight: 560,
+                objectFit: "contain",
+                background: "#e9efef",
+              }}
+            />
+          )}
+          <a
+            className="secondary"
+            href={file.originalUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Открыть оригинал в полном размере ↗
+          </a>
+        </>
+      ) : (
+        <p>Для оригинала требуется отдельное разрешение.</p>
+      )}
+      <Details
+        value={{
+          fileId: file.id,
+          photoId: file.photoId,
+          checksum: file.checksum,
+          model: file.moderationModel,
+        }}
+      />
+    </article>
+  );
+  return (
+    <section className="problem-context">
+      {!data && (
+        <button
+          type="button"
+          className="secondary"
+          disabled={loading}
+          onClick={() => void load()}
+        >
+          {loading
+            ? "Загрузка материалов…"
+            : "Фотографии, документы и данные инспекции"}
+        </button>
+      )}
+      {error && <p className="notice warning">{error}</p>}
+      {data && (
+        <>
+          <p>{data.note}</p>
+          <h3>Файлы именно этого действия</h3>
+          {data.files.filter((f: any) => f.forEvent).map(fileCard)}
+          {!data.files.some((f: any) => f.forEvent) && (
+            <p>
+              Файл этой попытки не сохранён. Причина и результат доступны в
+              истории события.
+            </p>
+          )}
+          {data.inspection && (
+            <details>
+              <summary>
+                Открыть данные инспекции и остальные фотографии (
+                {data.files.filter((f: any) => !f.forEvent).length})
+              </summary>
+              <p>
+                <b>{data.inspection.organization.name}</b> ·{" "}
+                {label(data.inspection.status)} · Свидетельство{" "}
+                {data.inspection.certificateNumber ?? "не выпущено"}
+              </p>
+              <p>
+                Автомобиль: {data.inspection.vehicle.make}{" "}
+                {data.inspection.vehicle.model},{" "}
+                {data.inspection.vehicle.plateNumber} · VIN{" "}
+                {data.inspection.vehicle.vin}
+              </p>
+              <p>
+                Место инспекции: {data.inspection.address ?? "не указано"} · GPS{" "}
+                {data.inspection.lat ?? "—"}, {data.inspection.lng ?? "—"}
+              </p>
+              <p>
+                Владелец:{" "}
+                {data.inspection.vehicle.owners
+                  .map((o: any) =>
+                    [o.fullName, o.address].filter(Boolean).join(" · "),
+                  )
+                  .join("; ") || "не указан"}
+              </p>
+              <Details value={data.inspection} />
+              <p className="muted">
+                Текущие материалы инспекции. Их автор и дата указаны отдельно;
+                они могли быть загружены в других действиях.
+              </p>
+              {data.files.filter((f: any) => !f.forEvent).map(fileCard)}
+            </details>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
 function ActivityTimeline({
   events,
   openJourney,
@@ -306,6 +454,7 @@ function ActivityTimeline({
                       : "координаты не получены"}
                 </div>
               )}
+              <EventEvidence id={event.id} />
               <Details
                 value={{
                   requestId: event.requestId,
@@ -1318,29 +1467,31 @@ export default function Panel() {
       {dialog && (
         <Modal
           title={
-            dialog.kind === "journey"
-              ? "Порядок действий сотрудника"
-              : dialog.kind === "problem"
-                ? "Расследование проблемы"
-                : dialog.kind === "reauth"
-                  ? "Повторное подтверждение личности"
-                  : dialog.kind === "account"
-                    ? "Новый технический сотрудник"
-                    : dialog.kind === "residence"
-                      ? "Город проживания инспектора"
-                      : dialog.kind === "recovery"
-                        ? "Восстановление доступа пользователя"
-                        : dialog.kind === "recovery-result"
-                          ? "Одноразовая ссылка восстановления"
-                          : dialog.kind === "rule"
-                            ? "Правило уведомлений"
-                            : dialog.kind === "mute"
-                              ? "Временно приглушить уведомление"
-                              : dialog.kind === "export"
-                                ? "Безопасный экспорт"
-                                : dialog.kind === "instructions"
-                                  ? "Инструкции обслуживания"
-                                  : "Подробности"
+            dialog.kind === "evidence"
+              ? "Фотографии и подробности действия"
+              : dialog.kind === "journey"
+                ? "Порядок действий сотрудника"
+                : dialog.kind === "problem"
+                  ? "Расследование проблемы"
+                  : dialog.kind === "reauth"
+                    ? "Повторное подтверждение личности"
+                    : dialog.kind === "account"
+                      ? "Новый технический сотрудник"
+                      : dialog.kind === "residence"
+                        ? "Город проживания инспектора"
+                        : dialog.kind === "recovery"
+                          ? "Восстановление доступа пользователя"
+                          : dialog.kind === "recovery-result"
+                            ? "Одноразовая ссылка восстановления"
+                            : dialog.kind === "rule"
+                              ? "Правило уведомлений"
+                              : dialog.kind === "mute"
+                                ? "Временно приглушить уведомление"
+                                : dialog.kind === "export"
+                                  ? "Безопасный экспорт"
+                                  : dialog.kind === "instructions"
+                                    ? "Инструкции обслуживания"
+                                    : "Подробности"
           }
           close={() => setDialog(null)}
         >
@@ -1374,6 +1525,9 @@ export default function Panel() {
             </>
           ) : (
             <form onSubmit={submitDialog}>
+              {dialog.kind === "evidence" && (
+                <EventEvidence id={dialog.value.id} initiallyOpen />
+              )}
               {dialog.kind === "journey" && (
                 <>
                   <h3>{dialog.value.scope}</h3>
@@ -2092,7 +2246,8 @@ export default function Panel() {
                   </p>
                 </div>
               )}
-              {dialog.kind !== "journey" &&
+              {dialog.kind !== "evidence" &&
+                dialog.kind !== "journey" &&
                 (dialog.kind !== "problem" || has("issues.manage")) && (
                   <div className="actions section-spacer">
                     <button className="primary" disabled={busy}>
@@ -2508,6 +2663,9 @@ function DataTable({
                 details: r.details,
               }}
             />
+            <button className="secondary" onClick={() => action("evidence", r)}>
+              Фотографии и подробности действия
+            </button>
             <button
               className="secondary"
               onClick={() => action("event-journey", r)}
