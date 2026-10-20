@@ -1,5 +1,6 @@
 import { safeText } from "../observability/safe-data";
 const actions: Record<string, string> = {
+  "inspection.photo.rejected":"Отклонение загрузки фотографии",
   "auth.login": "Вход в приложение",
   "auth.password_failed": "Неудачная попытка входа",
   "auth.logout": "Выход из приложения",

@@ -24,8 +24,10 @@ export class NotificationsController {
     const query = q?.trim().toLowerCase();
     const meta = paginationMeta(page, limit ?? '100');
     const poolLimit = Math.min(500, meta.skip + meta.limit + 100);
+    const organizationIds = hasGlobalAccess(user)?undefined:await userOrganizationIds(this.prisma,user);
     const notificationItems = await this.prisma.notification.findMany({
       where: {
+        ...(organizationIds?{AND:[{OR:[{organizationId:null},{organizationId:{in:organizationIds}}]}]}:{}),
         OR: [
           { userId: user.sub },
           { role: { in: user.roles } },
@@ -35,9 +37,6 @@ export class NotificationsController {
       orderBy: { createdAt: 'desc' },
       take: poolLimit,
     });
-    const organizationIds = hasGlobalAccess(user)
-      ? undefined
-      : await userOrganizationIds(this.prisma, user);
     const certificates = await this.prisma.certificate.findMany({
       where: {
         status: 'active',
@@ -92,8 +91,8 @@ export class NotificationsController {
     }));
     const storedItems = notificationItems.map((item) => ({
       ...item,
-      entity: 'notification',
-      entityId: item.id,
+      entity: item.entity ?? 'notification',
+      entityId: item.entityId ?? item.id,
     }));
     const allItems = [...storedItems, ...certificateItems, ...inspectionItems]
       .filter((item) => {
@@ -148,6 +147,7 @@ export class NotificationsController {
     if (!visibleNotification) {
       throw new NotFoundException('Уведомление не найдено');
     }
+    if(visibleNotification.organizationId && !hasGlobalAccess(user) && !(await userOrganizationIds(this.prisma,user)).includes(visibleNotification.organizationId))throw new NotFoundException('Уведомление не найдено');
     const notification = await this.prisma.notification.update({
       where: { id },
       data: { readAt: new Date() },

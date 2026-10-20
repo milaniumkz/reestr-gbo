@@ -41,7 +41,7 @@ describe("local photo screening", () => {
       "screenshot.png",
       "tech_passport",
     );
-    expect(result.moderationModel).toBe("local-screening-v3.1");
+    expect(result.moderationModel).toBe("local-screening-v3.2");
     expect(result.moderationStatus).toBe("local_checked");
     expect(fetch).not.toHaveBeenCalled();
   });

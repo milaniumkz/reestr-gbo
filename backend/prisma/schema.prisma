@@ -406,6 +406,10 @@ model ApiToken {
 }
 
 model Notification {
+  dedupKey String? @unique
+  organizationId String?
+  entity String?
+  entityId String?
   id        String    @id @default(uuid())
   userId    String?
   role      String?

@@ -681,9 +681,11 @@ export class TechnicalData {
       "monitoring",
       "inspection_geography",
       "inspection_deviation",
+      "inspection_photo_review",
+      "inspection_photo_rejected",
     ].filter((category) => {
       if (
-        ["inspection_geography", "inspection_deviation"].includes(category) &&
+        ["inspection_geography", "inspection_deviation", "inspection_photo_review", "inspection_photo_rejected"].includes(category) &&
         !principal.permissions.includes("people.read")
       )
         return false;

@@ -9,7 +9,7 @@ export type PhotoCheck = {
   moderationCheckedAt?: Date;
   moderationReason?: string;
 };
-const MODEL = "local-screening-v3.1";
+const MODEL = "local-screening-v3.2";
 @Injectable()
 export class PhotoModerationService {
   private readonly limiter = new PhotoAnalysisLimiter();
@@ -21,7 +21,7 @@ export class PhotoModerationService {
       provider: "local",
       model: MODEL,
       authenticityGuaranteed: false,
-      analysisRevision: "v3.1-tolerant-documents",
+      analysisRevision: "v3.2-human-review",
       load: this.limiter.status(),
     };
   }
@@ -116,11 +116,11 @@ export class PhotoModerationService {
         rgb.info.width,
         rgb.info.height,
       );
+      const reasons = reviewReasons(metrics);
       if (shouldReshoot(evidence, _type))
         throw new BadRequestException(
           "Обнаружены совместные признаки экрана: тёмная рамка и повторяющиеся полосы. Сфотографируйте оригинал документа вне экрана другого устройства",
         );
-      const reasons = reviewReasons(metrics);
       if (document) {
         const native = await input
           .clone()

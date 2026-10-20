@@ -1,3 +1,4 @@
+import {notifyPhotoReview,notifyPhotoRejection} from './photo-review-notifications';
 import { cylinderProducedAt } from '../common/cylinder-date';
 import { PhotoModerationService } from '../photo-moderation/photo-moderation.service';
 import { ownerPhone as normalizeOwnerPhone } from '../common/owner-phone';
@@ -566,7 +567,9 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException("Документы инспектора зафиксированы. Верните инспекцию на исправление");
     }
     if (!file?.buffer?.length) throw new BadRequestException("Выберите непустой файл");
-    const moderation = await this.photoModeration.check(file.buffer,file.originalname,type);
+    let moderation:Awaited<ReturnType<PhotoModerationService['check']>>;
+    try{moderation=await this.photoModeration.check(file.buffer,file.originalname,type);}
+    catch(error){if(error instanceof BadRequestException)await this.prisma.$transaction(tx=>notifyPhotoRejection(tx,id,type,error.message,user?.sub,this.photoModeration.status().model));throw error;}
     const lat = this.coordinate(location.lat, -90, 90);
     const lng = this.coordinate(location.lng, -180, 180);
     const extension =
@@ -588,26 +591,17 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
         lat,
         lng,
       };
-    const photo = inspection.status === "submitted" && type !== "certificate_document"
-      ? await this.prisma.$transaction(async tx => {
-          await tx.inspection.update({where:{id,status:"submitted",qualityReviewerId:user!.sub},data:{updatedAt:new Date()}});
-          await tx.inspectionPhoto.deleteMany({where:{inspectionId:id,type}});
-          return tx.inspectionPhoto.create({data:photoData});
-        })
-      : type === "certificate_document"
-      ? await this.prisma.$transaction(async (tx) => {
-          await tx.inspection.update({ where: { id, status: "submitted", qualityReviewerId: user!.sub }, data: { qualityDocumentUploadedAt: new Date() } });
-          return tx.inspectionPhoto.create({ data: photoData });
-        })
-      : await this.prisma.inspectionPhoto.create({ data: photoData });
-    await this.prisma.auditLog.create({
-      data: {
-        actorId: user?.sub,
-        action: "inspection.photo.upload",
-        entity: "inspection",
-        entityId: id,
-        metadata: { photoId: photo.id, type, objectKey, lat, lng },
-      },
+    const photo = await this.prisma.$transaction(async tx=>{
+      if(inspection.status === "submitted" && type !== "certificate_document"){
+        await tx.inspection.update({where:{id,status:"submitted",qualityReviewerId:user!.sub},data:{updatedAt:new Date()}});
+        await tx.inspectionPhoto.deleteMany({where:{inspectionId:id,type}});
+      }else if(type === "certificate_document"){
+        await tx.inspection.update({where:{id,status:"submitted",qualityReviewerId:user!.sub},data:{qualityDocumentUploadedAt:new Date()}});
+      }else await tx.inspection.update({where:{id},data:{updatedAt:new Date()}});
+      const saved=await tx.inspectionPhoto.create({data:photoData});
+      if(moderation.moderationStatus==='manual_review')await notifyPhotoReview(tx,id,user?.sub);
+      await tx.auditLog.create({data:{actorId:user?.sub,action:"inspection.photo.upload",entity:"inspection",entityId:id,metadata:{photoId:saved.id,type,objectKey,lat,lng}}});
+      return saved;
     });
     return photo;
   }

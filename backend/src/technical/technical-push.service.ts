@@ -277,12 +277,17 @@ export class TechnicalPush implements OnModuleInit, OnModuleDestroy {
                 "В технической панели новое " +
                 (alert.severity === "critical" ? "критическое " : "") +
                 "уведомление. Откройте панель для подробностей.",
-              url: alert.problemId
-                ? "/tech/?section=problems&problem=" +
-                  encodeURIComponent(alert.problemId)
-                : alert.category.startsWith("inspection")
-                  ? "/tech/?section=deviations"
-                  : "/tech/?section=alerts",
+              url:
+                alert.category === "inspection_photo_review"
+                  ? "/tech/?section=files"
+                  : alert.category === "inspection_photo_rejected"
+                    ? "/tech/?section=alerts"
+                    : alert.problemId
+                      ? "/tech/?section=problems&problem=" +
+                        encodeURIComponent(alert.problemId)
+                      : alert.category.startsWith("inspection")
+                        ? "/tech/?section=deviations"
+                        : "/tech/?section=alerts",
               tag: alert.id,
             });
             await this.prisma.technicalPushDelivery.update({
