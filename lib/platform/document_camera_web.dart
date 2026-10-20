@@ -1,3 +1,4 @@
+import '../l10n/kk_catalog.dart';
 // ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
 import 'dart:async';
 import 'dart:convert';
@@ -7,6 +8,7 @@ import 'dart:math' as math;
 
 Future<PickedLocalFile?> captureDocumentPhoto({
   double frameAspectRatio = 0.71,
+  String languageCode = 'ru',
 }) async {
   final devices = html.window.navigator.mediaDevices;
   if (devices == null) {
@@ -23,7 +25,10 @@ Future<PickedLocalFile?> captureDocumentPhoto({
   final overlay = html.DivElement()
     ..setAttribute('role', 'dialog')
     ..setAttribute('aria-modal', 'true')
-    ..setAttribute('aria-label', 'Съёмка документа')
+    ..setAttribute(
+      'aria-label',
+      translateKazakh('Съёмка документа', languageCode),
+    )
     ..style.cssText =
         'position:fixed;inset:0;z-index:2147483647;background:#101010;display:flex;flex-direction:column;padding:16px;box-sizing:border-box';
   final video = html.VideoElement()
@@ -33,12 +38,12 @@ Future<PickedLocalFile?> captureDocumentPhoto({
     ..style.cssText =
         'width:100%;height:calc(100% - 80px);object-fit:contain;flex:1;min-height:0';
   final capture = html.ButtonElement()
-    ..text = 'СДЕЛАТЬ ФОТО'
+    ..text = translateKazakh('СДЕЛАТЬ ФОТО', languageCode).toUpperCase()
     ..disabled = true
     ..style.cssText =
         'padding:14px;border:0;border-radius:12px;background:#007a4d;color:white;font-size:16px;flex:1';
   final cancel = html.ButtonElement()
-    ..text = 'ОТМЕНА'
+    ..text = translateKazakh('ОТМЕНА', languageCode).toUpperCase()
     ..style.cssText =
         'padding:14px;border:0;border-radius:12px;background:white;color:#123;font-size:16px;flex:1';
   final controls = html.DivElement()
@@ -51,7 +56,10 @@ Future<PickedLocalFile?> captureDocumentPhoto({
     ..style.cssText =
         'position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(90%,${frameAspectRatio * 70}vh);aspect-ratio:$frameAspectRatio;border:3px solid white;border-radius:12px;box-shadow:0 0 0 999px rgba(0,0,0,.35);pointer-events:none';
   final hint = html.DivElement()
-    ..text = 'В СНИМОК ПОПАДЁТ ТОЛЬКО ОБЛАСТЬ ВНУТРИ РАМКИ'
+    ..text = translateKazakh(
+      'В СНИМОК ПОПАДЁТ ТОЛЬКО ОБЛАСТЬ ВНУТРИ РАМКИ',
+      languageCode,
+    ).toUpperCase()
     ..style.cssText =
         'position:absolute;bottom:12px;left:12px;right:12px;text-align:center;color:white;font-size:16px';
   preview.children.addAll([video, frame, hint]);

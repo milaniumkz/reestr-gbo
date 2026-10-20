@@ -1365,6 +1365,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
   }
 
   Future<void> _captureInspectionPhoto(String kind) async {
+    final languageCode = Localizations.localeOf(context).languageCode;
     try {
       final initialPosition = await _tryCurrentPosition();
       final String filename;
@@ -1373,6 +1374,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         final file = await pickLocalFile(
           const ['jpg', 'jpeg', 'png', 'heic', 'webp'],
           camera: true,
+          languageCode: languageCode,
           frameAspectRatio: 1.6,
         );
         final pickedBytes = file?.bytes;
@@ -1478,6 +1480,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
             ? await pickLocalFile(
                 extensions,
                 camera: camera,
+                languageCode: Localizations.localeOf(context).languageCode,
                 frameAspectRatio: type == 'tech_passport_back' ? 1.6 : .71,
               )
             : await _pickPluginFile(extensions);
