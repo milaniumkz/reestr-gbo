@@ -1,5 +1,7 @@
-import '../l10n/kk_catalog.dart';
 // ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
+import '../l10n/kk_catalog.dart';
+import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:html' as html;
@@ -156,8 +158,11 @@ Future<PickedLocalFile?> captureDocumentPhoto({
     );
   } finally {
     video.pause();
-    for (final track in stream.getTracks()) {
-      track.stop();
+    final tracks = (stream as JSObject).callMethod<JSArray<JSObject>>(
+      'getTracks'.toJS,
+    );
+    for (final track in tracks.toDart) {
+      track.callMethod<JSAny?>('stop'.toJS);
     }
     await cancelSub.cancel();
     await keySub.cancel();
