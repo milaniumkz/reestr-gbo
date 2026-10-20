@@ -1,3 +1,7 @@
+import {
+  photoRejectionReason,
+  legacyPhotoRejectionReason,
+} from "./photo-rejection-reason";
 import { TechnicalActivity } from "./technical-activity.service";
 import { problemName } from "./activity-presentation";
 import {
@@ -685,7 +689,12 @@ export class TechnicalData {
       "inspection_photo_rejected",
     ].filter((category) => {
       if (
-        ["inspection_geography", "inspection_deviation", "inspection_photo_review", "inspection_photo_rejected"].includes(category) &&
+        [
+          "inspection_geography",
+          "inspection_deviation",
+          "inspection_photo_review",
+          "inspection_photo_rejected",
+        ].includes(category) &&
         !principal.permissions.includes("people.read")
       )
         return false;
@@ -733,6 +742,47 @@ export class TechnicalData {
       }),
       this.prisma.technicalAlert.count({ where }),
     ]);
+    const rejected = items.filter(
+      (item) => item.category === "inspection_photo_rejected",
+    );
+    const attemptIds = rejected.map((item) =>
+      item.dedupKey.replace(/^photo-rejected:/, ""),
+    );
+    const requestIds = rejected
+      .map((item) => /Обращение: ([a-f0-9-]{36})/i.exec(item.explanation)?.[1])
+      .filter((value): value is string => !!value);
+    const refusalEvents = rejected.length
+      ? await this.prisma.technicalEvent.findMany({
+          where: {
+            action: "inspection.photo.rejected",
+            OR: [{ id: { in: attemptIds } }, { requestId: { in: requestIds } }],
+          },
+          take: page.limit,
+        })
+      : [];
+    const refusalContext = await this.activity.enrich(refusalEvents, principal);
+    const rejectionFor = (item: any) => {
+      if (item.category !== "inspection_photo_rejected") return null;
+      const requestId = /Обращение: ([a-f0-9-]{36})/i.exec(
+        item.explanation,
+      )?.[1];
+      const event = refusalContext.find(
+        (event) =>
+          event.id === item.dedupKey.replace(/^photo-rejected:/, "") ||
+          (requestId && event.requestId === requestId),
+      );
+      const reason =
+        event?.details?.reason ?? legacyPhotoRejectionReason(item.explanation);
+      return {
+        ...photoRejectionReason(reason),
+        actor: event?.actor ?? null,
+        inspection: event?.objectContext ?? null,
+        documentType: event?.details?.type ?? null,
+        model: event?.details?.moderationModel ?? null,
+        requestId: event?.requestId ?? requestId ?? null,
+        createdAt: event?.createdAt ?? item.firstSeenAt,
+      };
+    };
     const profiles = await this.activity.profiles(
       [],
       items
@@ -743,6 +793,7 @@ export class TechnicalData {
     return {
       items: items.map((item) => ({
         ...item,
+        photoRejection: rejectionFor(item),
         acknowledgedName:
           profiles.get("tech:" + item.acknowledgedBy)?.name ?? null,
         assignedName: profiles.get("tech:" + item.assignedTo)?.name ?? null,

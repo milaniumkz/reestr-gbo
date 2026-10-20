@@ -1,3 +1,4 @@
+import { photoRejectionReason } from "../technical/photo-rejection-reason";
 import { randomUUID } from "node:crypto";
 import { traceFields, requestContext } from "../observability/request-context";
 import { safeText } from "../observability/safe-data";
@@ -173,7 +174,10 @@ export async function notifyPhotoRejection(
     await tx.notification.create({
       data: {
         title,
-        body,
+        body: body.replace(
+          "Причина: " + reason,
+          "Подробная причина сохранена в технической панели",
+        ),
         role,
         organizationId: inspection.organizationId,
         entity: "inspection",
@@ -193,6 +197,7 @@ export async function notifyPhotoRejection(
   await tx.technicalEvent.create({
     data: {
       ...traceFields(),
+      id: attemptId,
       source: "server",
       category: "security",
       action: "inspection.photo.rejected",
@@ -200,15 +205,17 @@ export async function notifyPhotoRejection(
       severity: "warning",
       actorId,
       ipAddress: requestContext.getStore()?.request?.ip,
-      device: String(
-        requestContext.getStore()?.request?.headers?.["user-agent"] ?? "",
-      ).slice(0, 180),
+      device: safeText(
+        requestContext.getStore()?.request?.headers?.["user-agent"],
+        180,
+      ),
       objectType: "inspection",
       objectId: inspectionId,
       explanation: safeText(reason, 500),
       details: {
         type,
         moderationModel: model,
+        reasonCode: photoRejectionReason(reason).code,
         reason: safeText(reason, 500),
         verified: true,
       },

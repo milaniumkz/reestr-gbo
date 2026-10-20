@@ -182,6 +182,15 @@ async function main() {
     2,
   );
   checks++;
+  for (const notice of adminInbox.filter(
+    (n: any) => n.entityId === inspection.id && n.title.includes("отклонена"),
+  )) {
+    assert.match(
+      notice.body,
+      /Подробная причина сохранена в технической панели/,
+    );
+    assert(!notice.body.includes("Причина:"));
+  }
   const qcInbox = await inbox(
     await login(quality.phone, "inspection_org", org.bin),
   );

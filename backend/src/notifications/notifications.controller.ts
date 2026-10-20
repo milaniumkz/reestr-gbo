@@ -91,6 +91,7 @@ export class NotificationsController {
     }));
     const storedItems = notificationItems.map((item) => ({
       ...item,
+      body: item.dedupKey?.startsWith('photo-rejected:') ? item.body.replace(/Причина:.*?(?= · Инспекция:| · Обращение:| · Попытка:|$)/s, 'Подробная причина сохранена в технической панели') : item.body,
       entity: item.entity ?? 'notification',
       entityId: item.entityId ?? item.id,
     }));

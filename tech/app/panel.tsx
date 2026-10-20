@@ -2696,7 +2696,49 @@ function DataTable({
         render: (r) => (
           <>
             <strong>{r.title}</strong>
-            <p>{r.explanation}</p>
+            {r.photoRejection ? (
+              <>
+                <div className="notice warning">
+                  <b>Причина отказа: {r.photoRejection.label}</b>
+                  <p>{r.photoRejection.reason}</p>
+                </div>
+                {r.photoRejection.actor && (
+                  <ActorSummary actor={r.photoRejection.actor} />
+                )}
+                <p>Время попытки: {date(r.photoRejection.createdAt)}</p>
+                {r.photoRejection.inspection && (
+                  <p>
+                    <b>{r.photoRejection.inspection.organization.name}</b> ·
+                    Госномер {r.photoRejection.inspection.vehicle.plateNumber} ·
+                    Свидетельство{" "}
+                    {r.photoRejection.inspection.certificateNumber ??
+                      "не выпущено"}
+                  </p>
+                )}
+                {r.photoRejection.documentType && (
+                  <p>
+                    Документ:{" "}
+                    {fileNames[r.photoRejection.documentType] ??
+                      r.photoRejection.documentType}
+                  </p>
+                )}
+                <p className="muted">
+                  Результат автоматической проверки.
+                  {r.photoRejection.code === "screen_capture" &&
+                    " Признаки экрана требуют проверки и сами по себе не доказывают нарушение."}
+                </p>
+                <Details
+                  value={{
+                    requestId: r.photoRejection.requestId,
+                    model: r.photoRejection.model,
+                    reasonCode: r.photoRejection.code,
+                  }}
+                />
+                {!r.photoRejection.actor && <p>{r.explanation}</p>}
+              </>
+            ) : (
+              <p>{r.explanation}</p>
+            )}
             <div className="muted">
               {date(r.lastSeenAt)} · Повторений: {r.repetitions}
             </div>

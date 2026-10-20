@@ -100,6 +100,14 @@ describe("photo review routing", () => {
       "test-model",
     );
     expect(tx.notification.create).toHaveBeenCalledTimes(6);
+    for (const call of tx.notification.create.mock.calls as any) {
+      expect(call[0].data.body).not.toContain("Размыто");
+      expect(call[0].data.body).toContain(
+        "Подробная причина сохранена в технической панели",
+      );
+    }
+    for (const call of tx.technicalAlert.create.mock.calls as any)
+      expect(call[0].data.explanation).toContain("Размыто");
     expect(tx.notification.upsert).not.toHaveBeenCalled();
     expect(tx.organizationMember.findMany).not.toHaveBeenCalled();
     const keys = tx.technicalAlert.create.mock.calls.map(
