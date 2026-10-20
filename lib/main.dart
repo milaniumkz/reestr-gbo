@@ -1,3 +1,4 @@
+import 'inspection_input.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'data/client_telemetry.dart';
 import 'dart:async';
@@ -2195,7 +2196,10 @@ class _ErsiDemoState extends State<ErsiDemo> {
                   Positioned.fill(
                     child: KeyedSubtree(
                       key: ValueKey('ersi-screen-$screen'),
-                      child: _buildScreen(),
+                      child: InspectionInputScope(
+                        enabled: screen >= 15 && screen <= 23,
+                        child: _buildScreen(),
+                      ),
                     ),
                   ),
                   if (widget.showStepper)
@@ -8472,6 +8476,17 @@ class _InputState extends State<_Input> {
 
   @override
   Widget build(BuildContext context) {
+    final inspectionText =
+        InspectionInputScope.enabledOf(context) &&
+        !widget.obscureText &&
+        ![
+          TextInputType.number,
+          TextInputType.phone,
+          TextInputType.datetime,
+          TextInputType.emailAddress,
+          TextInputType.url,
+          TextInputType.visiblePassword,
+        ].contains(widget.keyboardType);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: TextFormField(
@@ -8482,7 +8497,14 @@ class _InputState extends State<_Input> {
         obscureText: widget.obscureText,
         onTap: widget.onTap,
         keyboardType: widget.keyboardType,
-        inputFormatters: widget.inputFormatters,
+        hintLocales: inspectionText ? const [Locale('ru', 'RU')] : null,
+        textCapitalization: inspectionText
+            ? TextCapitalization.characters
+            : TextCapitalization.none,
+        inputFormatters: [
+          ...?widget.inputFormatters,
+          if (inspectionText) const InspectionUppercaseFormatter(),
+        ],
         onChanged: widget.onChanged,
         style: const TextStyle(color: ink, fontWeight: FontWeight.w800),
         decoration: InputDecoration(

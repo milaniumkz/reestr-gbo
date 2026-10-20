@@ -60,3 +60,11 @@ for 30 days and verifies the public download against the built file.
 The repository currently signs release APKs with the Android debug key. Installing
 an update over an existing installation requires the same signing certificate;
 a stable production signing key must be configured separately for repeatable updates.
+
+### Inspection keyboard (20 October 2026)
+
+Inspection text fields (screens 15–23, including quality correction of the same form) request `ru-RU` via Flutter `hintLocales` and character capitalization. A scoped formatter also uppercases typed and pasted text while preserving punctuation, Kazakh/Russian characters, cursor selection and active IME composition. Password, phone, number, date, URL and email keyboard modes are excluded. Login/password screens are outside the scope.
+
+The operating-system keyboard owns the language selection: Android API 24+ can honor the language hint if Russian is available, but a keyboard may ignore it; browsers and iOS do not guarantee this language switch. Uppercase normalization does not depend on the selected keyboard layout. Android users need the newly built APK; the web version uses the updated client after refresh. Existing APK debug-signing limitations described above still apply.
+
+Validation: Flutter analyze without issues; full pre-existing suite plus keyboard tests passed (16 passed, one visual golden test skipped), followed by five focused keyboard tests including numeric mode and unchanged mixed-case password. No backend schema changes.
