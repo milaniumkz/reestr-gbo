@@ -33,6 +33,11 @@
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
+  <div id="startup" role="status" style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:#f0f8f5;color:#103d37;font:16px Arial,sans-serif;text-align:center;padding:24px;z-index:9999">
+    <strong>ЕРСИ ГБО</strong>
+    <span id="startup-message">Загрузка приложения… / Қолданба жүктелуде…</span>
+    <button id="startup-retry" type="button" hidden style="padding:12px 24px;border:0;border-radius:8px;background:#007e56;color:white;font:inherit">Повторить / Қайталау</button>
+  </div>
   <script>
     window.addEventListener('contextmenu', function (event) {
       event.preventDefault();
@@ -43,20 +48,50 @@
         event.preventDefault();
       }
     });
+    const startup = document.getElementById('startup');
+    let started = false;
+    function startupFailed() {
+      if (started) return;
+      document.getElementById('startup-message').textContent =
+        'Не удалось загрузить приложение. Проверьте интернет и повторите. / Қолданбаны жүктеу мүмкін болмады. Интернетті тексеріп, қайталаңыз.';
+      document.getElementById('startup-retry').hidden = false;
+    }
+    document.getElementById('startup-retry').addEventListener('click', function () {
+      window.location.reload();
+    });
+    const startupTimeout = setTimeout(startupFailed, 45000);
+    window.addEventListener('ersi-bootstrap-error', startupFailed);
+    window.addEventListener('error', function (event) {
+      if (event.target instanceof HTMLScriptElement) startupFailed();
+    }, true);
+    window.addEventListener('flutter-first-frame', function () {
+      started = true;
+      clearTimeout(startupTimeout);
+      startup.remove();
+    }, {once: true});
     (async function startWithoutStaleCache() {
       try {
-        if ('serviceWorker' in navigator) {
-          const registrations = await navigator.serviceWorker.getRegistrations();
-          await Promise.all(registrations.map((registration) => registration.unregister()));
-        }
-        if ('caches' in window) {
-          const keys = await caches.keys();
-          await Promise.all(keys.map((key) => caches.delete(key)));
-        }
+        // A stalled browser storage operation must never prevent app startup.
+        await Promise.race([
+          (async function () {
+            if ('serviceWorker' in navigator) {
+              const registrations = await navigator.serviceWorker.getRegistrations();
+              await Promise.all(registrations.map((registration) => registration.unregister()));
+            }
+            if ('caches' in window) {
+              const keys = await caches.keys();
+              await Promise.all(keys.filter((key) => key.startsWith('flutter-')).map((key) => caches.delete(key)));
+            }
+          })(),
+          new Promise((resolve) => setTimeout(resolve, 1500)),
+        ]);
+      } catch (error) {
+        console.warn('Browser cache cleanup unavailable', error);
       } finally {
         const script = document.createElement('script');
         script.src = 'flutter_bootstrap.js?v=' + Date.now();
         script.async = true;
+        script.onerror = startupFailed;
         document.body.appendChild(script);
       }
     })();

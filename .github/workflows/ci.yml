@@ -105,6 +105,7 @@ jobs:
           echo /Volumes/PD1000/job/flutter/bin >> "$GITHUB_PATH"
           /Volumes/PD1000/job/flutter/bin/flutter --version --machine | python3 -c 'import json,sys; assert json.load(sys.stdin)["frameworkVersion"] == "3.41.1"'
       - run: flutter pub get ${{ github.event_name != 'pull_request' && '--enforce-lockfile' || '' }}
+      - run: node --test scripts/web_startup.test.cjs
       - run: python3 scripts/check_localization.py
       - run: flutter analyze
       - run: flutter test

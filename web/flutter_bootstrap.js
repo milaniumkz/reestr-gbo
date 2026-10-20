@@ -11,4 +11,11 @@ if (_flutter.buildConfig && Array.isArray(_flutter.buildConfig.builds)) {
   });
 }
 
-_flutter.loader.load();
+_flutter.loader.load({
+  config: {
+    canvasKitBaseUrl: new URL('canvaskit/', document.baseURI).toString(),
+  },
+}).catch((error) => {
+  console.error('Application bootstrap failed', error);
+  window.dispatchEvent(new Event('ersi-bootstrap-error'));
+});
