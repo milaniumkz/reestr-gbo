@@ -1,3 +1,4 @@
+import 'widgets/photo_rotation_scope.dart';
 import 'l10n/app_language.dart';
 import 'inspection_input.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -706,6 +707,41 @@ class _ErsiDemoState extends State<ErsiDemo> {
       _ownsQualityReview &&
       selectedInspection?.status == 'submitted' &&
       draftInspectionId == selectedInspection?.id;
+
+  Future<void> _rotateInspectionPhoto(
+    InspectionFileInfo file,
+    int turns,
+  ) async {
+    final inspection = selectedInspection;
+    if (inspection == null || !_ownsQualityReview || qualityBusy) return;
+    setState(() => qualityBusy = true);
+    try {
+      final updated = await repositories.inspections.rotatePhoto(
+        inspectionId: inspection.id,
+        file: file,
+        turns: turns,
+      );
+      if (!mounted) return;
+      setState(() {
+        final index = inspection.files.indexWhere((item) => item.id == file.id);
+        if (index >= 0) {
+          inspection.files[index] = updated;
+        }
+        apiState = 'Поворот фотографии сохранён';
+      });
+    } on ApiException catch (error) {
+      if (mounted) setState(() => apiState = error.message);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => apiState =
+              'Не удалось сохранить поворот фотографии. Обновите инспекцию перед повтором',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => qualityBusy = false);
+    }
+  }
 
   Future<Position> _bestInspectionPosition() async {
     final live = await _tryCurrentPosition();
@@ -2215,7 +2251,13 @@ class _ErsiDemoState extends State<ErsiDemo> {
                       key: ValueKey('ersi-screen-$screen'),
                       child: InspectionInputScope(
                         enabled: screen >= 15 && screen <= 23,
-                        child: _buildScreen(),
+                        child: PhotoRotationScope(
+                          busy: qualityBusy,
+                          onRotate: _ownsQualityReview
+                              ? _rotateInspectionPhoto
+                              : null,
+                          child: _buildScreen(),
+                        ),
                       ),
                     ),
                   ),
@@ -4936,6 +4978,7 @@ class _InspectionFileCard extends StatelessWidget {
               text: file.moderationReason,
             ),
           ],
+          PhotoRotationButtons(file: file),
           if (file.isImage && url.isNotEmpty) ...[
             const SizedBox(height: 12),
             InkWell(

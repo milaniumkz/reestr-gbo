@@ -12,6 +12,7 @@ const actions: Record<string, string> = {
   "inspection.create": "Создание инспекции",
   "inspection.data.update": "Изменение данных инспекции",
   "inspection.status.update": "Изменение статуса инспекции",
+  "inspection.photo.rotate": "Поворот фотографии инспекции",
   "inspection.photo.upload": "Загрузка документа инспекции",
   "organization.member.add": "Добавление сотрудника ИО",
   "organization.member.remove": "Удаление сотрудника ИО",

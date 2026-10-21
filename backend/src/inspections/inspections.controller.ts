@@ -136,6 +136,13 @@ export class InspectionsController {
     return this.inspections.photos(id, user);
   }
 
+  @Post(":id/photos/:photoId/rotate")
+  @Roles("inspection_org")
+  rotatePhoto(@CurrentUser() user: RequestUser, @Param("id") id: string,
+    @Param("photoId") photoId: string, @Body() body: {turns?: unknown; objectKey?: unknown}) {
+    return this.inspections.rotatePhoto(id, photoId, body?.turns, body?.objectKey, user);
+  }
+
   @Get("photo-moderation/status")
   @Roles("inspection_org", "operator", "super_admin")
   moderationStatus() { return this.inspections.moderationStatus(); }

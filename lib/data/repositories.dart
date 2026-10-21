@@ -581,6 +581,18 @@ class InspectionRepository {
     );
   }
 
+  Future<InspectionFileInfo> rotatePhoto({
+    required String inspectionId,
+    required InspectionFileInfo file,
+    required int turns,
+  }) async {
+    final response = await _api.postJson(
+      '/inspections/$inspectionId/photos/${file.id}/rotate',
+      {'turns': turns, 'objectKey': file.objectKey},
+    );
+    return InspectionFileInfo.fromJson(response);
+  }
+
   Future<void> uploadPhoto({
     required String inspectionId,
     required String type,

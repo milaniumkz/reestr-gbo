@@ -1,3 +1,4 @@
+import sharp from 'sharp';
 import {notifyPhotoReview,notifyPhotoRejection} from './photo-review-notifications';
 import { cylinderProducedAt } from '../common/cylinder-date';
 import { PhotoModerationService } from '../photo-moderation/photo-moderation.service';
@@ -541,6 +542,52 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       ...photo,
       viewUrl: this.storage.objectUrl(photo.objectKey).url,
     }));
+  }
+
+  async rotatePhoto(id: string, photoId: string, turns: unknown, expectedObjectKey: unknown, user?: RequestUser) {
+    if (turns !== -1 && turns !== 1) throw new BadRequestException("Выберите поворот влево или вправо");
+    if (typeof expectedObjectKey !== 'string' || !expectedObjectKey) throw new BadRequestException("Обновите фотографию перед поворотом");
+    const inspection = await this.assertInspectionAccess(id, user);
+    await this.assertQualityControl(inspection.organizationId, user);
+    if (inspection.status !== 'submitted' || inspection.qualityReviewerId !== user!.sub) {
+      throw new ConflictException("Повернуть фото может сотрудник, проверяющий эту инспекцию");
+    }
+    const photo = await this.prisma.inspectionPhoto.findFirst({where: {id: photoId, inspectionId: id}});
+    if (!photo) throw new NotFoundException("Фотография не найдена");
+    if (photo.objectKey !== expectedObjectKey) throw new ConflictException("Фотография уже изменена. Обновите инспекцию");
+    const original = await this.storage.readObject(photo.objectKey);
+    let rotated: Buffer;
+    try {
+      const image = sharp(original, {limitInputPixels: 40_000_000});
+      const metadata = await image.metadata();
+      if (!['jpeg', 'png', 'webp'].includes(metadata.format ?? '') || (metadata.pages ?? 1) > 1) {
+        throw new Error('Unsupported image');
+      }
+      // Normalize EXIF orientation before applying the requested visible turn.
+      // PNG preserves the decoded pixels across repeated turns without JPEG loss.
+      const normalized = await image.autoOrient().png().toBuffer();
+      rotated = await sharp(normalized, {limitInputPixels: 40_000_000}).rotate(turns * 90).png().toBuffer();
+    } catch {
+      throw new BadRequestException("Поворот доступен только для фотографий JPEG, PNG и WebP");
+    }
+    const objectKey = `inspections/${id}/${photo.type}-rotated-${randomUUID()}.png`;
+    const stored = await this.storage.putObject({key: objectKey, body: rotated, createdById: user!.sub});
+    const saved = await this.prisma.$transaction(async tx => {
+      const locked = await tx.inspection.updateMany({
+        where: {id, status: 'submitted', qualityReviewerId: user!.sub},
+        data: {updatedAt: new Date()},
+      });
+      if (locked.count !== 1) throw new ConflictException("Инспекция уже не находится у вас на проверке");
+      const updated = await tx.inspectionPhoto.updateMany({
+        where: {id: photoId, inspectionId: id, objectKey: photo.objectKey},
+        data: {objectKey, checksum: createHash('sha256').update(rotated).digest('hex')},
+      });
+      if (updated.count !== 1) throw new ConflictException("Фотография уже изменена. Обновите инспекцию");
+      await tx.auditLog.create({data: {actorId: user!.sub, action: 'inspection.photo.rotate', entity: 'inspection', entityId: id,
+        metadata: {photoId, fileId: stored.id, type: photo.type, turns, objectKey, previousObjectKey: photo.objectKey}}});
+      return tx.inspectionPhoto.findUniqueOrThrow({where: {id: photoId}});
+    });
+    return {...saved, viewUrl: this.storage.objectUrl(saved.objectKey).url};
   }
 
   moderationStatus() { return this.photoModeration.status(); }
