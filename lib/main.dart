@@ -1063,6 +1063,38 @@ class _ErsiDemoState extends State<ErsiDemo> {
       .replaceFirst(RegExp(r'^ApiException\(\d+\):\s*'), '')
       .replaceFirst('Exception: ', '');
 
+  Future<void> _askDiagnosticLocationConsent() async {
+    final consentPreferences = await SharedPreferences.getInstance();
+    if (consentPreferences.getBool('diagnosticLocationAsked') == true ||
+        !mounted ||
+        currentUser == null) {
+      return;
+    }
+    final allow = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Геолокация для технической поддержки'),
+        content: const Text(
+          'Разрешить сохранять координаты при входе и действиях в системе? Это поможет разобраться с ошибками и местом инспекции. Отказ не мешает входу.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Не сейчас'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Разрешить'),
+          ),
+        ],
+      ),
+    );
+    await consentPreferences.setBool('diagnosticLocationAsked', true);
+    if (allow == true) {
+      unawaited(ClientTelemetry.allowLocation().catchError((Object _) {}));
+    }
+  }
+
   Future<void> _passwordLogin() async {
     if (authBusy) return;
     if (authPassword.isEmpty) {
@@ -1071,31 +1103,6 @@ class _ErsiDemoState extends State<ErsiDemo> {
     }
     setState(() => authBusy = true);
     try {
-      final consentPreferences = await SharedPreferences.getInstance();
-      if (consentPreferences.getBool('diagnosticLocationAsked') != true &&
-          mounted) {
-        final allow = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Геолокация для технической поддержки'),
-            content: const Text(
-              'Разрешить сохранять координаты при входе и действиях в системе? Это поможет разобраться с ошибками и местом инспекции. Отказ не мешает входу.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Не сейчас'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Разрешить'),
-              ),
-            ],
-          ),
-        );
-        await consentPreferences.setBool('diagnosticLocationAsked', true);
-        if (allow == true) await ClientTelemetry.allowLocation();
-      }
       final result = await repositories.auth.login(
         _normalizeKzPhone(authPhone),
         authPassword,
@@ -1201,7 +1208,10 @@ class _ErsiDemoState extends State<ErsiDemo> {
       await _loadNotifications();
       await _loadViewHistory();
     }
-    if (mounted) go(_homeScreenForRoleCode(_roleCode));
+    if (mounted) {
+      go(_homeScreenForRoleCode(_roleCode));
+      unawaited(_askDiagnosticLocationConsent().catchError((Object _) {}));
+    }
   }
 
   Future<void> _searchRegistry(String query) async {

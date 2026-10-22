@@ -20,7 +20,7 @@ void main() {
           'refreshToken': 'old-refresh',
           'lastRoleCode': role,
           'lastOrganizationBin': '123456789012',
-          'diagnosticLocationAsked': true,
+          'diagnosticLocationAsked': role != 'inspection_org',
         });
         tester.view.physicalSize = const Size(430, 1000);
         tester.view.devicePixelRatio = 1;
@@ -83,6 +83,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('Обязательная смена пароля'), findsOneWidget);
         expect(changed, 0);
+        expect(find.text('Геолокация для технической поддержки'), findsNothing);
         final dynamic state = tester.state(find.byType(ErsiDemo));
         state.go(14);
         await tester.pumpAndSettle();
@@ -101,6 +102,14 @@ void main() {
         await tester.tap(find.text('Сменить пароль и войти'));
         await tester.pumpAndSettle();
         expect(changed, 1);
+        if (role == 'inspection_org') {
+          expect(
+            find.text('Геолокация для технической поддержки'),
+            findsOneWidget,
+          );
+          await tester.tap(find.text('Не сейчас'));
+          await tester.pumpAndSettle();
+        }
         expect(prefs.getString('accessToken'), 'new');
         expect(find.text('Обязательная смена пароля'), findsNothing);
         expect(tester.takeException(), isNull);
