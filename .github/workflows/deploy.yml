@@ -23,6 +23,7 @@ on:
           - deploy-admin
           - restore-confirmed-inspector
           - diagnose-members
+          - diagnose-passwords
           - photo-moderation-status
           - status
           - logs
@@ -157,6 +158,7 @@ jobs:
           case "${{ github.event.inputs.operation }}" in
             restore-confirmed-inspector) bash ops/restore-confirmed-inspector.sh ;;
             diagnose-members) bash ops/diagnose-members.sh ;;
+            diagnose-passwords) bash ops/diagnose-passwords.sh ;;
             photo-moderation-status) bash ops/photo-moderation-status.sh ;;
             deploy-admin) DEPLOY_COMPONENTS=admin bash ops/deploy-production.sh "$(git rev-parse HEAD)" ;;
             deploy-services) DEPLOY_COMPONENTS=services bash ops/deploy-production.sh "$(git rev-parse HEAD)" ;;
