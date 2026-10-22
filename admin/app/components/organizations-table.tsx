@@ -211,7 +211,7 @@ export function OrganizationsTable({
               const members = org.members ?? [];
               return (
                 <tr key={org.id}>
-                  <td>{org.name}{org.type === "inspection_org" && <div className="muted">{accreditationPeriod(org)}</div>}</td>
+                  <td>{onOpen ? <button type="button" className="organizationLink" onClick={() => onOpen(org)}>{org.name}</button> : org.name}{org.type === "inspection_org" && <div className="muted">{accreditationPeriod(org)}</div>}</td>
                   <td>{org.bin}</td>
                   <td>{org.region ?? '-'}</td>
                   <td>

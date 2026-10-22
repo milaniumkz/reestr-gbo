@@ -641,3 +641,14 @@ code {
 .mediaDialog { max-width:98vw; width:98vw; max-height:98vh; }
 .mediaPreview img { max-height:82vh; width:100%; height:82vh; object-fit:contain; }
 button, label, h1, h2, h3, th, .mediaTile span { text-transform:uppercase; }
+
+.organizationLink {
+  background: transparent;
+  color: var(--dark);
+  padding: 0;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-transform: none;
+}
+.organizationLink:hover { color: var(--green); }

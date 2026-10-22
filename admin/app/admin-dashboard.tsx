@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { withRefreshedSession } from './lib/session-action';
 import {
   AdminUser,
@@ -301,6 +301,12 @@ export default function AdminDashboard() {
   const [pages, setPages] = useState<DashboardPages>({});
   const [listMeta, setListMeta] = useState<Record<string, ListMeta>>({});
   const [selectedOrganization, setSelectedOrganization] = useState<Organization | null>(null);
+  const [openingOrganization, setOpeningOrganization] = useState<Organization | null>(null);
+  const organizationRequest = useRef(0);
+  const detailAnchor = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (openingOrganization || selectedOrganization) detailAnchor.current?.scrollIntoView({ block: 'start' });
+  }, [openingOrganization?.id, selectedOrganization?.id]);
   const [selectedOrganizationActivity, setSelectedOrganizationActivity] = useState<OrganizationActivity | null>(null);
   const [selectedUser, setSelectedUser] = useState<UserRow | null>(null);
   const [selectedUserActivity, setSelectedUserActivity] = useState<{
@@ -361,6 +367,8 @@ export default function AdminDashboard() {
   const currentActive = availableNav.includes(active) ? active : availableNav[0];
 
   function closeDetails() {
+    organizationRequest.current++;
+    setOpeningOrganization(null);
     setSelectedOrganization(null);
     setSelectedOrganizationActivity(null);
     setSelectedUser(null);
@@ -695,16 +703,32 @@ export default function AdminDashboard() {
 
   async function openOrganization(row: Organization) {
     if (!token) return;
-    await runAction('Карточка ИО открыта', async () => {
-      const [detail, activity] = await Promise.all([
-        getOrganizationDetail(token, row.id),
-        getOrganizationActivity(token, row.id),
-      ]);
-      closeDetails();
-      setSelectedOrganization(detail);
-      setSelectedOrganizationActivity(activity);
-      await trackView(token, 'organization', detail.id, detail.name).catch(() => undefined);
-    });
+    closeDetails();
+    const request = organizationRequest.current;
+    setOpeningOrganization(row);
+    setError('');
+    setStatus('');
+    try {
+      const session = await withRefreshedSession(token, refreshSession,
+        (accessToken) => getOrganizationDetail(accessToken, row.id));
+      if (organizationRequest.current !== request) return;
+      setSelectedOrganization(session.value);
+      setOpeningOrganization(null);
+      setStatus('Карточка ИО открыта');
+      void withRefreshedSession(session.token, refreshSession,
+        (accessToken) => getOrganizationActivity(accessToken, row.id))
+        .then(({value}) => {
+          if (organizationRequest.current === request) setSelectedOrganizationActivity(value);
+        }).catch(() => {
+          if (organizationRequest.current === request) setError('Карточка ИО открыта, но историю действий загрузить не удалось. Повторите открытие позже.');
+        });
+      void trackView(session.token, 'organization', session.value.id, session.value.name).catch(() => undefined);
+    } catch (err) {
+      if (organizationRequest.current !== request) return;
+      setOpeningOrganization(null);
+      setError(err instanceof Error ? err.message : 'Не удалось открыть карточку ИО');
+      window.scrollTo({top: 0});
+    }
   }
 
   async function reloadSelectedOrganization(organizationId: string, accessToken = token) {
@@ -1677,6 +1701,7 @@ export default function AdminDashboard() {
     org.type === 'installer',
   );
   const detailOpen = Boolean(
+    openingOrganization ||
     selectedOrganization ||
     selectedUser ||
     selectedInspection ||
@@ -1712,8 +1737,18 @@ export default function AdminDashboard() {
           />
         )}
 
+        <div ref={detailAnchor} />
+        {openingOrganization && (
+          <section className="detailPanel" role="status" aria-live="polite">
+            <div className="tableHeader">
+              <h2>Загрузка карточки: {openingOrganization.name}</h2>
+              <button type="button" className="smallButton" onClick={closeDetails}>Отмена</button>
+            </div>
+          </section>
+        )}
         {selectedOrganization && (
           <OrganizationDetailPanel
+            key={selectedOrganization.id}
             organization={selectedOrganization}
             activity={selectedOrganizationActivity}
             users={users}
