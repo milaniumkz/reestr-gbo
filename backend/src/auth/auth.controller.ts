@@ -46,6 +46,13 @@ class ChangeInitialPasswordDto {
   @IsString() @MaxLength(72) confirmation!: string;
 }
 
+class PersonalPasswordDto {
+  @IsString() @MaxLength(12) bin!: string;
+  @IsString() @MaxLength(32) phone!: string;
+  @IsString() @MaxLength(72) oldPassword!: string;
+  @IsString() @MinLength(8) @MaxLength(72) newPassword!: string;
+  @IsString() @MaxLength(72) confirmation!: string;
+}
 class RefreshDto {
   @IsString()
   refreshToken!: string;
@@ -63,6 +70,12 @@ export class AuthController {
   @Post('password/change')
   changePassword(@Body() dto: ChangeInitialPasswordDto, @Ip() ipAddress: string) {
     return this.auth.changeInitialPassword(dto.passwordChangeToken,dto.newPassword,dto.confirmation,ipAddress);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('password/update')
+  updatePassword(@Body() dto: PersonalPasswordDto, @CurrentUser() user: RequestUser, @Ip() ip: string) {
+    return this.auth.changePersonalPassword(user.sub, dto, ip);
   }
 
   @Post('otp/send')

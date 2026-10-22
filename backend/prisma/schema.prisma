@@ -640,3 +640,15 @@ count Int @default(1)
 expiresAt DateTime
 @@index([expiresAt])
 }
+
+model PasswordRecoveryRequest {
+  id String @id @default(uuid())
+  userId String
+  organizationId String
+  status String @default("pending")
+  approvedBy String?
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  @@index([organizationId, status, createdAt])
+  @@index([userId, status])
+}

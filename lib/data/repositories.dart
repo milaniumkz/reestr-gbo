@@ -65,6 +65,43 @@ class AuthRepository {
     return user;
   }
 
+  Future<String> requestRecovery(
+    String bin,
+    String phone,
+    String fullName,
+  ) async {
+    final value = await _api.postJson('/auth/recovery/request', {
+      'bin': bin,
+      'phone': phone,
+      'fullName': fullName,
+    });
+    return value['message'].toString();
+  }
+
+  Future<List<dynamic>> recoveryRequests() async =>
+      (await _api.getJson('/auth/recovery/requests'))['items'] as List<dynamic>;
+  Future<String> approveRecovery(String id) async => (await _api.postJson(
+    '/auth/recovery/requests/$id/approve',
+    {},
+  ))['token'].toString();
+  Future<String> changePersonalPassword(
+    String bin,
+    String phone,
+    String oldPassword,
+    String password,
+    String confirmation,
+  ) async {
+    final value = await _api.postJson('/auth/password/update', {
+      'bin': bin,
+      'phone': phone,
+      'oldPassword': oldPassword,
+      'newPassword': password,
+      'confirmation': confirmation,
+    });
+    await clearLocalSession();
+    return value['message'].toString();
+  }
+
   String _resolvedRole(String requested, AppUser user) {
     if (requested == 'nca' || requested == 'government') {
       if (user.roles.contains('government') && !user.roles.contains('nca')) {

@@ -424,6 +424,15 @@ export class TechnicalController {
   @Get("people") people(@Req() r: any, @Query() q: any) {
     return this.data.people(r.tech, q);
   }
+  @Get('recovery-requests')
+  @TechnicalPermission('credentials.manage')
+  recoveryRequests() { return this.recovery.requests(); }
+  @Post('recovery-requests/:id/approve')
+  @TechnicalPermission('credentials.manage')
+  approveRecovery(@Req() r: any, @Param('id') id: string) {
+    this.auth.fresh(r.tech);
+    return this.recovery.approve(id, r.tech.account.id, true);
+  }
   @Post("people/:id/recovery")
   @TechnicalPermission("credentials.manage")
   issueRecovery(@Req() r: any, @Param("id") id: string, @Body() body: any) {

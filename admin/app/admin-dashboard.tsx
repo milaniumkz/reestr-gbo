@@ -1664,6 +1664,7 @@ export default function AdminDashboard() {
           </>}
           {error && <div className="error">{error}</div>}
           <button type="submit" disabled={loading}>{loading ? 'Подождите...' : passwordChangeToken ? 'Сменить пароль и войти' : 'Войти'}</button>
+          {!passwordChangeToken && <a href="https://tech.89-207-255-42.sslip.io/tech/recovery/">Забыли пароль</a>}
           {passwordChangeToken && <button type="button" className="smallButton" disabled={loading} onClick={() => { setPasswordChangeToken(null); setNewPassword(''); setConfirmation(''); setError(''); }}>Вернуться ко входу</button>}
         </form>
       </main>

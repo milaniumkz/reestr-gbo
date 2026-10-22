@@ -1,3 +1,4 @@
+import 'widgets/password_access_screen.dart';
 import 'widgets/photo_rotation_scope.dart';
 import 'l10n/app_language.dart';
 import 'inspection_input.dart';
@@ -995,6 +996,16 @@ class _ErsiDemoState extends State<ErsiDemo> {
   }
 
   Future<void> _openNotification(AppNotification notification) async {
+    if (notification.entity == 'password_recovery_request' &&
+        _isInspectionManager) {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) =>
+              PasswordAccessScreen(auth: repositories.auth, manager: true),
+        ),
+      );
+      return;
+    }
     if (notification.entity == 'certificate' &&
         notification.entityId.isNotEmpty) {
       await _openControlCertificate(
@@ -2412,6 +2423,15 @@ class _ErsiDemoState extends State<ErsiDemo> {
         onBin: (value) => setState(() => authBin = value),
         password: authPassword,
         onPassword: (value) => setState(() => authPassword = value),
+        onForgot: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => PasswordAccessScreen(
+              auth: repositories.auth,
+              bin: authBin,
+              phone: authPhone,
+            ),
+          ),
+        ),
         onLogin: _passwordLogin,
         isLoading: authBusy,
       ),
@@ -2767,6 +2787,25 @@ class _ErsiDemoState extends State<ErsiDemo> {
       ),
       39 => _ProfileSecurity(
         go: go,
+        onPassword: () async {
+          final changed = await Navigator.of(context).push<bool>(
+            MaterialPageRoute(
+              builder: (_) => PasswordAccessScreen(
+                auth: repositories.auth,
+                change: true,
+                bin: authBin,
+                phone: currentUser?.phone ?? '',
+              ),
+            ),
+          );
+          if (changed == true && mounted) _logout();
+        },
+        onRecoveryRequests: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) =>
+                PasswordAccessScreen(auth: repositories.auth, manager: true),
+          ),
+        ),
         onLogout: _logout,
         user: currentUser,
         roleLabel: role,
@@ -3685,6 +3724,7 @@ class _Login extends StatelessWidget {
     required this.onPhone,
     required this.onBin,
     required this.onLogin,
+    required this.onForgot,
     this.isLoading = false,
     this.notice = '',
   });
@@ -3698,6 +3738,7 @@ class _Login extends StatelessWidget {
   final ValueChanged<String> onPhone;
   final ValueChanged<String> onBin;
   final VoidCallback onLogin;
+  final VoidCallback onForgot;
   final bool isLoading;
 
   @override
@@ -3753,6 +3794,10 @@ class _Login extends StatelessWidget {
             text: isLoading ? 'Входим...' : 'Войти',
             icon: Icons.login_rounded,
             onTap: isLoading ? null : onLogin,
+          ),
+          TextButton(
+            onPressed: isLoading ? null : onForgot,
+            child: const Text('Забыли пароль'),
           ),
           const SizedBox(height: 34),
           const Center(
@@ -7785,6 +7830,8 @@ class _ProfileSecurity extends StatelessWidget {
   const _ProfileSecurity({
     required this.go,
     required this.onLogout,
+    required this.onPassword,
+    required this.onRecoveryRequests,
     required this.user,
     required this.roleLabel,
     required this.history,
@@ -7804,6 +7851,8 @@ class _ProfileSecurity extends StatelessWidget {
   });
   final void Function(int) go;
   final VoidCallback onLogout;
+  final VoidCallback onPassword;
+  final VoidCallback onRecoveryRequests;
   final AppUser? user;
   final String roleLabel;
   final List<ViewHistoryItem> history;
@@ -7853,6 +7902,17 @@ class _ProfileSecurity extends StatelessWidget {
               ],
             ),
           ),
+          TextButton.icon(
+            onPressed: onPassword,
+            icon: const Icon(Icons.password),
+            label: const Text('Сменить пароль'),
+          ),
+          if (isInspectionManager)
+            TextButton.icon(
+              onPressed: onRecoveryRequests,
+              icon: const Icon(Icons.lock_reset),
+              label: const Text('Заявки восстановления доступа'),
+            ),
           if (isInspectionManager) ...[
             const SizedBox(height: 16),
             _Card(

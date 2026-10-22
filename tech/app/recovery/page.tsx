@@ -3,11 +3,42 @@ import { FormEvent, useEffect, useState } from "react";
 export default function Recovery() {
   const [token, setToken] = useState(""),
     [message, setMessage] = useState(""),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    [completed, setCompleted] = useState(false);
   useEffect(() => {
-    setToken(location.hash.slice(1));
-    history.replaceState(null, "", location.pathname);
+    function readToken() {
+      if (!location.hash) return;
+      setToken(location.hash.slice(1));
+      setCompleted(false);
+      setMessage("");
+      history.replaceState(null, "", location.pathname);
+    }
+    readToken();
+    window.addEventListener("hashchange", readToken);
+    return () => window.removeEventListener("hashchange", readToken);
   }, []);
+  async function request(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    setBusy(true);
+    try {
+      const r = await fetch("/api/v1/auth/recovery/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(Object.fromEntries(f.entries())),
+      });
+      const value = await r.json();
+      setMessage(
+        Array.isArray(value.message)
+          ? value.message.join(". ")
+          : (value.message ?? "Не удалось выполнить запрос"),
+      );
+    } catch {
+      setMessage("Соединение потеряно. Повторите запрос.");
+    } finally {
+      setBusy(false);
+    }
+  }
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
@@ -24,7 +55,10 @@ export default function Recovery() {
       });
       const value = await r.json();
       setMessage(value.message ?? "Не удалось выполнить запрос");
-      if (r.ok) setToken("");
+      if (r.ok) {
+        setToken("");
+        setCompleted(true);
+      }
     } catch {
       setMessage("Соединение потеряно. Повторите запрос.");
     } finally {
@@ -35,7 +69,13 @@ export default function Recovery() {
     <div className="login-form-side" style={{ minHeight: "100vh" }}>
       <div className="login-form">
         <div className="eyebrow">ЕРСИ ГБО · Восстановление доступа</div>
-        <h2>Установите личный пароль</h2>
+        <h2>
+          {completed
+            ? "Пароль изменён"
+            : token
+              ? "Установите личный пароль"
+              : "Забыли пароль"}
+        </h2>
         <p className="muted">
           Одноразовая ссылка действует 10 минут. После смены пароля прежние
           сеансы будут завершены.
@@ -72,11 +112,36 @@ export default function Recovery() {
               {busy ? "Сохраняем…" : "Изменить пароль"}
             </button>
           </form>
+        ) : completed ? (
+          <p>Войдите в приложение с новым личным паролем.</p>
         ) : (
-          <div className="notice">
-            Нужна действующая ссылка, выданная владельцем после подтверждения
-            личности. Автоматическая отправка ссылок не подключена.
-          </div>
+          <form onSubmit={request}>
+            <p>
+              Введите данные сотрудника. Руководитель ИО или технический
+              администратор проверит личность и передаст одноразовую ссылку.
+            </p>
+            <label>
+              БИН организации
+              <input
+                name="bin"
+                inputMode="numeric"
+                pattern="[0-9]{12}"
+                maxLength={12}
+                required
+              />
+            </label>
+            <label>
+              Номер телефона
+              <input name="phone" type="tel" maxLength={32} required />
+            </label>
+            <label>
+              Фамилия, имя, отчество
+              <input name="fullName" maxLength={200} required />
+            </label>
+            <button className="primary" disabled={busy}>
+              {busy ? "Отправляем…" : "Отправить заявку"}
+            </button>
+          </form>
         )}
         <p>
           <a href="https://89-207-255-42.sslip.io/">Открыть приложение</a>

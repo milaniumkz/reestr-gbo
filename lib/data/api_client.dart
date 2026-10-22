@@ -27,7 +27,9 @@ class ApiClient {
       headers: {..._headers, ...await ClientTelemetry.headers()},
     );
     if (response.statusCode == 401 &&
-        !path.startsWith('/auth/') &&
+        (!path.startsWith('/auth/') ||
+            path.startsWith('/auth/recovery/requests') ||
+            path == '/auth/password/update') &&
         await _refreshAccessToken()) {
       return getJson(path);
     }
@@ -48,7 +50,9 @@ class ApiClient {
       body: jsonEncode(body),
     );
     if (response.statusCode == 401 &&
-        !path.startsWith('/auth/') &&
+        (!path.startsWith('/auth/') ||
+            path.startsWith('/auth/recovery/requests') ||
+            path == '/auth/password/update') &&
         await _refreshAccessToken()) {
       return postJson(path, body);
     }
@@ -69,7 +73,9 @@ class ApiClient {
       body: jsonEncode(body),
     );
     if (response.statusCode == 401 &&
-        !path.startsWith('/auth/') &&
+        (!path.startsWith('/auth/') ||
+            path.startsWith('/auth/recovery/requests') ||
+            path == '/auth/password/update') &&
         await _refreshAccessToken()) {
       return patchJson(path, body);
     }
@@ -98,7 +104,9 @@ class ApiClient {
     final streamed = await request.send();
     final response = await http.Response.fromStream(streamed);
     if (response.statusCode == 401 &&
-        !path.startsWith('/auth/') &&
+        (!path.startsWith('/auth/') ||
+            path.startsWith('/auth/recovery/requests') ||
+            path == '/auth/password/update') &&
         await _refreshAccessToken()) {
       return postMultipart(
         path,

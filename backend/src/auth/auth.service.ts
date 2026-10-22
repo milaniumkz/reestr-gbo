@@ -1,3 +1,4 @@
+import { enforceRateLimit } from '../technical/rate-limit';
 import {accountContext} from '../observability/account-context';
 import { BadRequestException, ForbiddenException, GoneException, Injectable, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -62,12 +63,38 @@ export class AuthService {
     if(await bcrypt.compare(password,user.passwordHash)) throw new BadRequestException('Новый пароль должен отличаться от временного');
     const hash=await bcrypt.hash(password,12);
     await this.prisma.$transaction(async tx=>{
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${user.id},1))`;
       const changed=await tx.user.updateMany({where:{id:user.id,passwordVersion:proof.pv,mustChangePassword:true,isBlocked:false},data:{passwordHash:hash,mustChangePassword:false,passwordVersion:{increment:1},passwordChangedAt:new Date(),failedPasswordAttempts:0,passwordLockedUntil:null}});
       if(changed.count!==1) throw new UnauthorizedException('Пароль уже изменён. Войдите заново');
       await tx.session.updateMany({where:{userId:user.id,revokedAt:null},data:{revokedAt:new Date()}});
+      await tx.passwordRecovery.updateMany({where:{userId:user.id,usedAt:null},data:{usedAt:new Date()}});
+      await tx.passwordRecoveryRequest.updateMany({where:{userId:user.id,status:'pending'},data:{status:'completed'}});
     });
     await this.audit.log('auth.password_changed','user',user.id,user.id,{firstLogin:true},ipAddress);
     return this.startSession(user.id,proof,ipAddress);
+  }
+
+  async changePersonalPassword(userId: string, input: {bin:string;phone:string;oldPassword:string;newPassword:string;confirmation:string}, ip?: string) {
+    await enforceRateLimit(this.prisma, `password-update:${userId}`, 5, 900);
+    this.validateNewPassword(input.newPassword,input.confirmation);
+    const user = await this.prisma.user.findUnique({where:{id:userId}});
+    const member = await this.prisma.organizationMember.findFirst({where:{userId,organization:{bin:input.bin,status:'active'}}});
+    if (!user || user.isBlocked || this.normalizePhone(input.phone) !== user.phone || !member || !await bcrypt.compare(input.oldPassword,user.passwordHash)) {
+      await this.audit.log('auth.password_update_failed','user',userId,userId,{reason:'identity_or_password_mismatch'},ip);
+      throw new BadRequestException('Проверьте БИН организации, телефон и старый пароль');
+    }
+    if (await bcrypt.compare(input.newPassword,user.passwordHash)) throw new BadRequestException('Новый пароль должен отличаться от старого');
+    const hash = await bcrypt.hash(input.newPassword,12);
+    await this.prisma.$transaction(async tx=>{
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${userId},1))`;
+      const changed=await tx.user.updateMany({where:{id:userId,passwordVersion:user.passwordVersion,isBlocked:false},data:{passwordHash:hash,mustChangePassword:false,passwordVersion:{increment:1},passwordChangedAt:new Date(),failedPasswordAttempts:0,passwordLockedUntil:null}});
+      if(changed.count!==1) throw new UnauthorizedException('Пароль уже изменён. Войдите заново');
+      await tx.session.updateMany({where:{userId,revokedAt:null},data:{revokedAt:new Date()}});
+      await tx.passwordRecovery.updateMany({where:{userId,usedAt:null},data:{usedAt:new Date()}});
+      await tx.passwordRecoveryRequest.updateMany({where:{userId,status:'pending'},data:{status:'completed'}});
+    });
+    await this.audit.log('auth.password_changed','user',userId,userId,{firstLogin:false},ip);
+    return {ok:true,message:'Пароль изменён. Войдите заново.'};
   }
 
   private validateNewPassword(password:string,confirmation:string) {

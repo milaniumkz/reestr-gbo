@@ -1,4 +1,5 @@
 "use client";
+import RecoveryRequests from "./recovery-requests";
 import PushControls from "./push-controls";
 import { consentLocation } from "./location";
 import {
@@ -1168,6 +1169,7 @@ export default function Panel() {
             )}
           </div>
         )}
+        {section === "accounts" && has("credentials.manage") && <RecoveryRequests />}
         {section === "accounts" && (
           <div className="tabs">
             <button
