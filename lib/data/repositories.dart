@@ -41,7 +41,7 @@ class AuthRepository {
       return PasswordLoginResult(passwordChangeToken: token);
     }
     final user = await _storeAuthResponse(response);
-    await _storeLoginContext(role, bin);
+    await _storeLoginContext(_resolvedRole(role, user), bin);
     return PasswordLoginResult(user: user);
   }
 
@@ -61,8 +61,20 @@ class AuthRepository {
       'confirmation': confirmation,
     });
     final user = await _storeAuthResponse(response);
-    await _storeLoginContext(role, bin);
+    await _storeLoginContext(_resolvedRole(role, user), bin);
     return user;
+  }
+
+  String _resolvedRole(String requested, AppUser user) {
+    if (requested == 'nca' || requested == 'government') {
+      if (user.roles.contains('government') && !user.roles.contains('nca')) {
+        return 'government';
+      }
+      if (user.roles.contains('nca') && !user.roles.contains('government')) {
+        return 'nca';
+      }
+    }
+    return requested;
   }
 
   Future<void> _storeLoginContext(String role, String? bin) async {
@@ -82,6 +94,7 @@ class AuthRepository {
     if (sessionExpiresAt != null) {
       final expiresAt = DateTime.tryParse(sessionExpiresAt);
       if (expiresAt != null && !DateTime.now().isBefore(expiresAt)) {
+        await _api.invalidateSession();
         await clearLocalSession();
         return null;
       }
@@ -94,9 +107,16 @@ class AuthRepository {
       final response = await _api.postJson('/auth/refresh', {
         'refreshToken': refreshToken,
       });
+      if (prefs.getString('refreshToken') != refreshToken) return null;
       return _storeAuthResponse(response);
+    } on ApiException catch (error) {
+      if (prefs.getString('refreshToken') != refreshToken) return null;
+      if (error.statusCode == 401 || error.statusCode == 403) {
+        await _api.invalidateSession();
+        await clearLocalSession();
+      }
+      return null;
     } catch (_) {
-      await clearLocalSession();
       return null;
     }
   }
@@ -706,7 +726,8 @@ class AuditRepository {
 
 class AppRepositories {
   AppRepositories({required ApiClient api})
-    : auth = AuthRepository(api),
+    : _api = api,
+      auth = AuthRepository(api),
       registry = RegistryRepository(api),
       organizations = OrganizationRepository(api),
       banners = BannerRepository(api),
@@ -722,6 +743,11 @@ class AppRepositories {
 
   factory AppRepositories.current() {
     return AppRepositories(api: ApiClient(baseUrl: AppEnvironment.apiBaseUrl));
+  }
+
+  final ApiClient _api;
+  set onSessionInvalidated(void Function()? callback) {
+    _api.onSessionInvalidated = callback;
   }
 
   final AuthRepository auth;

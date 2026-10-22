@@ -21,8 +21,12 @@ export class AuthService {
 
   async login(phone:string,password:string,input:LoginContext={},ipAddress?:string) {
     const normalized = this.normalizePhone(phone);
-    const role = this.requestedRole(input.role);
+    let role = this.requestedRole(input.role);
     const user = await this.prisma.user.findUnique({where:{phone:normalized},include:{roles:true}});
+    // The client exposes one control-authority entry for both assigned roles.
+    // Resolve only within those roles; never grant a role through login.
+    if (role === 'nca' && !user?.roles.some(r => r.role === 'nca') && user?.roles.some(r => r.role === 'government')) role = 'government';
+    else if (role === 'government' && !user?.roles.some(r => r.role === 'government') && user?.roles.some(r => r.role === 'nca')) role = 'nca';
     accountContext({actorId:user?.id,verified:false,requestedRole:role});
     if (user?.passwordLockedUntil && user.passwordLockedUntil > new Date()){accountContext({verified:false,reasonCode:'login_locked'});throw new UnauthorizedException('Вход временно ограничен. Повторите через 15 минут');}
     const valid = typeof password === 'string' && Buffer.byteLength(password,'utf8') <= 72 && await bcrypt.compare(password,user?.passwordHash ?? INITIAL_PASSWORD_HASH);

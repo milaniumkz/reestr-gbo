@@ -66,6 +66,20 @@ describe('password authentication',()=>{
     prisma.organizationMember.findFirst.mockResolvedValue(null);
     await expect(auth.login('+77001234567','123456',{role:'inspection_org',bin:'220340010835'})).rejects.toBeInstanceOf(ForbiddenException);
   });
+  it.each([['government','nca'],['nca','government']])('resolves control entry %s to the assigned role %s before password change',async(requested,assigned)=>{
+    const {auth,prisma,jwt}=setup({roles:[{role:assigned}]});
+    const result:any=await auth.login('+77001234567','123456',{role:requested});
+    expect(result.requiresPasswordChange).toBe(true);
+    const proof=await jwt.verifyAsync(result.passwordChangeToken,{secret:secrets.JWT_ACCESS_SECRET});
+    expect(proof.role).toBe(assigned);
+    expect(prisma.userRole.upsert).not.toHaveBeenCalled();
+    expect(prisma.session.create).not.toHaveBeenCalled();
+  });
+  it('does not permit control entry for users without either control role',async()=>{
+    const {auth}=setup();
+    await expect(auth.login('+77001234567','123456',{role:'nca'})).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(auth.login('+77001234567','123456',{role:'government'})).rejects.toBeInstanceOf(ForbiddenException);
+  });
   it('does not self-assign privileged roles and disables both SMS endpoints',()=>{
     const {auth}=setup();
     expect(()=>auth['requestedRole']('super_admin')).toThrow(ForbiddenException);

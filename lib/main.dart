@@ -455,8 +455,14 @@ class ErsiGboApp extends StatelessWidget {
 }
 
 class ErsiDemo extends StatefulWidget {
-  const ErsiDemo({super.key, this.initialScreen = 0, this.showStepper = false});
+  const ErsiDemo({
+    super.key,
+    this.initialScreen = 0,
+    this.showStepper = false,
+    this.repositories,
+  });
 
+  final AppRepositories? repositories;
   final int initialScreen;
   final bool showStepper;
 
@@ -466,7 +472,10 @@ class ErsiDemo extends StatefulWidget {
 
 class _ErsiDemoState extends State<ErsiDemo> {
   late int screen = widget.initialScreen.clamp(0, 40);
-  final AppRepositories repositories = AppRepositories.current();
+  late final AppRepositories repositories =
+      widget.repositories ?? AppRepositories.current();
+  String sessionNotice = "";
+  String controlRoleCode = 'nca';
   String vinQuery = '';
   String authPhone = '';
   String authBin = '';
@@ -559,13 +568,38 @@ class _ErsiDemoState extends State<ErsiDemo> {
   @override
   void initState() {
     super.initState();
+    repositories.onSessionInvalidated = _onSessionInvalidated;
     _loadInitialData();
   }
 
   @override
   void dispose() {
     _qualityQueueTimer?.cancel();
+    repositories.onSessionInvalidated = null;
     super.dispose();
+  }
+
+  void _onSessionInvalidated() {
+    if (!mounted) return;
+    setState(() {
+      authPhone = currentUser?.phone ?? authPhone;
+      currentUser = null;
+      authPassword = '';
+      passwordChangeToken = null;
+      newPassword = '';
+      confirmPassword = '';
+      myInspections = const [];
+      selectedInspection = null;
+      selectedEmployee = null;
+      controlCertificates = const [];
+      organizations = const [];
+      notifications = const [];
+      viewHistory = const [];
+      _history.clear();
+      screen = 2;
+      sessionNotice =
+          'Сеанс завершён. Войдите повторно. После входа с временным паролем потребуется установить собственный пароль.';
+    });
   }
 
   Future<void> _loadInitialData() async {
@@ -593,11 +627,22 @@ class _ErsiDemoState extends State<ErsiDemo> {
           legalBody = legal.body;
         }
       } catch (_) {}
-      currentUser = await repositories.auth.restoreSession();
+      final restoredRoleCode =
+          await repositories.auth.restoreLastRoleCode() ?? 'public_check';
+      final restoredBin =
+          await repositories.auth.restoreLastOrganizationBin() ?? '';
+      final restoredUser = await repositories.auth.restoreSession();
+      if (currentUser == null && passwordChangeToken == null) {
+        currentUser = restoredUser;
+      }
+      if (currentUser != null || sessionNotice.isNotEmpty) {
+        authBin = restoredBin;
+        controlRoleCode = restoredRoleCode == 'government'
+            ? 'government'
+            : 'nca';
+        role = _roleLabelFromCode(restoredRoleCode);
+      }
       if (currentUser != null) {
-        final restoredRoleCode =
-            await repositories.auth.restoreLastRoleCode() ?? 'public_check';
-        authBin = await repositories.auth.restoreLastOrganizationBin() ?? '';
         role = _roleLabelFromCode(restoredRoleCode);
         organizations = await repositories.organizations.list();
         if (restoredRoleCode == 'inspection_org') {
@@ -1063,6 +1108,8 @@ class _ErsiDemoState extends State<ErsiDemo> {
         setState(() {
           currentUser = null;
           passwordChangeToken = result.passwordChangeToken;
+          sessionNotice = '';
+          _history.clear();
           newPassword = '';
           confirmPassword = '';
           apiState = 'Установите собственный пароль';
@@ -1134,6 +1181,13 @@ class _ErsiDemoState extends State<ErsiDemo> {
     if (!mounted) return;
     setState(() {
       currentUser = user;
+      sessionNotice = '';
+      if (user.roles.contains('government') && !user.roles.contains('nca')) {
+        controlRoleCode = 'government';
+      } else if (user.roles.contains('nca') &&
+          !user.roles.contains('government')) {
+        controlRoleCode = 'nca';
+      }
       apiState = 'Authorized';
     });
     if (_roleCode == 'inspection_org') {
@@ -2036,13 +2090,21 @@ class _ErsiDemoState extends State<ErsiDemo> {
     if (role.startsWith('Инсп')) return 'inspection_org';
     if (role.startsWith('Оператор')) return 'operator';
     if (role.startsWith('НЦА')) return 'nca';
-    if (role.startsWith('Контроль')) return 'nca';
+    if (role.startsWith('Контроль')) return controlRoleCode;
     if (role.startsWith('Гос')) return 'government';
     return 'public_check';
   }
 
   void go(int index) {
-    final target = index.clamp(0, 40);
+    final requested = index.clamp(0, 40);
+    final target = passwordChangeToken != null && requested >= 4
+        ? 3
+        : sessionNotice.isNotEmpty &&
+              currentUser == null &&
+              _roleCode != 'public_check' &&
+              requested >= 4
+        ? 2
+        : requested;
     if (target == screen) return;
     setState(() {
       _history.add(screen);
@@ -2067,6 +2129,16 @@ class _ErsiDemoState extends State<ErsiDemo> {
   }
 
   void back() {
+    if (screen == 3 && passwordChangeToken != null) {
+      setState(() {
+        passwordChangeToken = null;
+        newPassword = '';
+        confirmPassword = '';
+        _history.clear();
+        screen = 2;
+      });
+      return;
+    }
     final home = _homeScreenForRoleCode(_roleCode);
     while (_history.isNotEmpty) {
       final previous = _history.removeLast();
@@ -2222,6 +2294,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       employeeActivityDateTo = '';
       _history.clear();
       screen = 0;
+      sessionNotice = '';
       apiState = 'Вы вышли из аккаунта';
     });
   }
@@ -2322,6 +2395,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       ),
       2 => _Login(
         role: role,
+        notice: sessionNotice,
         phone: authPhone,
         bin: authBin,
         onPhone: (value) => setState(() => authPhone = value),
@@ -3602,8 +3676,10 @@ class _Login extends StatelessWidget {
     required this.onBin,
     required this.onLogin,
     this.isLoading = false,
+    this.notice = '',
   });
 
+  final String notice;
   final String role;
   final String phone;
   final String password;
@@ -3624,6 +3700,10 @@ class _Login extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (notice.isNotEmpty) ...[
+            _InfoBox(title: 'Требуется повторный вход', text: notice),
+            const SizedBox(height: 16),
+          ],
           const _HintPill(text: 'ЗАЩИЩЕННЫЙ ДОСТУП'),
           const SizedBox(height: 26),
           if (role.startsWith('Инспекционный') || role.startsWith('Установщик'))

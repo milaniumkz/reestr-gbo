@@ -12,14 +12,23 @@ class ApiClient {
   final String baseUrl;
   final http.Client _http;
   String? _accessToken;
+  bool _sessionInvalidated = false;
+  Future<bool>? _refreshing;
+  void Function()? onSessionInvalidated;
 
   void setAccessToken(String? token) {
     _accessToken = token;
+    if (token != null) _sessionInvalidated = false;
   }
 
   Future<Map<String, dynamic>> getJson(String path) async {
-    final response = await _http.get(_uri(path), headers: {..._headers,...await ClientTelemetry.headers()});
-    if (response.statusCode == 401 && await _refreshAccessToken()) {
+    final response = await _http.get(
+      _uri(path),
+      headers: {..._headers, ...await ClientTelemetry.headers()},
+    );
+    if (response.statusCode == 401 &&
+        !path.startsWith('/auth/') &&
+        await _refreshAccessToken()) {
       return getJson(path);
     }
     return _decode(response);
@@ -31,10 +40,16 @@ class ApiClient {
   ) async {
     final response = await _http.post(
       _uri(path),
-      headers: {..._headers,...await ClientTelemetry.headers(), 'Content-Type': 'application/json'},
+      headers: {
+        ..._headers,
+        ...await ClientTelemetry.headers(),
+        'Content-Type': 'application/json',
+      },
       body: jsonEncode(body),
     );
-    if (response.statusCode == 401 && await _refreshAccessToken()) {
+    if (response.statusCode == 401 &&
+        !path.startsWith('/auth/') &&
+        await _refreshAccessToken()) {
       return postJson(path, body);
     }
     return _decode(response);
@@ -46,10 +61,16 @@ class ApiClient {
   ) async {
     final response = await _http.patch(
       _uri(path),
-      headers: {..._headers,...await ClientTelemetry.headers(), 'Content-Type': 'application/json'},
+      headers: {
+        ..._headers,
+        ...await ClientTelemetry.headers(),
+        'Content-Type': 'application/json',
+      },
       body: jsonEncode(body),
     );
-    if (response.statusCode == 401 && await _refreshAccessToken()) {
+    if (response.statusCode == 401 &&
+        !path.startsWith('/auth/') &&
+        await _refreshAccessToken()) {
       return patchJson(path, body);
     }
     return _decode(response);
@@ -64,7 +85,7 @@ class ApiClient {
     Map<String, String> fields = const {},
   }) async {
     final request = http.MultipartRequest('POST', _uri(path));
-    request.headers.addAll({..._headers,...await ClientTelemetry.headers()});
+    request.headers.addAll({..._headers, ...await ClientTelemetry.headers()});
     request.fields.addAll(fields);
     request.files.add(
       http.MultipartFile.fromBytes(
@@ -76,7 +97,9 @@ class ApiClient {
     );
     final streamed = await request.send();
     final response = await http.Response.fromStream(streamed);
-    if (response.statusCode == 401 && await _refreshAccessToken()) {
+    if (response.statusCode == 401 &&
+        !path.startsWith('/auth/') &&
+        await _refreshAccessToken()) {
       return postMultipart(
         path,
         fieldName: fieldName,
@@ -117,18 +140,38 @@ class ApiClient {
     return decoded.toString();
   }
 
-  Future<bool> _refreshAccessToken() async {
+  Future<bool> _refreshAccessToken() {
+    final pending = _refreshing;
+    if (pending != null) return pending;
+    final next = _performRefresh();
+    _refreshing = next;
+    return next.whenComplete(() {
+      if (identical(_refreshing, next)) _refreshing = null;
+    });
+  }
+
+  Future<bool> _performRefresh() async {
     final prefs = await SharedPreferences.getInstance();
     final refreshToken = prefs.getString('refreshToken');
-    if (refreshToken == null || refreshToken.isEmpty) return false;
+    if (refreshToken == null || refreshToken.isEmpty) {
+      if (_accessToken != null) await invalidateSession();
+      return false;
+    }
     try {
       final response = await _http.post(
         _uri('/auth/refresh'),
-        headers: {...await ClientTelemetry.headers(),'Content-Type': 'application/json'},
+        headers: {
+          ...await ClientTelemetry.headers(),
+          'Content-Type': 'application/json',
+        },
         body: jsonEncode({'refreshToken': refreshToken}),
       );
+      // An older request must never clear a newly established session.
+      if (prefs.getString('refreshToken') != refreshToken) return false;
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        await _clearLocalAuth();
+        if (response.statusCode == 401 || response.statusCode == 403) {
+          await invalidateSession();
+        }
         return false;
       }
       final decoded = jsonDecode(response.body) as Map<String, dynamic>;
@@ -146,8 +189,15 @@ class ApiClient {
       }
       return true;
     } catch (_) {
-      await _clearLocalAuth();
       return false;
+    }
+  }
+
+  Future<void> invalidateSession() async {
+    await _clearLocalAuth();
+    if (!_sessionInvalidated) {
+      _sessionInvalidated = true;
+      onSessionInvalidated?.call();
     }
   }
 
