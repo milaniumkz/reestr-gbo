@@ -1,5 +1,6 @@
 import 'client_telemetry.dart';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
@@ -118,6 +119,20 @@ class ApiClient {
       );
     }
     return _decode(response);
+  }
+
+  Future<Uint8List> getBytes(String path) async {
+    final response = await _http.get(
+      _uri(path),
+      headers: {..._headers, ...await ClientTelemetry.headers()},
+    );
+    if (response.statusCode == 401 && await _refreshAccessToken()) {
+      return getBytes(path);
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      _decode(response);
+    }
+    return response.bodyBytes;
   }
 
   Uri _uri(String path) => Uri.parse('$baseUrl$path');

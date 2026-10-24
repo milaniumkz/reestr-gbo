@@ -87,6 +87,7 @@ export class OrganizationsService {
     id: string,
     input: {
       name?: string;
+      legalName?: string | null;
       bin?: string;
       address?: string | null;
       region?: string | null;
@@ -100,6 +101,7 @@ export class OrganizationsService {
   ) {
     const data: {
       name?: string;
+      legalName?: string | null;
       bin?: string;
       address?: string | null;
       region?: string | null;
@@ -111,6 +113,7 @@ export class OrganizationsService {
       lng?: number | null;
     } = {};
     if (input.name !== undefined) data.name = this.requiredText(input.name, "Название ИО");
+    if (input.legalName !== undefined) data.legalName = this.optionalText(input.legalName);
     if (input.bin !== undefined) data.bin = this.requiredText(input.bin, "БИН");
     if (input.address !== undefined) data.address = this.optionalText(input.address);
     if (input.region !== undefined) data.region = this.optionalText(input.region);

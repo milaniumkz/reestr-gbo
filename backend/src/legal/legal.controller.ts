@@ -3,11 +3,16 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Public } from '../common/public.decorator';
 import { Roles } from '../common/roles.decorator';
 import { RolesGuard } from '../common/roles.guard';
+import { PUBLISHED_OFFER } from './published-offer';
 import { LegalService } from './legal.service';
 
 @Controller('legal')
 export class LegalController {
   constructor(private readonly legal: LegalService) {}
+
+  @Public()
+  @Get('public/offer')
+  publicOffer() { return { item: PUBLISHED_OFFER }; }
 
   @Public()
   @Get('public/active')

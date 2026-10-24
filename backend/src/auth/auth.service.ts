@@ -1,3 +1,4 @@
+import { PUBLISHED_OFFER } from '../legal/published-offer';
 import { enforceRateLimit } from '../technical/rate-limit';
 import {accountContext} from '../observability/account-context';
 import { BadRequestException, ForbiddenException, GoneException, Injectable, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
@@ -9,8 +10,8 @@ import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { INITIAL_PASSWORD_HASH } from './initial-password';
 
-type LoginContext = { role?: string; bin?: string; deviceName?: string };
-type ChangeProof = { sub:string; scope:string; pv:number; role:string; bin?:string; deviceName?:string };
+type LoginContext = { offerVersion?: string; role?: string; bin?: string; deviceName?: string };
+type ChangeProof = { offerVersion?:string; sub:string; scope:string; pv:number; role:string; bin?:string; deviceName?:string };
 type SessionPayload = {sub:string;phone:string;roles:string[];sid:string;pv:number;scope:'session'};
 
 @Injectable()
@@ -40,12 +41,13 @@ export class AuthService {
       await this.audit.log('auth.password_failed','auth',undefined,user?.id,{verified:false},ipAddress);
       throw new UnauthorizedException('Неверный телефон или пароль');
     }
+    if (input.offerVersion && input.offerVersion !== PUBLISHED_OFFER.version) throw new BadRequestException('Условия оферты обновлены. Обновите страницу или приложение и повторите вход');
     accountContext({actorId:user.id,verified:true});
     await this.assertAccess(user,role,input.bin);
     await this.prisma.user.update({where:{id:user.id},data:{failedPasswordAttempts:0,passwordLockedUntil:null}});
     if (user.mustChangePassword) {
       accountContext({verified:true,reasonCode:'password_change_required'});
-      const passwordChangeToken = await this.jwt.signAsync({sub:user.id,scope:'password_change',pv:user.passwordVersion,role,bin:input.bin?.trim(),deviceName:input.deviceName},{secret:this.jwtSecret('JWT_ACCESS_SECRET'),expiresIn:'10m'});
+      const passwordChangeToken = await this.jwt.signAsync({sub:user.id,scope:'password_change',pv:user.passwordVersion,role,offerVersion:input.offerVersion,bin:input.bin?.trim(),deviceName:input.deviceName},{secret:this.jwtSecret('JWT_ACCESS_SECRET'),expiresIn:'10m'});
       return {requiresPasswordChange:true as const,passwordChangeToken};
     }
     return this.startSession(user.id,{...input,role},ipAddress);
@@ -104,11 +106,13 @@ export class AuthService {
   }
 
   private async assertAccess(user:{id:string;isBlocked:boolean;roles:Array<{role:string}>},role:string,bin?:string) {
+    let organizationId: string | undefined;
     if(user.isBlocked){accountContext({verified:true,reasonCode:'account_blocked'});throw new ForbiddenException('Пользователь заблокирован');}
     const superAdmin=user.roles.some(r=>r.role==='super_admin');
     if(role==='inspection_org'||role==='operator') {
       if(!/^\d{12}$/.test(bin?.trim()??'')) throw new BadRequestException('Введите БИН организации из 12 цифр');
       const organization=await this.prisma.organization.findUnique({where:{bin:bin!.trim()}});
+      organizationId = organization?.id;
       if(organization)accountContext({verified:true,organizationId:organization.id});
       if(!organization||organization.type!==role||organization.status!=='active') throw new ForbiddenException('Организация не найдена или заблокирована');
       const membership=await this.prisma.organizationMember.findFirst({where:{organizationId:organization.id,userId:user.id,...(role==='inspection_org'?{role:{in:['inspection_org','inspector','admin','quality_control']}}:{role:{in:['operator','admin']}})}});
@@ -117,18 +121,21 @@ export class AuthService {
     } else if(['nca','government'].includes(role)&&!superAdmin&&!user.roles.some(r=>r.role===role)) {
       throw new ForbiddenException('Нет доступа к выбранному органу');
     }
+    return organizationId;
   }
 
   private async startSession(userId:string,input:LoginContext,ipAddress?:string) {
     const user=await this.prisma.user.findUniqueOrThrow({where:{id:userId},include:{roles:true}});
     if(user.mustChangePassword||user.isBlocked) throw new ForbiddenException('Требуется смена пароля или пользователь заблокирован');
-    await this.assertAccess(user,this.requestedRole(input.role),input.bin);
+    if (input.offerVersion && input.offerVersion !== PUBLISHED_OFFER.version) throw new BadRequestException('Условия оферты обновлены. Обновите страницу или приложение и повторите вход');
+    const organizationId = await this.assertAccess(user,this.requestedRole(input.role),input.bin);
     const roles=user.roles.map(r=>r.role);
     const session=await this.prisma.session.create({data:{userId,refreshHash:'pending',deviceName:input.deviceName,ipAddress,expiresAt:this.refreshExpiresAtForRoles(roles)}});
     accountContext({actorId:user.id,verified:true,sessionId:session.id});
     const result=await this.issueTokens({sub:user.id,phone:user.phone,roles,sid:session.id,pv:user.passwordVersion,scope:'session'});
     await this.prisma.user.update({where:{id:userId},data:{lastLoginAt:new Date()}});
     await this.audit.log('auth.login','session',session.id,user.id,{requestedRole:input.role,deviceName:input.deviceName},ipAddress);
+    if (input.offerVersion) await this.audit.log('auth.offer_accepted','public_offer',PUBLISHED_OFFER.version,user.id,{version:PUBLISHED_OFFER.version,source:'login_button',verificationMethod:'password',...(organizationId ? {organizationId} : {})},ipAddress);
     return result;
   }
 

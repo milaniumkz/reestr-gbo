@@ -1127,6 +1127,7 @@ export class TechnicalData {
             OR: [
               { key: { startsWith: "file-" } },
               { key: "browser-push-vapid" },
+              { key: "bank-invoice-supplier" },
             ],
           },
         },

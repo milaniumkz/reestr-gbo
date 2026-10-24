@@ -34,6 +34,7 @@ class VerifyOtpDto {
 }
 
 class PasswordLoginDto {
+  @IsOptional() @IsString() @MaxLength(100) offerVersion?: string;
   @IsString() @MaxLength(32) phone!: string;
   @IsString() @MaxLength(72) password!: string;
   @IsOptional() @IsString() role?: string;

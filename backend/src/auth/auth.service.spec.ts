@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import bcrypt from 'bcryptjs';
 import { AuthService } from './auth.service';
+import { PUBLISHED_OFFER } from '../legal/published-offer';
 import { INITIAL_PASSWORD_HASH } from './initial-password';
 
 const secrets={JWT_ACCESS_SECRET:'test-access-secret-with-enough-length',JWT_REFRESH_SECRET:'test-refresh-secret-with-enough-length'};
@@ -12,8 +13,9 @@ function setup(overrides:Record<string,unknown>={}) {
   const prisma:any={$executeRaw:jest.fn(),passwordRecovery:{updateMany:jest.fn(async()=>({count:1}))},passwordRecoveryRequest:{updateMany:jest.fn(async()=>({count:1}))},user:{findUnique:jest.fn(async()=>user),findUniqueOrThrow:jest.fn(async()=>user),update:jest.fn(async()=>user),updateMany:jest.fn(async({data}:any)=>{Object.assign(user,data,{passwordVersion:1});return {count:1};})},session:{create:jest.fn(async()=>({id:'s1'})),update:jest.fn(async()=>({})),updateMany:jest.fn(async()=>({count:1})),findUnique:jest.fn()},organization:{findUnique:jest.fn()},organizationMember:{findFirst:jest.fn()},userRole:{upsert:jest.fn()}};
   prisma.$transaction=async(fn:any)=>fn(prisma);
   const jwt=new JwtService();
-  const auth=new AuthService(prisma,jwt,{get:(key:string)=>secrets[key as keyof typeof secrets]} as ConfigService,{log:jest.fn(async()=>{})} as never);
-  return {auth,prisma,user,jwt};
+  const audit = {log:jest.fn(async(..._args:unknown[])=>{})};
+  const auth=new AuthService(prisma,jwt,{get:(key:string)=>secrets[key as keyof typeof secrets]} as ConfigService,audit as never);
+  return {auth,prisma,user,jwt,audit};
 }
 describe('password authentication',()=>{
   it('recognizes the shared temporary password and creates no session until changed',async()=>{
@@ -93,5 +95,37 @@ describe('password authentication',()=>{
     await expect(auth.refresh(token)).rejects.toBeInstanceOf(UnauthorizedException);
     user.mustChangePassword=false;user.passwordVersion=1;
     await expect(auth.refresh(token)).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+});
+
+describe('public offer acceptance on login',()=>{
+  it('records the offered version, actor, organization and IP only after successful login',async()=>{
+    const {auth,prisma,user,audit}=setup({mustChangePassword:false,roles:[{role:'inspection_org'}]});
+    prisma.organization.findUnique.mockResolvedValue({id:'org1',type:'inspection_org',status:'active'});
+    prisma.organizationMember.findFirst.mockResolvedValue({id:'member1'});
+    await auth.login(user.phone,'123456',{role:'inspection_org',bin:'123456789012',offerVersion:PUBLISHED_OFFER.version},'127.0.0.1');
+    expect(audit.log).toHaveBeenCalledWith('auth.offer_accepted','public_offer',PUBLISHED_OFFER.version,user.id,{version:PUBLISHED_OFFER.version,source:'login_button',verificationMethod:'password',organizationId:'org1'},'127.0.0.1');
+    expect(audit.log.mock.calls.filter(([action])=>action==='auth.offer_accepted')).toHaveLength(1);
+  });
+  it('carries the chosen version through mandatory password change without recording an unfinished login',async()=>{
+    const {auth,user,jwt,audit}=setup();
+    const login:any=await auth.login(user.phone,'123456',{offerVersion:PUBLISHED_OFFER.version});
+    const proof=await jwt.verifyAsync(login.passwordChangeToken,{secret:secrets.JWT_ACCESS_SECRET});
+    expect(proof.offerVersion).toBe(PUBLISHED_OFFER.version);
+    expect(audit.log.mock.calls.filter(([action])=>action==='auth.offer_accepted')).toHaveLength(0);
+    await auth.changeInitialPassword(login.passwordChangeToken,'Personal123!','Personal123!');
+    expect(audit.log.mock.calls.filter(([action])=>action==='auth.offer_accepted')).toHaveLength(1);
+  });
+  it('does not mark failed login or clients that did not display the offer as accepted',async()=>{
+    const {auth,user,audit}=setup({mustChangePassword:false});
+    await expect(auth.login(user.phone,'Wrong123!',{offerVersion:PUBLISHED_OFFER.version})).rejects.toBeInstanceOf(UnauthorizedException);
+    await auth.login(user.phone,'123456');
+    expect(audit.log.mock.calls.filter(([action])=>action==='auth.offer_accepted')).toHaveLength(0);
+  });
+  it('rejects an unknown offer version before issuing a session',async()=>{
+    const {auth,user,prisma,audit}=setup({mustChangePassword:false});
+    await expect(auth.login(user.phone,'123456',{offerVersion:'unknown-version'})).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.session.create).not.toHaveBeenCalled();
+    expect(audit.log.mock.calls.filter(([action])=>action==='auth.offer_accepted')).toHaveLength(0);
   });
 });

@@ -25,6 +25,7 @@ model User {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
+  bankInvoices BankInvoice[]
   roles       UserRole[]
   sessions    Session[]
   memberships OrganizationMember[]
@@ -77,6 +78,8 @@ model Organization {
   id        String   @id @default(uuid())
   type      String
   name      String
+  legalName String?
+  billingNumber Int @unique @default(autoincrement())
   bin       String   @unique
   status    String   @default("active")
   address   String?
@@ -91,6 +94,7 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  bankInvoices BankInvoice[]
   members     OrganizationMember[]
   inspections Inspection[]
   cameras     Camera[]
@@ -651,4 +655,22 @@ model PasswordRecoveryRequest {
   expiresAt DateTime
   @@index([organizationId, status, createdAt])
   @@index([userId, status])
+}
+
+model BankInvoice {
+  id String @id @default(uuid())
+  number Int @unique @default(autoincrement())
+  organizationId String?
+  issuedById String?
+  requestKey String
+  amountMinor BigInt
+  currency String @default("KZT")
+  status String @default("issued")
+  snapshot Json
+  pdf Bytes
+  createdAt DateTime @default(now())
+  organization Organization? @relation(fields:[organizationId],references:[id],onDelete:SetNull)
+  issuedBy User? @relation(fields:[issuedById],references:[id],onDelete:SetNull)
+  @@unique([organizationId,requestKey])
+  @@index([organizationId,createdAt])
 }

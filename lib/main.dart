@@ -1,3 +1,4 @@
+import 'widgets/bank_invoice_screen.dart';
 import 'widgets/password_access_screen.dart';
 import 'widgets/photo_rotation_scope.dart';
 import 'l10n/app_language.dart';
@@ -18,6 +19,7 @@ import 'package:latlong2/latlong.dart' hide Path;
 import 'package:url_launcher/url_launcher.dart';
 
 import 'data/app_environment.dart';
+import 'data/public_offer.dart';
 import 'data/api_client.dart';
 import 'data/models.dart';
 import 'data/repositories.dart';
@@ -2519,6 +2521,17 @@ class _ErsiDemoState extends State<ErsiDemo> {
         go: go,
         inspections: myInspections,
         organization: _currentInspectionOrganization,
+        onTopUp: _currentInspectionOrganization == null
+            ? null
+            : () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => BankInvoiceScreen(
+                    payments: repositories.payments,
+                    organizationId: _currentInspectionOrganization!.id,
+                    organizationName: _currentInspectionOrganization!.name,
+                  ),
+                ),
+              ),
         isManager: _isInspectionManager,
         isQualityControl: _isQualityControl,
         reviewerId: currentUser?.id ?? '',
@@ -3628,6 +3641,16 @@ class _Splash extends StatelessWidget {
                       icon: Icons.business_center_rounded,
                       onTap: onActivity,
                     ),
+                    TextButton(
+                      onPressed: () => launchUrl(
+                        publicOfferUri,
+                        mode: LaunchMode.externalApplication,
+                      ),
+                      child: const Text(
+                        'Публичная оферта',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -3792,6 +3815,23 @@ class _Login extends StatelessWidget {
           const SizedBox(height: 26),
           const _SecurityPanel(),
           const SizedBox(height: 34),
+          const Center(
+            child: Text(
+              'Нажимая «Войти», вы принимаете условия публичной оферты.',
+              textAlign: TextAlign.center,
+              style: _muted,
+            ),
+          ),
+          Center(
+            child: TextButton(
+              onPressed: () => launchUrl(
+                publicOfferUri,
+                mode: LaunchMode.externalApplication,
+              ),
+              child: const Text('Публичная оферта'),
+            ),
+          ),
+          const SizedBox(height: 12),
           _PrimaryButton(
             text: isLoading ? 'Входим...' : 'Войти',
             icon: Icons.login_rounded,
@@ -3802,13 +3842,6 @@ class _Login extends StatelessWidget {
             child: const Text('Забыли пароль'),
           ),
           const SizedBox(height: 34),
-          const Center(
-            child: Text(
-              'Продолжая, вы подтверждаете согласие\nс политикой обработки данных',
-              textAlign: TextAlign.center,
-              style: _muted,
-            ),
-          ),
           Center(
             child: TextButton(
               onPressed: () => launchUrl(
@@ -5771,6 +5804,7 @@ class _InspectorHome extends StatelessWidget {
     required this.inspections,
     required this.organization,
     required this.isManager,
+    this.onTopUp,
     required this.isQualityControl,
     this.reviewerId = '',
     required this.onReload,
@@ -5782,6 +5816,7 @@ class _InspectorHome extends StatelessWidget {
   final List<InspectionSummary> inspections;
   final OrganizationSummary? organization;
   final bool isManager;
+  final VoidCallback? onTopUp;
   final bool isQualityControl;
   final String reviewerId;
   final VoidCallback onReload;
@@ -5827,37 +5862,47 @@ class _InspectorHome extends StatelessWidget {
           if (isManager) ...[
             _Card(
               elevated: true,
-              child: Row(
+              child: Column(
                 children: [
-                  const Icon(
-                    Icons.account_balance_wallet_rounded,
-                    color: green,
-                    size: 32,
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Ваш баланс', style: _section),
-                        const SizedBox(height: 6),
-                        Text(
-                          organization == null
-                              ? '—'
-                              : '${organization!.balanceAmount.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (match) => '${match[1]} ')} ${organization!.balanceCurrency == 'KZT' ? '₸' : organization!.balanceCurrency}',
-                          style: const TextStyle(
-                            color: green,
-                            fontSize: 28,
-                            fontWeight: FontWeight.w900,
-                          ),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.account_balance_wallet_rounded,
+                        color: green,
+                        size: 32,
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Ваш баланс', style: _section),
+                            const SizedBox(height: 6),
+                            Text(
+                              organization == null
+                                  ? '—'
+                                  : '${organization!.balanceAmount.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (match) => '${match[1]} ')} ${organization!.balanceCurrency == 'KZT' ? '₸' : organization!.balanceCurrency}',
+                              style: const TextStyle(
+                                color: green,
+                                fontSize: 28,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                      IconButton(
+                        onPressed: onReload,
+                        tooltip: 'Обновить',
+                        icon: const Icon(Icons.refresh_rounded),
+                      ),
+                    ],
                   ),
-                  IconButton(
-                    onPressed: onReload,
-                    tooltip: 'Обновить',
-                    icon: const Icon(Icons.refresh_rounded),
+                  const SizedBox(height: 12),
+                  _PrimaryButton(
+                    text: 'Пополнить',
+                    icon: Icons.add_rounded,
+                    onTap: onTopUp,
                   ),
                 ],
               ),

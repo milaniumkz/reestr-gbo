@@ -1419,6 +1419,7 @@ export default function AdminDashboard() {
 
   async function saveOrganization(org: Organization, input: {
     name: string;
+    legalName: string;
     bin: string;
     region: string;
     address: string;
@@ -1433,6 +1434,7 @@ export default function AdminDashboard() {
     await runAction('Инспекционный орган обновлен', async () => {
       const updated = await updateOrganization(token, org.id, {
         name: input.name,
+        legalName: input.legalName || null,
         bin: input.bin,
         region: input.region || null,
         address: input.address || null,
@@ -1663,6 +1665,7 @@ export default function AdminDashboard() {
             <label>Пароль<input type="password" autoComplete="current-password" required maxLength={72} value={password} onChange={event => setPassword(event.target.value)} /></label>
           </>}
           {error && <div className="error">{error}</div>}
+          {!passwordChangeToken && <p>Нажимая «Войти», вы принимаете условия <a href="/legal/offer-ru-v1.html" target="_blank" rel="noopener noreferrer">публичной оферты</a>.</p>}
           <button type="submit" disabled={loading}>{loading ? 'Подождите...' : passwordChangeToken ? 'Сменить пароль и войти' : 'Войти'}</button>
           {!passwordChangeToken && <a href="https://tech.89-207-255-42.sslip.io/tech/recovery/">Забыли пароль</a>}
           {passwordChangeToken && <button type="button" className="smallButton" disabled={loading} onClick={() => { setPasswordChangeToken(null); setNewPassword(''); setConfirmation(''); setError(''); }}>Вернуться ко входу</button>}

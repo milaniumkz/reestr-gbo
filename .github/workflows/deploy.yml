@@ -19,6 +19,8 @@ on:
         options:
           - deploy
           - deploy-web
+          - provision-test-manager
+          - configure-bank-invoices
           - change-employee-phones
           - deploy-services
           - deploy-admin
@@ -33,6 +35,14 @@ on:
           - inventory-inspection-data
           - purge-inspection-data
 
+      test_manager:
+        description: Private isolated test-account configuration JSON
+        required: false
+        type: string
+      bank_invoice_supplier:
+        description: Private supplier configuration JSON (not logged)
+        required: false
+        type: string
       employee_phone_changes:
         description: Verified account IDs, identity hashes and replacement phones (JSON; no output)
         required: false
@@ -70,6 +80,7 @@ jobs:
       - run: flutter pub get
       - run: node --test scripts/web_startup.test.cjs
       - run: python3 scripts/check_localization.py
+      - run: python3 scripts/check_public_offer.py
       - run: flutter build web --release --pwa-strategy=none --dart-define=API_BASE_URL=https://89-207-255-42.sslip.io/api/v1 --dart-define=APP_MODE=production --dart-define=APP_VERSION="1.0.0+$(git rev-parse --short HEAD)"
       - uses: actions/setup-java@v4
         if: github.event.inputs.operation != 'deploy-web'
@@ -168,6 +179,8 @@ jobs:
         run: |
           set -o pipefail
           case "${{ github.event.inputs.operation }}" in
+            provision-test-manager) bash ops/provision-test-manager.sh ;;
+            configure-bank-invoices) bash ops/configure-bank-invoices.sh ;;
             change-employee-phones) bash ops/change-employee-phones.sh "${{ github.event.inputs.phone_change_mode }}" ;;
             restore-confirmed-inspector) bash ops/restore-confirmed-inspector.sh ;;
             diagnose-members) bash ops/diagnose-members.sh ;;

@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'api_client.dart';
+import 'public_offer.dart';
 import 'app_environment.dart';
 import 'models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -30,6 +32,7 @@ class AuthRepository {
     final response = await _api.postJson('/auth/login', {
       'phone': phone,
       'password': password,
+      'offerVersion': publicOfferVersion,
       'role': role,
       if (bin != null && bin.isNotEmpty) 'bin': bin,
       'deviceName': 'ЕРСИ ГБО приложение',
@@ -684,6 +687,23 @@ String _contentTypeFor(String filename) {
 class PaymentRepository {
   PaymentRepository(this._api);
   final ApiClient _api;
+
+  Future<Map<String, dynamic>> createBankInvoice(
+    String organizationId,
+    String amount,
+    String requestKey,
+  ) => _api.postJson('/payments/bank-invoices', {
+    'organizationId': organizationId,
+    'amount': amount,
+    'requestKey': requestKey,
+  });
+  Future<List<dynamic>> bankInvoices(String organizationId) async =>
+      (await _api.getJson(
+            '/payments/bank-invoices?organizationId=${Uri.encodeQueryComponent(organizationId)}',
+          ))['items']
+          as List<dynamic>;
+  Future<Uint8List> bankInvoicePdf(String id) =>
+      _api.getBytes('/payments/bank-invoices/${Uri.encodeComponent(id)}/pdf');
 
   Future<String> createInvoice(int amount, String purpose) async {
     if (AppEnvironment.isDemo) return 'demo-payment-url';

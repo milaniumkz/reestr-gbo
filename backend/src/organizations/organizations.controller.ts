@@ -73,6 +73,7 @@ export class OrganizationsController {
     @Body()
     body: {
       name?: string;
+      legalName?: string | null;
       bin?: string;
       address?: string | null;
       region?: string | null;

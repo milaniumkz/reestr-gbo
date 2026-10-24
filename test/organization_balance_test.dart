@@ -104,6 +104,10 @@ void main() {
           find.text('Ваш баланс'),
           role == 'admin' ? findsOneWidget : findsNothing,
         );
+        expect(
+          find.text('Пополнить'),
+          role == 'admin' ? findsOneWidget : findsNothing,
+        );
         if (role == 'admin') {
           expect(find.text('123 450 ₸'), findsOneWidget);
           await tester.tap(find.byIcon(Icons.refresh_rounded).first);

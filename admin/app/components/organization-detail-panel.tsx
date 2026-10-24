@@ -13,6 +13,7 @@ type OrganizationDetailPanelProps = {
     organization: Organization,
     input: {
       name: string;
+      legalName: string;
       bin: string;
       region: string;
       address: string;
@@ -55,6 +56,7 @@ export function OrganizationDetailPanel({
   const createdCount = activity?.stats?.createdCount ?? inspections.length;
   const submittedCount = activity?.stats?.submittedCount ?? inspections.filter((item) => item.submittedAt || item.status === 'submitted' || item.status === 'approved').length;
   const publishedCount = activity?.stats?.publishedCount ?? inspections.filter((item) => item.certificate || item.status === 'approved').length;
+  const [legalName, setLegalName] = useState(organization.legalName ?? '');
   const [name, setName] = useState(organization.name);
   const [bin, setBin] = useState(organization.bin);
   const [region, setRegion] = useState(organization.region ?? '');
@@ -107,10 +109,11 @@ export function OrganizationDetailPanel({
           className="wideForm flatForm"
           onSubmit={(event) => {
             event.preventDefault();
-            onSave(organization, { name, bin, region, address, contactPhone, contactEmail, accreditationValidFrom, accreditationValidUntil, lat, lng });
+            onSave(organization, { name, legalName, bin, region, address, contactPhone, contactEmail, accreditationValidFrom, accreditationValidUntil, lat, lng });
           }}
         >
           <input placeholder="Название" value={name} onChange={(event) => setName(event.target.value)} />
+          {isInspectionOrg && <input placeholder="Юридическое наименование (для счетов, если отличается)" value={legalName} onChange={(event) => setLegalName(event.target.value)} />}
           <input placeholder="БИН" value={bin} onChange={(event) => setBin(event.target.value)} />
           <input placeholder="Регион" value={region} onChange={(event) => setRegion(event.target.value)} />
           <input placeholder="Адрес" value={address} onChange={(event) => setAddress(event.target.value)} />

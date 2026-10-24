@@ -37,6 +37,7 @@ void main() {
               final body = jsonDecode(req.body) as Map<String, dynamic>;
               expect(body['role'], role);
               expect(body['password'], '123456');
+              expect(body['offerVersion'], 'offer-ru-v1');
               return http.Response(
                 jsonEncode({
                   'requiresPasswordChange': true,
@@ -73,6 +74,12 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(find.text('Требуется повторный вход'), findsOneWidget);
+        expect(
+          find.text('Нажимая «Войти», вы принимаете условия публичной оферты.'),
+          findsOneWidget,
+        );
+        expect(find.text('Публичная оферта'), findsOneWidget);
+        expect(find.byType(Checkbox), findsNothing);
         final fields = find.byType(TextField);
         final count = fields.evaluate().length;
         expect(count, role == 'inspection_org' ? 3 : 2);

@@ -138,6 +138,7 @@ export type AuthResponse = {
 export type Organization = {
   id: string;
   name: string;
+  legalName?: string | null;
   bin: string;
   type: string;
   status: string;
@@ -382,7 +383,7 @@ export type UserActivity = {
 export type PasswordLoginResponse = AuthResponse | { requiresPasswordChange: true; passwordChangeToken: string };
 
 export async function loginWithPassword(phone: string, password: string) {
-  return post<PasswordLoginResponse>('/auth/login', { phone, password, deviceName: 'ЕРСИ ГБО Admin Web' });
+  return post<PasswordLoginResponse>('/auth/login', { phone, password, offerVersion: 'offer-ru-v1', deviceName: 'ЕРСИ ГБО Admin Web' });
 }
 
 export async function changeInitialPassword(passwordChangeToken: string, newPassword: string, confirmation: string) {
@@ -609,6 +610,7 @@ export function createOrganization(token: string, input: {
 
 export function updateOrganization(token: string, id: string, input: {
   name?: string;
+  legalName?: string | null;
   bin?: string;
   address?: string | null;
   region?: string | null;
