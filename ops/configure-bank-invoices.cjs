@@ -36,11 +36,14 @@ const db = new PrismaClient();
     !/^\d{2}$/.test(value.kbe)
   )
     throw Error("Invalid supplier configuration");
+  const owner = await db.techAccount.findUnique({ where: { login: "owner" }, select: { id: true } });
+  if (!owner) throw Error("Technical owner is not configured");
+  const attribution = { updatedBy: owner.id, reason: "Настройка реквизитов PDF-счетов по указанию владельца; оплата и баланс не изменяются" };
   await db.$transaction(async (tx) => {
     await tx.technicalSetting.upsert({
       where: { key: "bank-invoice-supplier" },
-      update: { value },
-      create: { key: "bank-invoice-supplier", value },
+      update: { value, ...attribution },
+      create: { key: "bank-invoice-supplier", value, ...attribution },
     });
     await tx.auditLog.create({
       data: {
