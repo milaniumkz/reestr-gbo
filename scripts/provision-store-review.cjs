@@ -8,7 +8,7 @@ const prisma = new PrismaClient();
 async function main() {
   const { password } = JSON.parse(readFileSync(process.argv[2], 'utf8'));
   if (typeof password !== 'string' || password.length < 20) throw Error('Missing strong review password');
-  const phone = '+77000000001';
+  const phone = '+77000000991';
   const existing = await prisma.user.findUnique({ where: { phone } });
   if (existing && existing.fullName !== 'Store Review — ERSI GBO') throw Error('Review phone already belongs to another account');
   if (existing) {
