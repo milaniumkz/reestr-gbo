@@ -35,5 +35,5 @@ jobs:
           trap 'ssh "$server" "rm -rf /tmp/reestr-store-${GITHUB_RUN_ID}"' EXIT
           node -e 'require("fs").writeFileSync(process.env.RUNNER_TEMP+"/review.json",JSON.stringify({password:process.env.STORE_REVIEW_PASSWORD}),{mode:0o600})'
           scp web/privacy.html scripts/provision-store-review.cjs "$RUNNER_TEMP/review.json" "$server:/tmp/reestr-store-${GITHUB_RUN_ID}/"
-          ssh "$server" "set -eu; cd /opt/reestr/app/backend; set -a; . ./.env; set +a; node /tmp/reestr-store-${GITHUB_RUN_ID}/provision-store-review.cjs /tmp/reestr-store-${GITHUB_RUN_ID}/review.json; install -m 644 /tmp/reestr-store-${GITHUB_RUN_ID}/privacy.html /opt/reestr/app/build/web/privacy.html"
+          ssh "$server" "set -eu; install -m 644 /tmp/reestr-store-${GITHUB_RUN_ID}/privacy.html /opt/reestr/app/build/web/privacy.html; cd /opt/reestr/app/backend; set -a; . ./.env; set +a; node /tmp/reestr-store-${GITHUB_RUN_ID}/provision-store-review.cjs /tmp/reestr-store-${GITHUB_RUN_ID}/review.json"
           curl --fail --silent --show-error https://89-207-255-42.sslip.io/privacy.html | grep -q 'Политика конфиденциальности'

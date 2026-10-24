@@ -22,7 +22,8 @@ async function main() {
   } });
   console.log('Review account created with vehicle_owner access');
 }
-main().finally(() => prisma.$disconnect()).catch(() => {
-  console.error('Review provisioning failed; no credentials printed');
+main().finally(() => prisma.$disconnect()).catch((error) => {
+  console.error('Review provisioning failed:', error.code || error.name,
+    error.message === 'Review phone already belongs to another account' ? error.message : '');
   process.exitCode = 1;
 });
