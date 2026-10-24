@@ -28,6 +28,10 @@ async function main() {
       if (org && org.name !== name) throw Error('Review organization identifier collision');
       const organization = org || await tx.organization.create({ data: { bin, type, name, status: 'active', region: 'Тестовые данные', address: 'Тестовая организация для проверки магазинами; не оказывает услуги' } });
       await tx.organizationMember.upsert({ where: { organizationId_userId_role: { organizationId: organization.id, userId: user.id, role } }, update: {}, create: { organizationId: organization.id, userId: user.id, role } });
+      if (type === 'inspection_org') {
+        await tx.organizationMember.upsert({ where: { organizationId_userId_role: { organizationId: organization.id, userId: user.id, role: 'admin' } }, update: {}, create: { organizationId: organization.id, userId: user.id, role: 'admin' } });
+        await tx.balance.upsert({ where: { organizationId: organization.id }, update: {}, create: { organizationId: organization.id, amount: 0, currency: 'KZT' } });
+      }
     }
   });
   console.log('Review account and two explicitly labelled test organizations prepared');
