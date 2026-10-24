@@ -136,6 +136,7 @@ export class BankInvoicesService {
         const purpose = `Пополнение авансового баланса ЕРСИ ГБО. ИО: ${org.name}. ID: ${orgPaymentId}. Счёт № ${number} от ${date}. ${supplier.vat}.`;
         const snapshot: InvoiceSnapshot = {
           templateVersion: "bank-invoice-v1",
+          issuedByUserId: user.sub,
           number,
           date,
           issuedAt: invoice.createdAt.toISOString(),

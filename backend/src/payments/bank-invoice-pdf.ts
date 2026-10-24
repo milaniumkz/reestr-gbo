@@ -1,7 +1,9 @@
 import PDFDocument from "pdfkit";
 import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 export type InvoiceSnapshot = {
   templateVersion: string;
+  issuedByUserId: string;
   number: string;
   date: string;
   issuedAt: string;
@@ -27,12 +29,14 @@ export type InvoiceSnapshot = {
 };
 export async function renderBankInvoice(s: InvoiceSnapshot): Promise<Buffer> {
   const regular = [
+    resolve(process.cwd(), "../assets/fonts/Roboto-Regular.ttf"),
     "/usr/share/fonts/truetype/liberation2/LiberationSerif-Regular.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     "/Library/Fonts/Arial Unicode.ttf",
   ].find(existsSync);
   const bold =
     [
+      resolve(process.cwd(), "../assets/fonts/Roboto-Bold.ttf"),
       "/usr/share/fonts/truetype/liberation2/LiberationSerif-Bold.ttf",
       "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     ].find(existsSync) ?? regular;

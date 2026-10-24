@@ -7,6 +7,7 @@ const db = new PrismaClient();
 (async () => {
   if (
     ![
+      require("node:path").resolve(process.cwd(), "../assets/fonts/Roboto-Regular.ttf"),
       "/usr/share/fonts/truetype/liberation2/LiberationSerif-Regular.ttf",
       "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
       "/Library/Fonts/Arial Unicode.ttf",
@@ -54,8 +55,9 @@ const db = new PrismaClient();
     "Bank invoice supplier configured; balance and payment settings unchanged",
   );
 })()
-  .catch(() => {
-    console.error("Supplier configuration failed");
+  .catch((error) => {
+    const message = ["Cyrillic PDF font unavailable", "Invalid supplier configuration"].includes(error.message) ? error.message : "Supplier configuration failed";
+    console.error(message);
     process.exitCode = 1;
   })
   .finally(() => db.$disconnect());
