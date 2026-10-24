@@ -2522,7 +2522,9 @@ class _ErsiDemoState extends State<ErsiDemo> {
         isManager: _isInspectionManager,
         isQualityControl: _isQualityControl,
         reviewerId: currentUser?.id ?? '',
-        onReload: _loadMyInspections,
+        onReload: () async {
+          await Future.wait([_loadOrganizations(), _loadMyInspections()]);
+        },
         onNewInspection: _startNewInspection,
         onImportXlsx: _pickImportXlsx,
         onOpenInspection: _openInspectionDetail,
@@ -5822,6 +5824,46 @@ class _InspectorHome extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (isManager) ...[
+            _Card(
+              elevated: true,
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.account_balance_wallet_rounded,
+                    color: green,
+                    size: 32,
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Ваш баланс', style: _section),
+                        const SizedBox(height: 6),
+                        Text(
+                          organization == null
+                              ? '—'
+                              : '${organization!.balanceAmount.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (match) => '${match[1]} ')} ${organization!.balanceCurrency == 'KZT' ? '₸' : organization!.balanceCurrency}',
+                          style: const TextStyle(
+                            color: green,
+                            fontSize: 28,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: onReload,
+                    tooltip: 'Обновить',
+                    icon: const Icon(Icons.refresh_rounded),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
           if (!isQualityControl)
             _GreenHero(
               title: 'Инспекции ГБО',

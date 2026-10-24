@@ -376,6 +376,8 @@ class OrganizationSummary {
     required this.region,
     this.accreditationValidFrom = '',
     this.accreditationValidUntil = '',
+    this.balanceAmount = 0,
+    this.balanceCurrency = 'KZT',
     this.type = '',
     this.address = '',
     this.phone = '',
@@ -389,6 +391,8 @@ class OrganizationSummary {
   String get accreditationLabel =>
       accreditationPeriodLabel(accreditationValidFrom, accreditationValidUntil);
 
+  final int balanceAmount;
+  final String balanceCurrency;
   final String id;
   final String name;
   final String bin;
@@ -402,6 +406,11 @@ class OrganizationSummary {
   final List<OrganizationMemberSummary> members;
 
   factory OrganizationSummary.fromJson(Map<String, dynamic> json) {
+    final balances = json['balances'] as List<dynamic>? ?? const [];
+    final balance =
+        balances.isNotEmpty && balances.first is Map<String, dynamic>
+        ? balances.first as Map<String, dynamic>
+        : const <String, dynamic>{};
     final members = json['members'] as List<dynamic>? ?? const [];
     final firstMember = members.isEmpty
         ? const <String, dynamic>{}
@@ -410,6 +419,8 @@ class OrganizationSummary {
         ? firstMember['user'] as Map<String, dynamic>
         : const <String, dynamic>{};
     return OrganizationSummary(
+      balanceAmount: int.tryParse(balance['amount']?.toString() ?? '') ?? 0,
+      balanceCurrency: balance['currency']?.toString() ?? 'KZT',
       id: json['id']?.toString() ?? '',
       name: json['name']?.toString() ?? '',
       accreditationValidFrom: json['accreditationValidFrom']?.toString() ?? '',
