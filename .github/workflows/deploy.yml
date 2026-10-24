@@ -19,6 +19,7 @@ on:
         options:
           - deploy
           - deploy-web
+          - change-employee-phones
           - deploy-services
           - deploy-admin
           - restore-confirmed-inspector
@@ -31,6 +32,17 @@ on:
           - rollback
           - inventory-inspection-data
           - purge-inspection-data
+
+      employee_phone_changes:
+        description: Verified account IDs, identity hashes and replacement phones (JSON; no output)
+        required: false
+        type: string
+      phone_change_mode:
+        description: Inspect or apply verified phone changes
+        required: false
+        default: inspect
+        type: choice
+        options: [inspect, apply]
 
 permissions:
   contents: read
@@ -156,6 +168,7 @@ jobs:
         run: |
           set -o pipefail
           case "${{ github.event.inputs.operation }}" in
+            change-employee-phones) bash ops/change-employee-phones.sh "${{ github.event.inputs.phone_change_mode }}" ;;
             restore-confirmed-inspector) bash ops/restore-confirmed-inspector.sh ;;
             diagnose-members) bash ops/diagnose-members.sh ;;
             diagnose-passwords) bash ops/diagnose-passwords.sh ;;
