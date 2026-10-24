@@ -2,6 +2,36 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+const sharedGboBrands = [
+  'AGIS',
+  'AEB',
+  'ALPHA',
+  'OSKAR-N',
+  'LANDI RENZO',
+  'POLETRON',
+  'HANA ENGINEERING',
+  'ZENIT',
+  'ATIKER',
+  'DIGITRONIC',
+  'OMVL',
+  'LOVATO',
+  'TOMASETTO',
+  'STAG',
+  'BRC',
+  'EMER PALLADIO',
+  'TECH 204',
+  'ALASKA',
+  'DESTRO',
+  'EUROPE GAS',
+  'ITALGAS',
+  'SIGMA RED',
+  'SAVER',
+  'KME',
+  'TAMONA',
+  'OPTIMA',
+  'OSCAR',
+];
+
 const cylinderManufacturers = [
   'STEP Fevzi Çakmak Mahallesi Büsan San. Sitesi Kosgeb Cad. 10646 Sk. No: 10-12-14 Karatay / KONYA / TURKEY',
   'ООО «Харпромтех» (Украина) Исполкомовская улица, 32, Харьков',
@@ -140,6 +170,23 @@ async function main() {
       periodDays: 30,
     },
   });
+
+  for (const type of ['reducer', 'control_unit']) {
+    for (const name of sharedGboBrands) {
+      const existing = await prisma.gboEquipmentItem.findFirst({
+        where: { type, name: { equals: name, mode: 'insensitive' } },
+      });
+      if (existing) {
+        await prisma.gboEquipmentItem.update({ where: { id: existing.id }, data: { isActive: true } });
+      } else {
+        await prisma.gboEquipmentItem.upsert({
+          where: { type_name: { type, name } },
+          update: { isActive: true },
+          create: { type, name },
+        });
+      }
+    }
+  }
 
   for (const name of cylinderManufacturers) {
     await prisma.gboEquipmentItem.upsert({
