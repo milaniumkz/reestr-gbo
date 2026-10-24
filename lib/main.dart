@@ -3807,6 +3807,17 @@ class _Login extends StatelessWidget {
               style: _muted,
             ),
           ),
+          Center(
+            child: TextButton(
+              onPressed: () => launchUrl(
+                Uri.parse(
+                  '${AppEnvironment.apiBaseUrl.replaceFirst(RegExp(r'/api/v1/?$'), '')}/privacy.html',
+                ),
+                mode: LaunchMode.externalApplication,
+              ),
+              child: const Text('Политика конфиденциальности'),
+            ),
+          ),
         ],
       ),
     );
