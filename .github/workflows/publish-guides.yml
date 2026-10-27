@@ -36,9 +36,10 @@ jobs:
           ssh "$server" 'cd /opt/reestr/app/build/web/guides && sha256sum -c SHA256SUMS'
       - name: Verify public download
         run: |
-          for file in observer-guide-ru.mp4 observer-guide-mobile-ru.mp4 observer.html observer-mobile.html; do
-            curl --fail --show-error --location --retry 3 "https://89-207-255-42.sslip.io/guides/$file" --output "$RUNNER_TEMP/$file"
-            cmp "web/guides/$file" "$RUNNER_TEMP/$file"
+          for file in web/guides/*.mp4 web/guides/*.html; do
+            name="${file##*/}"
+            curl --fail --show-error --location --retry 3 "https://89-207-255-42.sslip.io/guides/$name" --output "$RUNNER_TEMP/$name"
+            cmp "$file" "$RUNNER_TEMP/$name"
           done
-          echo 'https://89-207-255-42.sslip.io/guides/observer.html' >> "$GITHUB_STEP_SUMMARY"
+          echo 'https://89-207-255-42.sslip.io/guides/index.html' >> "$GITHUB_STEP_SUMMARY"
           echo 'https://89-207-255-42.sslip.io/guides/observer-mobile.html' >> "$GITHUB_STEP_SUMMARY"
