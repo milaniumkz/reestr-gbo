@@ -82,11 +82,26 @@ jobs:
       - run: python3 scripts/check_localization.py
       - run: python3 scripts/check_public_offer.py
       - run: flutter build web --release --pwa-strategy=none --dart-define=API_BASE_URL=https://89-207-255-42.sslip.io/api/v1 --dart-define=APP_MODE=production --dart-define=APP_VERSION="1.0.0+$(git rev-parse --short HEAD)"
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+      - name: Trust server host key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
       - uses: actions/setup-java@v4
         if: github.event.inputs.operation != 'deploy-web'
         with:
           distribution: temurin
           java-version: "17"
+      - name: Configure persistent APK signing
+        if: github.event.inputs.operation != 'deploy-web'
+        run: bash ops/configure-android-release-signing.sh
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
       - name: Configure official Maven repositories for included Gradle builds
         if: github.event.inputs.operation != 'deploy-web'
         run: |
@@ -125,14 +140,6 @@ jobs:
             build/web/downloads/ersi-gbo.apk.sha256
           if-no-files-found: error
           retention-days: 30
-      - uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
-      - name: Trust server host key
-        run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/known_hosts
       - name: Preserve published APK without rebuilding
         if: github.event.inputs.operation == 'deploy-web'
         run: |
