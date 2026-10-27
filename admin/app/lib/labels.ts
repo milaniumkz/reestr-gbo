@@ -40,6 +40,9 @@ const organizationTypeLabels: Record<string, string> = {
 
 const fileTypeLabels: Record<string, string> = {
   cylinder_label: 'Фото бирки баллона',
+  cylinder_label_2: 'Фото бирки второго баллона',
+  cylinder_work_record_2: 'Рабочая запись второго баллона',
+  cylinder_inspection_report_2: 'Отчет инспекции второго баллона',
   vehicle_photo: 'Фото автомобиля',
   tech_passport: 'Техпаспорт — лицевая сторона',
   tech_passport_back: 'Техпаспорт — обратная сторона',

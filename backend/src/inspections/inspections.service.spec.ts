@@ -337,7 +337,7 @@ describe('Inspection quality control workflow', () => {
     await f.service.claimQualityReview(f.user('qc2'),'inspection_1');
     expect(f.state.qualityReviewerId).toBe('qc2');
   });
-  it.each(['gas_work_record','cylinder_work_record','gas_inspection_report','cylinder_inspection_report'])('keeps %s immutable for quality staff',async type => {
+  it.each(['gas_work_record','cylinder_work_record','gas_inspection_report','cylinder_inspection_report','cylinder_work_record_2','cylinder_inspection_report_2'])('keeps %s immutable for quality staff',async type => {
     const f=fixture();f.state.status='submitted';
     await expect(f.service.uploadPhoto('inspection_1',type,{originalname:'doc.jpg',buffer:Buffer.from('photo')},f.user('qc'))).rejects.toThrow('не может изменять');
     expect(f.storage.putObject).not.toHaveBeenCalled();

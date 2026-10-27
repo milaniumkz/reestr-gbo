@@ -58,6 +58,8 @@ const protectedInspectionDocuments = <String>{
   'cylinder_work_record',
   'gas_inspection_report',
   'cylinder_inspection_report',
+  'cylinder_work_record_2',
+  'cylinder_inspection_report_2',
 };
 const inspectionPackageDocuments = <String, String>{
   'applicant_application': 'Заявка заявителя',
@@ -67,8 +69,29 @@ const inspectionPackageDocuments = <String, String>{
   'gas_inspection_report': 'Отчет инспекции ГБО (подпись и печать)',
   'cylinder_inspection_report': 'Отчет инспекции баллона (подпись и печать)',
 };
+const secondCylinderDocumentTypes = <String>{
+  'cylinder_label_2',
+  'cylinder_work_record_2',
+  'cylinder_inspection_report_2',
+};
+Map<String, String> cylinderPackageDocuments(bool two) => {
+  ...inspectionPackageDocuments,
+  if (two) ...{
+    'cylinder_work_record': 'Рабочая запись первого баллона (подписи)',
+    'cylinder_inspection_report':
+        'Отчет инспекции первого баллона (подпись и печать)',
+    'cylinder_work_record_2': 'Рабочая запись второго баллона (подписи)',
+    'cylinder_inspection_report_2':
+        'Отчет инспекции второго баллона (подпись и печать)',
+  },
+};
 const inspectionRequiredLabels = <String, String>{
   'cylinder_label': 'фото бирки баллона',
+  'cylinder_label_2': 'Фото бирки второго баллона',
+  'cylinder_work_record_2': 'Рабочая запись второго баллона (подписи)',
+  'cylinder_inspection_report_2':
+      'Отчет инспекции второго баллона (подпись и печать)',
+  'second_cylinder_serial': 'номер второго баллона',
   'vehicle_photo': 'фото автомобиля',
   'tech_passport': 'фото техпаспорта',
   ...inspectionPackageDocuments,
@@ -511,6 +534,30 @@ class _ErsiDemoState extends State<ErsiDemo> {
   String vehicleYear = '';
   String vehicleColor = '';
   String cylinderNumber = '';
+  bool usesTwoCylinders = false;
+  String secondCylinderNumber = '';
+  Map<String, String> get _inspectionPackageDocuments =>
+      cylinderPackageDocuments(usesTwoCylinders);
+
+  void _setTwoCylinders(bool value) {
+    setState(() {
+      usesTwoCylinders = value;
+      if (!value) secondCylinderNumber = '';
+      _resetSecondCylinderDocuments();
+    });
+  }
+
+  void _resetSecondCylinderDocuments() {
+    packageDocumentPositions = {...packageDocumentPositions}
+      ..removeWhere((key, _) => secondCylinderDocumentTypes.contains(key));
+    packageDocumentNames = {...packageDocumentNames}
+      ..removeWhere((key, _) => secondCylinderDocumentTypes.contains(key));
+    packageDocumentBytes = {...packageDocumentBytes}
+      ..removeWhere((key, _) => secondCylinderDocumentTypes.contains(key));
+    packageDocumentUploaded = {...packageDocumentUploaded}
+      ..removeWhere((key, _) => secondCylinderDocumentTypes.contains(key));
+  }
+
   String cylinderMaker = '';
   String cylinderVolume = '';
   String cylinderProductionDate = '';
@@ -1597,7 +1644,8 @@ class _ErsiDemoState extends State<ErsiDemo> {
           ),
         );
       } else {
-        final extensions = type == 'tech_passport_back'
+        final extensions =
+            (type == 'tech_passport_back' || type == 'cylinder_label_2')
             ? const ['jpg', 'jpeg', 'png']
             : const ['pdf', 'jpg', 'jpeg', 'png'];
         file = kIsWeb
@@ -1659,6 +1707,12 @@ class _ErsiDemoState extends State<ErsiDemo> {
       if (vehiclePlate.trim().isEmpty) 'госномер',
       if (vehicleVin.trim().isEmpty) 'VIN',
       if (cylinderNumber.trim().isEmpty) 'номер баллона',
+      if (usesTwoCylinders && secondCylinderNumber.trim().isEmpty)
+        'номер второго баллона',
+      if (usesTwoCylinders &&
+          secondCylinderNumber.trim().toUpperCase() ==
+              cylinderNumber.trim().toUpperCase())
+        'разные номера первого и второго баллонов',
       if (cylinderVolume.trim().isEmpty) 'объем баллона',
       if (!_validCylinderProductionDate(cylinderProductionDate))
         'полную дату выпуска баллона',
@@ -1680,6 +1734,10 @@ class _ErsiDemoState extends State<ErsiDemo> {
             inspectionCertificateNumber,
           ),
           'inspectionDate': _dateOnly(inspectionIssuedAt),
+          'usesTwoCylinders': usesTwoCylinders,
+          'secondCylinderSerial': usesTwoCylinders
+              ? secondCylinderNumber.trim()
+              : null,
           'owner': {
             'fullName': ownerName.trim(),
             'iin': ownerId.trim(),
@@ -1747,6 +1805,8 @@ class _ErsiDemoState extends State<ErsiDemo> {
         inspectionId: draftInspectionId!,
         vehicleId: vehicleId,
         certificateNumber: certificateNumber,
+        usesTwoCylinders: usesTwoCylinders,
+        secondCylinderSerial: secondCylinderNumber.trim(),
       );
       draftVehicleId = vehicleId;
       selectedInspection = detail;
@@ -1757,6 +1817,8 @@ class _ErsiDemoState extends State<ErsiDemo> {
       organizationId,
       vehicleId,
       certificateNumber: certificateNumber,
+      usesTwoCylinders: usesTwoCylinders,
+      secondCylinderSerial: secondCylinderNumber.trim(),
       lat: position.latitude,
       lng: position.longitude,
     );
@@ -1786,13 +1848,17 @@ class _ErsiDemoState extends State<ErsiDemo> {
       }
 
       final missingLocal = <String>[
+        if (usesTwoCylinders &&
+            packageDocumentUploaded['cylinder_label_2'] != true &&
+            !packageDocumentBytes.containsKey('cylinder_label_2'))
+          'Фото бирки второго баллона',
         if (!cylinderPhotoUploaded && cylinderPhotoBytes == null)
           'фото бирки баллона',
         if (!vehiclePhotoUploaded && vehiclePhotoBytes == null)
           'фото автомобиля',
         if (!techPassportPhotoUploaded && techPassportPhotoBytes == null)
           'фото техпаспорта',
-        for (final entry in inspectionPackageDocuments.entries)
+        for (final entry in _inspectionPackageDocuments.entries)
           if (packageDocumentUploaded[entry.key] != true &&
               !packageDocumentBytes.containsKey(entry.key))
             entry.value,
@@ -1926,6 +1992,10 @@ class _ErsiDemoState extends State<ErsiDemo> {
     );
 
     for (final entry in packageDocumentBytes.entries) {
+      if (!usesTwoCylinders &&
+          secondCylinderDocumentTypes.contains(entry.key)) {
+        continue;
+      }
       if (packageDocumentUploaded[entry.key] == true) continue;
       await repositories.inspections.uploadPhoto(
         inspectionId: inspectionId,
@@ -2058,6 +2128,12 @@ class _ErsiDemoState extends State<ErsiDemo> {
       if (!const ['СНГ', 'КПГ'].contains(cylinderFuel.trim()))
         'тип газа (СНГ или КПГ)',
       if (cylinderNumber.trim().isEmpty) 'номер баллона',
+      if (usesTwoCylinders && secondCylinderNumber.trim().isEmpty)
+        'номер второго баллона',
+      if (usesTwoCylinders &&
+          secondCylinderNumber.trim().toUpperCase() ==
+              cylinderNumber.trim().toUpperCase())
+        'разные номера первого и второго баллонов',
       if (cylinderVolume.trim().isEmpty) 'объем баллона',
       if (!_validCylinderProductionDate(cylinderProductionDate))
         'полную дату выпуска баллона',
@@ -2090,6 +2166,8 @@ class _ErsiDemoState extends State<ErsiDemo> {
       vehicleYear = '';
       vehicleColor = '';
       cylinderNumber = '';
+      usesTwoCylinders = false;
+      secondCylinderNumber = '';
       cylinderMaker = '';
       cylinderVolume = '';
       cylinderProductionDate = '';
@@ -2238,14 +2316,18 @@ class _ErsiDemoState extends State<ErsiDemo> {
       final fileTypes = detail.files.map((file) => file.type).toSet();
       final packageUploaded = <String, bool>{
         for (final type in [
-          ...inspectionPackageDocuments.keys,
+          ...cylinderPackageDocuments(detail.usesTwoCylinders).keys,
+          'cylinder_label_2',
           'tech_passport_back',
         ])
           type: fileTypes.contains(type),
       };
       final packageNames = <String, String>{
         for (final file in detail.files)
-          if (inspectionPackageDocuments.containsKey(file.type) ||
+          if ((cylinderPackageDocuments(
+                    detail.usesTwoCylinders,
+                  ).containsKey(file.type) ||
+                  file.type == 'cylinder_label_2') ||
               file.type == 'tech_passport_back')
             file.type: inspectionRequiredLabels[file.type] ?? file.type,
       };
@@ -2278,6 +2360,8 @@ class _ErsiDemoState extends State<ErsiDemo> {
         vehicleMakeModel = detail.vehicleName;
         vehicleYear = detail.vehicleYear;
         cylinderNumber = detail.cylinderSerial;
+        usesTwoCylinders = detail.usesTwoCylinders;
+        secondCylinderNumber = detail.secondCylinderSerial;
         cylinderMaker = detail.cylinderManufacturer;
         cylinderVolume = detail.cylinderVolume;
         reducerName = detail.reducerName;
@@ -2294,13 +2378,15 @@ class _ErsiDemoState extends State<ErsiDemo> {
       });
       if (forceDataStep) {
         go(15);
-      } else if (!cylinderPhotoUploaded) {
+      } else if (!cylinderPhotoUploaded ||
+          (usesTwoCylinders &&
+              packageDocumentUploaded['cylinder_label_2'] != true)) {
         go(18);
       } else if (!vehiclePhotoUploaded) {
         go(19);
       } else if (!techPassportPhotoUploaded) {
         go(20);
-      } else if (!inspectionPackageDocuments.keys.every(fileTypes.contains)) {
+      } else if (!_inspectionPackageDocuments.keys.every(fileTypes.contains)) {
         go(22);
       } else {
         go(23);
@@ -2611,10 +2697,22 @@ class _ErsiDemoState extends State<ErsiDemo> {
       17 => _CylinderStep(
         reviewFiles:
             selectedInspection?.files
-                .where((file) => ['cylinder_label'].contains(file.type))
+                .where(
+                  (file) => [
+                    'cylinder_label',
+                    'cylinder_label_2',
+                  ].contains(file.type),
+                )
                 .toList() ??
             const [],
         editingQuality: _editingQualityInspection,
+        usesTwoCylinders: usesTwoCylinders,
+        secondNumber: secondCylinderNumber,
+        onTwoCylinders: _setTwoCylinders,
+        onSecondNumber: (value) => setState(() {
+          secondCylinderNumber = value;
+          _resetSecondCylinderDocuments();
+        }),
         number: cylinderNumber,
         maker: cylinderMaker,
         volume: cylinderVolume,
@@ -2638,14 +2736,65 @@ class _ErsiDemoState extends State<ErsiDemo> {
       ),
       18 => _PhotoStep(
         step: 4,
-        title: 'Фото бирки баллона',
+        title: usesTwoCylinders
+            ? 'Фото бирки первого баллона'
+            : 'Фото бирки баллона',
+        secondary: usesTwoCylinders
+            ? Column(
+                children: [
+                  const SizedBox(height: 12),
+                  const Text('Фото бирки второго баллона', style: _section),
+                  _PrimaryButton(
+                    text: 'Камера: второй баллон',
+                    icon: Icons.camera_alt_rounded,
+                    onTap: () => _pickInspectionDocument(
+                      'cylinder_label_2',
+                      'Фото бирки второго баллона',
+                      camera: true,
+                    ),
+                  ),
+                  _PrimaryButton(
+                    text: 'Выбрать файл: второй баллон',
+                    icon: Icons.upload_file_rounded,
+                    onTap: () => _pickInspectionDocument(
+                      'cylinder_label_2',
+                      'Фото бирки второго баллона',
+                    ),
+                  ),
+                  if (packageDocumentNames['cylinder_label_2'] != null)
+                    Text(
+                      packageDocumentUploaded['cylinder_label_2'] == true
+                          ? 'Загружено'
+                          : 'Фото выбрано',
+                      style: _section,
+                    ),
+                  for (final file
+                      in selectedInspection?.files.where(
+                            (file) =>
+                                file.type == 'cylinder_label_2' &&
+                                file.cylinderSerial ==
+                                    secondCylinderNumber.trim(),
+                          ) ??
+                          <InspectionFileInfo>[])
+                    _InspectionFileCard(file: file),
+                ],
+              )
+            : null,
         caption: 'Поместите бирку в рамку',
         photoName: cylinderPhotoName,
         photoBytes: cylinderPhotoBytes,
         uploaded: cylinderPhotoUploaded,
         locked: protectedInspectionPhotosLocked && cylinderPhotoUploaded,
         onCamera: () => _captureInspectionPhoto('cylinder'),
-        onNext: () => go(19),
+        onNext: () {
+          if (usesTwoCylinders &&
+              packageDocumentUploaded['cylinder_label_2'] != true &&
+              !packageDocumentBytes.containsKey('cylinder_label_2')) {
+            setState(() => apiState = 'Добавьте фото бирки второго баллона');
+            return;
+          }
+          go(19);
+        },
       ),
       19 => _PhotoStep(
         step: 5,
@@ -2710,6 +2859,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         onNext: () => go(22),
       ),
       22 => _DocumentScanStep(
+        usesTwoCylinders: usesTwoCylinders,
         names: packageDocumentNames,
         uploaded: packageDocumentUploaded,
         readOnly: _isQualityControl,
@@ -4418,6 +4568,12 @@ class _Certificate extends StatelessWidget {
                         : '${item.cylinderVolume} л',
                   ].where((value) => value.trim().isNotEmpty).join(' · '),
                 ),
+                if (item.usesTwoCylinders)
+                  (
+                    Icons.horizontal_rule_rounded,
+                    'БАЛЛОН 2',
+                    item.secondCylinderSerial,
+                  ),
                 (
                   Icons.event_rounded,
                   'ДАТА ВЫПУСКА БАЛЛОНА',
@@ -4927,7 +5083,12 @@ class _InspectionDetailScreen extends StatelessWidget {
             _QualityDataWithPhotos(
               enabled: qualityLayout,
               files: files
-                  .where((file) => ['cylinder_label'].contains(file.type))
+                  .where(
+                    (file) => [
+                      'cylinder_label',
+                      'cylinder_label_2',
+                    ].contains(file.type),
+                  )
                   .toList(),
               child: _CertificateDetailsCard(
                 rows: [
@@ -4953,6 +5114,12 @@ class _InspectionDetailScreen extends StatelessWidget {
                           : '${item.cylinderVolume} л',
                     ].where((value) => value.trim().isNotEmpty).join(' · '),
                   ),
+                  if (item.usesTwoCylinders)
+                    (
+                      Icons.horizontal_rule_rounded,
+                      'БАЛЛОН 2',
+                      item.secondCylinderSerial,
+                    ),
                   (
                     Icons.event_rounded,
                     'ДАТА ВЫПУСКА БАЛЛОНА',
@@ -6206,6 +6373,10 @@ class _OwnerStep extends StatelessWidget {
 
 class _CylinderStep extends StatelessWidget {
   const _CylinderStep({
+    this.usesTwoCylinders = false,
+    this.secondNumber = '',
+    this.onTwoCylinders,
+    this.onSecondNumber,
     this.reviewFiles = const [],
     this.editingQuality = false,
     required this.number,
@@ -6229,6 +6400,10 @@ class _CylinderStep extends StatelessWidget {
     required this.onShape,
     required this.onNext,
   });
+  final bool usesTwoCylinders;
+  final String secondNumber;
+  final ValueChanged<bool>? onTwoCylinders;
+  final ValueChanged<String>? onSecondNumber;
   final String number;
   final String maker;
   final String volume;
@@ -6275,11 +6450,33 @@ class _CylinderStep extends StatelessWidget {
             ),
             const SizedBox(height: 14),
             _Input(
-              label: 'Номер баллона',
+              label: usesTwoCylinders
+                  ? 'Номер первого баллона'
+                  : 'Номер баллона',
               value: number,
               hint: 'Введите номер баллона',
               onChanged: onNumber,
             ),
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(tr(context, 'Используются два баллона')),
+              value: usesTwoCylinders,
+              onChanged: onTwoCylinders == null
+                  ? null
+                  : (value) => onTwoCylinders!(value ?? false),
+            ),
+            if (usesTwoCylinders) ...[
+              _Input(
+                label: 'Номер второго баллона',
+                value: secondNumber,
+                onChanged: onSecondNumber,
+              ),
+              const _InfoBox(
+                title: 'Два баллона',
+                text:
+                    'Остальные параметры общие для обоих баллонов. Документы и бирки загружаются отдельно.',
+              ),
+            ],
             _EquipmentPicker(
               label: 'Производитель',
               value: maker,
@@ -6501,6 +6698,7 @@ class _PhotoStep extends StatelessWidget {
 
 class _DocumentScanStep extends StatelessWidget {
   const _DocumentScanStep({
+    this.usesTwoCylinders = false,
     required this.names,
     required this.uploaded,
     required this.onUpload,
@@ -6509,6 +6707,7 @@ class _DocumentScanStep extends StatelessWidget {
     this.requireApplicantPhotos = true,
     required this.onNext,
   });
+  final bool usesTwoCylinders;
   final Map<String, String> names;
   final Map<String, bool> uploaded;
   final void Function(String type, String label) onUpload;
@@ -6519,7 +6718,8 @@ class _DocumentScanStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final allSelected = inspectionPackageDocuments.keys
+    final documents = cylinderPackageDocuments(usesTwoCylinders);
+    final allSelected = documents.keys
         .where(
           (type) =>
               requireApplicantPhotos ||
@@ -6529,7 +6729,9 @@ class _DocumentScanStep extends StatelessWidget {
     return _AppScreen(
       title: 'Пакет документов',
       subtitle: requireApplicantPhotos
-          ? '6 обязательных файлов'
+          ? (usesTwoCylinders
+                ? '8 обязательных файлов'
+                : '6 обязательных файлов')
           : 'Документы инспекции',
       activeNav: 1,
       leadingBack: true,
@@ -6550,7 +6752,7 @@ class _DocumentScanStep extends StatelessWidget {
               text:
                   'Рабочие записи и отчёты инспекции можно просматривать, но нельзя заменять.',
             ),
-          for (final entry in inspectionPackageDocuments.entries)
+          for (final entry in documents.entries)
             Column(
               children: [
                 _ListTileCard(

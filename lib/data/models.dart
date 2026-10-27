@@ -57,6 +57,8 @@ class AppBanner {
 
 class RegistryVehicle {
   const RegistryVehicle({
+    this.usesTwoCylinders = false,
+    this.secondCylinderSerial = '',
     required this.vin,
     required this.plateNumber,
     required this.make,
@@ -95,6 +97,8 @@ class RegistryVehicle {
     this.documents = const [],
   });
 
+  final bool usesTwoCylinders;
+  final String secondCylinderSerial;
   final String accreditationValidFrom;
   final String accreditationValidUntil;
   String get accreditationLabel =>
@@ -156,6 +160,9 @@ class RegistryVehicle {
         : const <String, dynamic>{};
     final photos = inspection['photos'] as List<dynamic>? ?? const [];
     return RegistryVehicle(
+      usesTwoCylinders: inspection['usesTwoCylinders'] == true,
+      secondCylinderSerial:
+          inspection['secondCylinderSerial']?.toString() ?? '',
       vin: json['vin']?.toString() ?? '',
       plateNumber: json['plateNumber']?.toString() ?? '',
       make: json['make']?.toString() ?? '',
@@ -228,6 +235,9 @@ class RegistryVehicle {
         : cylinders.first as Map<String, dynamic>;
     final photos = inspection['photos'] as List<dynamic>? ?? const [];
     return RegistryVehicle(
+      usesTwoCylinders: inspection['usesTwoCylinders'] == true,
+      secondCylinderSerial:
+          inspection['secondCylinderSerial']?.toString() ?? '',
       vin: vehicle['vin']?.toString() ?? '',
       plateNumber: vehicle['plateNumber']?.toString() ?? '',
       make: vehicle['make']?.toString() ?? '',
@@ -482,6 +492,8 @@ class OrganizationMemberSummary {
 
 class InspectionSummary {
   const InspectionSummary({
+    this.usesTwoCylinders = false,
+    this.secondCylinderSerial = '',
     required this.id,
     required this.status,
     required this.createdAt,
@@ -531,6 +543,8 @@ class InspectionSummary {
     this.files = const [],
   });
 
+  final bool usesTwoCylinders;
+  final String secondCylinderSerial;
   final String accreditationValidFrom;
   final String accreditationValidUntil;
   String get accreditationLabel =>
@@ -610,7 +624,19 @@ class InspectionSummary {
         json['qualityConfirmedBy'] is Map<String, dynamic>
         ? json['qualityConfirmedBy'] as Map<String, dynamic>
         : const <String, dynamic>{};
-    final photos = json['photos'] as List<dynamic>? ?? const [];
+    final photos = (json['photos'] as List<dynamic>? ?? const [])
+        .where(
+          (photo) =>
+              photo is Map<String, dynamic> &&
+              (!const {
+                    'cylinder_label_2',
+                    'cylinder_work_record_2',
+                    'cylinder_inspection_report_2',
+                  }.contains(photo['type']) ||
+                  (json['usesTwoCylinders'] == true &&
+                      photo['cylinderSerial'] == json['secondCylinderSerial'])),
+        )
+        .toList();
     final owners = vehicle['owners'] as List<dynamic>? ?? const [];
     final owner = owners.isEmpty
         ? const <String, dynamic>{}
@@ -622,6 +648,8 @@ class InspectionSummary {
     final make = vehicle['make']?.toString() ?? '';
     final model = vehicle['model']?.toString() ?? '';
     return InspectionSummary(
+      usesTwoCylinders: json['usesTwoCylinders'] == true,
+      secondCylinderSerial: json['secondCylinderSerial']?.toString() ?? '',
       id: json['id']?.toString() ?? '',
       status: json['status']?.toString() ?? '',
       createdAt: json['createdAt']?.toString().split('T').first ?? '',
@@ -689,6 +717,7 @@ class InspectionSummary {
 
 class InspectionFileInfo {
   const InspectionFileInfo({
+    this.cylinderSerial = '',
     required this.id,
     required this.type,
     required this.objectKey,
@@ -698,6 +727,7 @@ class InspectionFileInfo {
     this.moderationReason = '',
   });
 
+  final String cylinderSerial;
   final String id;
   final String type;
   final String objectKey;
@@ -716,6 +746,7 @@ class InspectionFileInfo {
 
   factory InspectionFileInfo.fromJson(Map<String, dynamic> json) {
     return InspectionFileInfo(
+      cylinderSerial: json['cylinderSerial']?.toString() ?? '',
       id: json['id']?.toString() ?? '',
       type: json['type']?.toString() ?? '',
       objectKey: json['objectKey']?.toString() ?? '',

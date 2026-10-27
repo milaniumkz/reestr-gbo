@@ -1,3 +1,4 @@
+import { CylinderPairInput } from './cylinder-pair';
 import { QualityReviewData } from './quality-review-data';
 import {
   Body,
@@ -54,6 +55,8 @@ export class InspectionsController {
     body: {
       organizationId: string;
       vehicleId: string;
+      usesTwoCylinders?: boolean;
+      secondCylinderSerial?: string | null;
       certificateNumber?: string;
       lat?: number | string;
       lng?: number | string;
@@ -106,6 +109,8 @@ export class InspectionsController {
     @Body()
     body: {
       vehicleId: string;
+      usesTwoCylinders?: boolean;
+      secondCylinderSerial?: string | null;
       certificateNumber?: string;
     },
   ) {

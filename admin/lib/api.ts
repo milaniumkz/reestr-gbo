@@ -186,6 +186,8 @@ export type LegalDocumentRow = {
 };
 
 export type Inspection = {
+  usesTwoCylinders?: boolean;
+  secondCylinderSerial?: string | null;
   id: string;
   status: string;
   createdAt: string;
@@ -254,6 +256,8 @@ export type CertificateRow = {
     }>;
   };
   inspection?: {
+    usesTwoCylinders?: boolean;
+    secondCylinderSerial?: string | null;
     id?: string;
     status?: string;
     address?: string;
@@ -311,7 +315,7 @@ export type RegistryVehicle = {
     number: string;
     status: string;
     validUntil: string;
-    inspection?: { organization?: Organization };
+    inspection?: { organization?: Organization; usesTwoCylinders?: boolean; secondCylinderSerial?: string | null };
   }>;
   cylinders?: Array<{ serialNumber: string; validUntil: string; producedAt?: string }>;
   owners?: Array<{ fullName: string; iin?: string }>;

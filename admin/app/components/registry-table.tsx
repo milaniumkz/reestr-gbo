@@ -102,7 +102,7 @@ export function RegistryTable({
                       </>
                     ) : '-'}
                   </td>
-                  <td>{cylinder?.serialNumber ?? '-'}<div className="muted">ВЫПУСК: {cylinder?.producedAt ? new Date(cylinder.producedAt).toLocaleDateString('ru-RU', {timeZone:'UTC'}) : '-'}</div></td>
+                  <td>{cylinder?.serialNumber ?? '-'}{certificate?.inspection?.usesTwoCylinders && <div>Баллон 2: {certificate.inspection.secondCylinderSerial}</div>}<div className="muted">ВЫПУСК: {cylinder?.producedAt ? new Date(cylinder.producedAt).toLocaleDateString('ru-RU', {timeZone:'UTC'}) : '-'}</div></td>
                 </tr>
               );
             })}

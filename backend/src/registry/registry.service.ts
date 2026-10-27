@@ -1,3 +1,4 @@
+import { activeCylinderPhotos } from '../inspections/cylinder-pair';
 import { Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { hasGlobalAccess, userOrganizationIds } from "../common/access-scope";
@@ -10,14 +11,14 @@ import { PrismaService } from "../prisma/prisma.service";
 export class RegistryService {
   constructor(private readonly prisma: PrismaService, private readonly storage: StorageService) {}
 
-  private withPhotoUrls<T extends { certificates: Array<{ inspection: { photos: Array<{ objectKey: string; type: string }> } }> }>(vehicle: T, observer = false) {
+  private withPhotoUrls<T extends { certificates: Array<{ inspection: { usesTwoCylinders?: boolean; secondCylinderSerial?: string | null; photos: Array<{ objectKey: string; type: string; cylinderSerial?: string | null }> } }> }>(vehicle: T, observer = false) {
     return {
       ...vehicle,
       certificates: vehicle.certificates.map(certificate => ({
         ...certificate,
         inspection: {
           ...certificate.inspection,
-          photos: certificate.inspection.photos
+          photos: activeCylinderPhotos(certificate.inspection, certificate.inspection.photos)
             .filter(photo => !observer || ["certificate_document", "tech_passport", "tech_passport_back"].includes(photo.type))
             .map(photo => ({
             ...photo,

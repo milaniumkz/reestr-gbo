@@ -217,6 +217,8 @@ model Inspection {
   qualityDocumentUploadedAt DateTime?
   qualityConfirmedAt DateTime?
   requireApplicantPhotos Boolean @default(false)
+  usesTwoCylinders Boolean @default(false)
+  secondCylinderSerial String?
   qualityReviewerId String?
   qualityReviewStartedAt DateTime?
   qualityConfirmedById String?
@@ -239,6 +241,7 @@ model InspectionPhoto {
   inspectionId String
   type         String
   objectKey    String
+  cylinderSerial String?
   moderationStatus String @default("not_checked")
   moderationModel String?
   moderationCheckedAt DateTime?

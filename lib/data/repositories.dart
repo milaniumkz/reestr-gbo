@@ -549,6 +549,8 @@ class InspectionRepository {
     String organizationId,
     String vehicleId, {
     required String certificateNumber,
+    bool usesTwoCylinders = false,
+    String secondCylinderSerial = '',
     double? lat,
     double? lng,
   }) async {
@@ -557,6 +559,8 @@ class InspectionRepository {
       'organizationId': organizationId,
       'vehicleId': vehicleId,
       'certificateNumber': certificateNumber,
+      'usesTwoCylinders': usesTwoCylinders,
+      'secondCylinderSerial': usesTwoCylinders ? secondCylinderSerial : null,
       ...lat == null ? const <String, dynamic>{} : {'lat': lat},
       ...lng == null ? const <String, dynamic>{} : {'lng': lng},
     });
@@ -621,10 +625,14 @@ class InspectionRepository {
     required String inspectionId,
     required String vehicleId,
     required String certificateNumber,
+    bool usesTwoCylinders = false,
+    String secondCylinderSerial = '',
   }) async {
     final response = await _api.patchJson('/inspections/$inspectionId/data', {
       'vehicleId': vehicleId,
       'certificateNumber': certificateNumber,
+      'usesTwoCylinders': usesTwoCylinders,
+      'secondCylinderSerial': usesTwoCylinders ? secondCylinderSerial : null,
     });
     return InspectionSummary.fromJson(response);
   }

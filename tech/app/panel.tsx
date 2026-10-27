@@ -2822,6 +2822,9 @@ function Services({ data, check }: { data: any; check: () => void }) {
 
 const fileNames: Record<string, string> = {
   cylinder_label: "Бирка баллона",
+  cylinder_label_2: "Бирка второго баллона",
+  cylinder_work_record_2: "Рабочая запись второго баллона",
+  cylinder_inspection_report_2: "Отчёт инспекции второго баллона",
   vehicle_photo: "Автомобиль",
   tech_passport: "Техпаспорт",
   tech_passport_back: "Техпаспорт, обратная сторона",
