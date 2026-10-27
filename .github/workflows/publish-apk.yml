@@ -1,0 +1,125 @@
+name: Build and publish Android APK
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: production-apk
+  cancel-in-progress: false
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.1'
+          channel: stable
+          cache: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+      - name: Configure persistent release signing
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p ~/.ssh "$RUNNER_TEMP/android-signing"
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          server="${DEPLOY_USER:-root}@${DEPLOY_HOST}"
+          remote='/opt/reestr/keys/android'
+          if ssh -o ConnectTimeout=20 "$server" "test -f '$remote/release.jks' && test -f '$remote/store.password'"; then
+            scp "$server:$remote/release.jks" "$RUNNER_TEMP/android-signing/release.jks"
+            scp "$server:$remote/store.password" "$RUNNER_TEMP/android-signing/store.password"
+          else
+            python3 - <<'PY'
+          import os,secrets
+          from pathlib import Path
+          p=Path(os.environ['RUNNER_TEMP'])/'android-signing/store.password'
+          p.write_text(secrets.token_hex(32))
+          p.chmod(0o600)
+          PY
+            keytool -genkeypair -noprompt -keystore "$RUNNER_TEMP/android-signing/release.jks" -storetype PKCS12 -alias ersi-release -keyalg RSA -keysize 3072 -validity 10000 -storepass:file "$RUNNER_TEMP/android-signing/store.password" -keypass:file "$RUNNER_TEMP/android-signing/store.password" -dname 'CN=ERSI GBO, O=ERSI GBO, C=KZ'
+            ssh "$server" "umask 077; mkdir -p '$remote'; chmod 700 '$remote'; test ! -e '$remote/release.jks'; test ! -e '$remote/store.password'"
+            scp "$RUNNER_TEMP/android-signing/release.jks" "$RUNNER_TEMP/android-signing/store.password" "$server:$remote/"
+            ssh "$server" "chmod 600 '$remote/release.jks' '$remote/store.password'"
+          fi
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          root=Path(os.environ['RUNNER_TEMP'])/'android-signing'
+          password=(root/'store.password').read_text().strip()
+          p=Path('android/key.properties')
+          p.write_text(f'storeFile={root}/release.jks\nstorePassword={password}\nkeyPassword={password}\nkeyAlias=ersi-release\n')
+          p.chmod(0o600)
+          PY
+      - run: flutter pub get --enforce-lockfile
+      - run: flutter analyze
+      - run: flutter test
+      - name: Build production APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.gradle/init.d
+          cat > ~/.gradle/init.d/official-repositories.gradle <<'GRADLE'
+          beforeSettings { settings ->
+            settings.pluginManagement.repositories { google(); mavenCentral(); gradlePluginPortal() }
+          }
+          allprojects { buildscript.repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          GRADLE
+          version_code="$(date +%s)"
+          flutter build apk --release --build-number="$version_code" --dart-define=API_BASE_URL=https://89-207-255-42.sslip.io/api/v1 --dart-define=APP_MODE=production --dart-define=APP_VERSION="1.0.0+$(git rev-parse --short HEAD)"
+          mkdir -p "$RUNNER_TEMP/apk-release"
+          cp build/app/outputs/flutter-apk/app-release.apk "$RUNNER_TEMP/apk-release/ersi-gbo.apk"
+          sdk="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          tools="$(find "$sdk/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          "$tools/apksigner" verify --verbose --print-certs "$RUNNER_TEMP/apk-release/ersi-gbo.apk"
+          "$tools/aapt" dump badging "$RUNNER_TEMP/apk-release/ersi-gbo.apk" | head -1
+          (cd "$RUNNER_TEMP/apk-release" && sha256sum ersi-gbo.apk > ersi-gbo.apk.sha256)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ersi-gbo-signed-apk
+          path: ${{ runner.temp }}/apk-release/
+          retention-days: 30
+      - name: Publish and verify APK download
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          server="${DEPLOY_USER:-root}@${DEPLOY_HOST}"
+          remote="$(ssh "$server" 'mktemp -d /opt/reestr/apk-upload.XXXXXX')"
+          trap 'ssh "$server" "rm -rf -- \"$remote\""' EXIT
+          scp "$RUNNER_TEMP/apk-release/ersi-gbo.apk" "$RUNNER_TEMP/apk-release/ersi-gbo.apk.sha256" "$server:$remote/"
+          ssh "$server" "bash -s -- '$remote'" <<'REMOTE'
+          set -euo pipefail
+          cd "$1"
+          sha256sum -c ersi-gbo.apk.sha256
+          target='/opt/reestr/app/build/web/downloads'
+          backup="/opt/reestr/backups/apk-$(date -u +%Y%m%dT%H%M%SZ)"
+          mkdir -p "$backup" "$target"
+          for name in ersi-gbo.apk ersi-gbo.apk.sha256; do
+            if [[ -f "$target/$name" ]]; then cp -a "$target/$name" "$backup/"; fi
+            install -m 644 "$name" "$target/$name.new"
+            mv -f "$target/$name.new" "$target/$name"
+          done
+          REMOTE
+          curl --fail --show-error --location --retry 3 'https://89-207-255-42.sslip.io/downloads/ersi-gbo.apk' --output "$RUNNER_TEMP/downloaded.apk"
+          cmp "$RUNNER_TEMP/apk-release/ersi-gbo.apk" "$RUNNER_TEMP/downloaded.apk"
+          echo 'APK: https://89-207-255-42.sslip.io/downloads/ersi-gbo.apk' >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove local signing material
+        if: always()
+        run: rm -f android/key.properties; rm -rf "$RUNNER_TEMP/android-signing"
