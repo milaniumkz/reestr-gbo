@@ -80,6 +80,11 @@ const inspectionRequiredLabels = <String, String>{
   'vehicle_owner': 'данные владельца',
 };
 const lawExtractTitle = 'Приказ №600 от 18 ноября 2021 года';
+const independentServiceNotice =
+    'ЕРСИ ГБО — независимый частный сервис. Приложение и разработчик не связаны с государственными органами, не представляют их и не предоставляют государственные услуги. Материалы о законодательстве приведены только для справки.';
+final officialLawUri = Uri.parse(
+  'https://www.adilet.zan.kz/rus/docs/V2100025219',
+);
 const lawExtractText =
     'Приказ № 600 Министра индустрии и инфраструктурного развития РК от 18 ноября 2021 года внес изменения в Правила организации и проведения обязательного технического осмотра механических транспортных средств.\n\n'
     'Данный приказ напрямую регулирует требования к автомобилям с газобаллонным оборудованием (ГБО) при прохождении техосмотра.\n\n'
@@ -125,13 +130,19 @@ void _showLawExtract(
               Expanded(
                 child: SingleChildScrollView(
                   controller: controller,
-                  child: Text(
-                    text,
-                    style: const TextStyle(
-                      color: ink,
-                      height: 1.45,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  child: Column(
+                    children: [
+                      const _ServiceNotice(),
+                      const SizedBox(height: 14),
+                      Text(
+                        text,
+                        style: const TextStyle(
+                          color: ink,
+                          height: 1.45,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -3576,9 +3587,9 @@ class _Splash extends StatelessWidget {
                 ),
                 child: Column(
                   children: [
-                    SizedBox(height: metrics.isShort ? 38 : 118),
+                    SizedBox(height: metrics.isShort ? 20 : 48),
                     const _LogoBig(),
-                    SizedBox(height: metrics.isShort ? 46 : 92),
+                    SizedBox(height: metrics.isShort ? 24 : 36),
                     const Text(
                       'ЕРСИ ГБО',
                       style: TextStyle(
@@ -3597,7 +3608,9 @@ class _Splash extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    SizedBox(height: metrics.isShort ? 22 : 44),
+                    const SizedBox(height: 16),
+                    const _ServiceNotice(onDark: true),
+                    const SizedBox(height: 16),
                     Center(
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 180),
@@ -3622,16 +3635,15 @@ class _Splash extends StatelessWidget {
                         ),
                       ),
                     ),
-                    SizedBox(height: metrics.isShort ? 24 : 44),
+                    const SizedBox(height: 16),
                     _SplashLawCard(
                       title: legalTitle,
                       excerpt: legalExcerpt,
                       body: legalBody,
                     ),
-                    SizedBox(height: metrics.isShort ? 18 : 26),
+                    const SizedBox(height: 16),
                     _PrimaryButton(
-                      text:
-                          'Наблюдатель (владелец авто с ГБО, оператор ЦТО, инспектор УДП)',
+                      text: 'Наблюдатель (проверка свидетельства ГБО)',
                       icon: Icons.visibility_rounded,
                       onTap: onObserver,
                     ),
@@ -5548,6 +5560,8 @@ class _LawInfo extends StatelessWidget {
       activeNav: _NavScope.publicModeOf(context) ? 2 : 3,
       child: Column(
         children: [
+          const _ServiceNotice(),
+          const SizedBox(height: 14),
           _ListTileCard(
             icon: Icons.policy_rounded,
             title: title,
@@ -5557,6 +5571,32 @@ class _LawInfo extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ServiceNotice extends StatelessWidget {
+  const _ServiceNotice({this.onDark = false});
+  final bool onDark;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = onDark ? Colors.white : ink;
+    return Column(
+      children: [
+        Text(
+          independentServiceNotice,
+          textAlign: TextAlign.center,
+          style: TextStyle(color: color, fontSize: 13, height: 1.4),
+        ),
+        TextButton.icon(
+          onPressed: () =>
+              launchUrl(officialLawUri, mode: LaunchMode.externalApplication),
+          icon: const Icon(Icons.open_in_new_rounded, size: 16),
+          label: const Text('Официальный источник: Әділет — приказ №600'),
+          style: TextButton.styleFrom(foregroundColor: color),
+        ),
+      ],
     );
   }
 }
