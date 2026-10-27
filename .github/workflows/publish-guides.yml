@@ -1,0 +1,43 @@
+name: Publish user guides
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify guide files
+        run: cd web/guides && sha256sum -c SHA256SUMS
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+      - name: Configure server identity
+        env:
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+      - name: Back up and publish static guides
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          server="${DEPLOY_USER:-root}@${DEPLOY_HOST}"
+          ssh "$server" 'bash /opt/reestr/app/ops/backup-reestr.sh && install -d -m 0755 /opt/reestr/app/build/web/guides'
+          rsync -az --chmod=D755,F644 web/guides/ "$server:/opt/reestr/app/build/web/guides/"
+          ssh "$server" 'cd /opt/reestr/app/build/web/guides && sha256sum -c SHA256SUMS'
+      - name: Verify public download
+        run: |
+          curl --fail --show-error --location --retry 3 https://89-207-255-42.sslip.io/guides/observer-guide-ru.mp4 --output "$RUNNER_TEMP/observer-guide.mp4"
+          cmp web/guides/observer-guide-ru.mp4 "$RUNNER_TEMP/observer-guide.mp4"
+          curl --fail --show-error --location https://89-207-255-42.sslip.io/guides/observer.html --output "$RUNNER_TEMP/observer.html"
+          cmp web/guides/observer.html "$RUNNER_TEMP/observer.html"
+          echo 'https://89-207-255-42.sslip.io/guides/observer.html' >> "$GITHUB_STEP_SUMMARY"
