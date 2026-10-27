@@ -12,7 +12,7 @@ jobs:
       - uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
-      - name: Inspect deployment disk usage
+      - name: Reclaim rebuildable release dependencies
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
@@ -21,4 +21,21 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
-          ssh "${DEPLOY_USER:-root}@${DEPLOY_HOST}" 'df -h /; du -sh /opt/reestr/releases /opt/reestr/backups /opt/reestr/storage /root/.npm 2>/dev/null; du -sh /opt/reestr/releases/* 2>/dev/null | tail -20'
+          ssh -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 "${DEPLOY_USER:-root}@${DEPLOY_HOST}" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          df -h /
+          mapfile -t releases < <(find /opt/reestr/releases -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | sort -r)
+          printf 'Release directories: %s\n' "${#releases[@]}"
+          # Preserve the three newest releases, all source files, uploads and backups.
+          for release in "${releases[@]:3}"; do
+            [[ "$release" =~ ^[0-9]{8}T[0-9]{6}Z-[0-9a-f]+$ ]] || continue
+            for component in backend admin tech; do
+              cache="/opt/reestr/releases/$release/$component/node_modules"
+              if [[ -d "$cache" && ! -L "$cache" ]]; then
+                rm -rf -- "$cache"
+              fi
+            done
+          done
+          npm cache clean --force
+          df -h /
+          REMOTE
