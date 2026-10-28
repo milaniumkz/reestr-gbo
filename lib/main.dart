@@ -3759,8 +3759,6 @@ class _Splash extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    const _ServiceNotice(onDark: true),
-                    const SizedBox(height: 16),
                     Center(
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 180),
@@ -5743,12 +5741,11 @@ class _LawInfo extends StatelessWidget {
 }
 
 class _ServiceNotice extends StatelessWidget {
-  const _ServiceNotice({this.onDark = false});
-  final bool onDark;
+  const _ServiceNotice();
 
   @override
   Widget build(BuildContext context) {
-    final color = onDark ? Colors.white : ink;
+    const color = ink;
     return Column(
       children: [
         Text(
