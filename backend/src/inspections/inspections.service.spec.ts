@@ -207,7 +207,7 @@ describe('Inspection quality control workflow', () => {
       qualityReviewStartedAt: null as Date | null,
       qualityReviewer: null as {id:string;fullName:string}|null,
       vehicleId:'vehicle_1',
-      photos: ['applicant_application','applicant_questionnaire','cylinder_label','vehicle_photo','tech_passport','gas_work_record','cylinder_work_record','gas_inspection_report','cylinder_inspection_report'].map(type => ({ id:type, type, objectKey:type })),
+      photos: ['applicant_application','applicant_questionnaire','cylinder_label','vehicle_photo','tech_passport','gas_work_record','cylinder_work_record','gas_inspection_report','cylinder_inspection_report'].map(type => ({ id:type, type, objectKey:type, checksum: undefined as string | undefined })),
       requireApplicantPhotos: false,
       vehicle: { cylinders:[{id:'cylinder_1',fuelType:'СНГ',producedAt:new Date('2024-07-15') as Date|null}], owners:[{id:'owner_1',userId:'owner_user',user:{phone:'+77001234567'}}] },
     };
@@ -230,7 +230,7 @@ describe('Inspection quality control workflow', () => {
       vehicleOwner: {update:jest.fn(async()=>({}))},
       gasCylinder: {findFirst:jest.fn(async()=>null),update:jest.fn(async()=>({}))},
       user: {findUnique:jest.fn(async()=>({id:'existing_user'})),create:jest.fn(async()=>({id:'new_user'}))},
-      inspectionPhoto: { deleteMany: jest.fn(async ({where}:{where:{inspectionId:string;type:string}}) => { const before=state.photos.length; state.photos=state.photos.filter(p=>p.type!==where.type); return {count:before-state.photos.length}; }), create: jest.fn(async ({ data }: { data: { type:string; objectKey:string } }) => {
+      inspectionPhoto: { findFirst: jest.fn(async ({where}:{where:{type:string;checksum:string}}) => state.photos.find(p=>p.type===where.type && p.checksum===where.checksum) ?? null), deleteMany: jest.fn(async ({where}:{where:{inspectionId:string;type:string}}) => { const before=state.photos.length; state.photos=state.photos.filter(p=>p.type!==where.type); return {count:before-state.photos.length}; }), create: jest.fn(async ({ data }: { data: { type:string; objectKey:string; checksum:string } }) => {
         const photo={id:'certificate-photo',...data}; state.photos.push(photo); return photo;
       }) },
       organizationMember: {
@@ -248,6 +248,37 @@ describe('Inspection quality control workflow', () => {
     const user=(id:string)=>({sub:id,phone:'test',roles:['inspection_org']});
     return {state,prisma,storage,certificates,service,user,moderation};
   }
+  it('reuses a saved photo on repeated upload, while retaining distinct images in the same document slot', async () => {
+    const f = fixture();
+    const file = {originalname:'report.jpg',buffer:Buffer.from('same-report')};
+    const first = await f.service.uploadPhoto('inspection_1','gas_work_record',file,f.user('inspector'));
+    const repeated = await f.service.uploadPhoto('inspection_1','gas_work_record',file,f.user('inspector'));
+    expect(repeated).toEqual(first);
+    expect(f.prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({action:'inspection.photo.duplicate_ignored'})}));
+    expect(f.prisma.inspectionPhoto.create).toHaveBeenCalledTimes(1);
+    expect(f.prisma.inspection.update.mock.invocationCallOrder[0]).toBeLessThan(f.prisma.inspectionPhoto.findFirst.mock.invocationCallOrder[0]);
+    await f.service.uploadPhoto('inspection_1','gas_work_record',{...file,buffer:Buffer.from('different-report')},f.user('inspector'));
+    expect(f.prisma.inspectionPhoto.create).toHaveBeenCalledTimes(2);
+    await f.service.uploadPhoto('inspection_1','cylinder_work_record',file,f.user('inspector'));
+    expect(f.prisma.inspectionPhoto.create).toHaveBeenCalledTimes(3);
+  });
+  it('keeps a single attachment when two upload requests overlap', async () => {
+    const f = fixture();
+    // Model PostgreSQL parent-row lock: a transaction holds it until commit.
+    let tail: Promise<unknown> = Promise.resolve();
+    f.prisma.$transaction.mockImplementation(action => {
+      const current = tail.then(()=>action(f.prisma));
+      tail = current.catch(()=>undefined);
+      return current;
+    });
+    const file = {originalname:'application.jpg',buffer:Buffer.from('application')};
+    const [first, second] = await Promise.all([
+      f.service.uploadPhoto('inspection_1','applicant_application',file,f.user('inspector')),
+      f.service.uploadPhoto('inspection_1','applicant_application',file,f.user('inspector')),
+    ]);
+    expect(first).toEqual(second);
+    expect(f.prisma.inspectionPhoto.create).toHaveBeenCalledTimes(1);
+  });
   it('prevents submission when the saved cylinder has no gas type',async()=>{
     const f=fixture();f.state.vehicle.cylinders[0].fuelType='';
     expect((await f.service.readiness('inspection_1',f.user('inspector'))).missing).toContain('fuel_type');

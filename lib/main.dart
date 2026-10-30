@@ -591,6 +591,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
   String? documentFileName;
   bool qualityConfirmed = false;
   bool qualityBusy = false;
+  bool _inspectionSubmitting = false;
   Map<String, String> packageDocumentNames = const {};
   Map<String, List<int>> packageDocumentBytes = const {};
   Map<String, Position> packageDocumentPositions = const {};
@@ -1838,6 +1839,8 @@ class _ErsiDemoState extends State<ErsiDemo> {
   }
 
   Future<void> _submitInspection() async {
+    if (_inspectionSubmitting) return;
+    setState(() => _inspectionSubmitting = true);
     try {
       if (_editingQualityInspection) {
         final id = await _ensureInspectionDraft();
@@ -1907,6 +1910,8 @@ class _ErsiDemoState extends State<ErsiDemo> {
         setState(() => apiState = message);
         _goToMissingInspectionStep(message);
       }
+    } finally {
+      if (mounted) setState(() => _inspectionSubmitting = false);
     }
   }
 
@@ -2889,6 +2894,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         onNext: () => go(23),
       ),
       23 => _ReviewStep(
+        busy: _inspectionSubmitting,
         onSubmit: _submitInspection,
         editingQuality: _editingQualityInspection,
       ),
@@ -6877,7 +6883,8 @@ class _ValidityStep extends StatelessWidget {
 }
 
 class _ReviewStep extends StatelessWidget {
-  const _ReviewStep({required this.onSubmit, this.editingQuality = false});
+  const _ReviewStep({required this.onSubmit, this.editingQuality = false, this.busy = false});
+  final bool busy;
   final bool editingQuality;
   final VoidCallback onSubmit;
 
@@ -6912,8 +6919,8 @@ class _ReviewStep extends StatelessWidget {
             text: editingQuality
                 ? 'Сохранить исправления'
                 : 'Отправить в контроль качества',
-            icon: Icons.send_rounded,
-            onTap: onSubmit,
+            icon: busy ? Icons.hourglass_top_rounded : Icons.send_rounded,
+            onTap: busy ? null : onSubmit,
           ),
         ],
       ),

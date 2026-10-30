@@ -130,7 +130,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       }),
       this.prisma.inspection.count({ where }),
     ]);
-    return listResponse(items, total, page, limit);
+    return listResponse(items.map(item => ({...item, photos: activeCylinderPhotos(item, item.photos)})), total, page, limit);
   }
 
   private dateRange(dateFrom?: string, dateTo?: string) {
@@ -321,10 +321,10 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
         },
       },
     });
-    if (status !== "approved") return inspection;
+    if (status !== "approved") return {...inspection, photos: activeCylinderPhotos(inspection, inspection.photos)};
 
     const certificate = await this.certificates.issueForInspection(id);
-    return { ...inspection, certificate };
+    return { ...inspection, photos: activeCylinderPhotos(inspection, inspection.photos), certificate };
   }
 
   async claimQualityReview(user: RequestUser | undefined, id: string) {
@@ -547,12 +547,12 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async photos(id: string, user?: RequestUser) {
-    await this.assertInspectionAccess(id, user);
+    const inspection = await this.assertInspectionAccess(id, user);
     const photos = await this.prisma.inspectionPhoto.findMany({
       where: { inspectionId: id },
       orderBy: { createdAt: "desc" },
     });
-    return photos.map((photo) => ({
+    return activeCylinderPhotos(inspection, photos).map((photo) => ({
       ...photo,
       viewUrl: this.storage.objectUrl(photo.objectKey).url,
     }));
@@ -667,12 +667,22 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
         lng,
       };
     const photo = await this.prisma.$transaction(async tx=>{
+      // Updating the parent row serializes uploads from all application instances.
+      // Recheck access/status after the lock, since moderation may have taken time.
+      const locked = await tx.inspection.update({where:{id},data:{updatedAt:new Date()}});
+      if (locked.status !== inspection.status || locked.secondCylinderSerial !== inspection.secondCylinderSerial || locked.usesTwoCylinders !== inspection.usesTwoCylinders) throw new ConflictException("Инспекция изменилась. Обновите данные перед загрузкой");
+      if (locked.status === "submitted" && locked.qualityReviewerId !== user!.sub) throw new ConflictException("Инспекцию уже проверяет другой сотрудник");
+      const existing = await tx.inspectionPhoto.findFirst({where:{inspectionId:id,type,checksum,cylinderSerial:photoData.cylinderSerial},orderBy:{createdAt:"desc"}});
+      if (existing) {
+        if (type === "certificate_document" && !locked.qualityDocumentUploadedAt) await tx.inspection.update({where:{id},data:{qualityDocumentUploadedAt:new Date()}});
+        await tx.auditLog.create({data:{actorId:user?.sub,action:"inspection.photo.duplicate_ignored",entity:"inspection",entityId:id,metadata:{photoId:existing.id,fileId:storedObject.id,type,checksum,lat,lng}}});
+        return existing;
+      }
       if(inspection.status === "submitted" && type !== "certificate_document"){
-        await tx.inspection.update({where:{id,status:"submitted",qualityReviewerId:user!.sub},data:{updatedAt:new Date()}});
         await tx.inspectionPhoto.deleteMany({where:{inspectionId:id,type}});
       }else if(type === "certificate_document"){
         await tx.inspection.update({where:{id,status:"submitted",qualityReviewerId:user!.sub},data:{qualityDocumentUploadedAt:new Date()}});
-      }else await tx.inspection.update({where:{id},data:{updatedAt:new Date()}});
+      }
       const saved=await tx.inspectionPhoto.create({data:photoData});
       if(moderation.moderationStatus==='manual_review')await notifyPhotoReview(tx,id,user?.sub);
       await tx.auditLog.create({data:{actorId:user?.sub,action:"inspection.photo.upload",entity:"inspection",entityId:id,metadata:{photoId:saved.id,fileId:storedObject.id,type,objectKey,lat,lng}}});

@@ -1,3 +1,4 @@
+import { activeCylinderPhotos } from '../inspections/cylinder-pair';
 import { residenceCity as parseResidenceCity } from '../technical/city-risk';
 import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
 import { hasGlobalAccess, userOrganizationIds } from "../common/access-scope";
@@ -175,8 +176,8 @@ export class OrganizationsService {
     return { ok: true };
   }
 
-  detail(id: string) {
-    return this.prisma.organization.findUniqueOrThrow({
+  async detail(id: string) {
+    const organization = await this.prisma.organization.findUniqueOrThrow({
       where: { id },
       include: {
         balances: true,
@@ -204,6 +205,7 @@ export class OrganizationsService {
         },
       },
     });
+    return {...organization, inspections: organization.inspections.map(inspection => ({...inspection, photos: activeCylinderPhotos(inspection, inspection.photos)}))};
   }
 
   async activity(id: string) {

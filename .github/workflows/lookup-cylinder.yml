@@ -1,10 +1,15 @@
-name: Read-only cylinder lookup
+name: Read-only cylinder or inspection lookup
 on:
   workflow_dispatch:
     inputs:
       serial:
         required: true
         type: string
+      lookup_kind:
+        required: false
+        default: cylinder
+        type: choice
+        options: [cylinder, inspection]
       delivery_public_key:
         required: true
         type: string
@@ -25,9 +30,11 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
           SERIAL: ${{ inputs.serial }}
+          LOOKUP_KIND: ${{ inputs.lookup_kind }}
           DELIVERY_PUBLIC_KEY: ${{ inputs.delivery_public_key }}
         run: |
           set -euo pipefail
+          [[ "$LOOKUP_KIND" == cylinder || "$LOOKUP_KIND" == inspection ]]
           [[ "$SERIAL" =~ ^[0-9A-Za-z._/-]{1,100}$ ]]
           [[ "$DELIVERY_PUBLIC_KEY" =~ ^[A-Za-z0-9+/=]+$ ]]
           mkdir -p ~/.ssh
@@ -37,7 +44,7 @@ jobs:
           remote="$(ssh "$server" 'mktemp -d /tmp/reestr-cylinder-lookup.XXXXXX')"
           trap 'ssh "$server" "rm -rf -- \"$remote\""' EXIT
           scp ops/lookup-cylinder.cjs "$server:$remote/lookup.cjs"
-          ssh "$server" "set -a; source /opt/reestr/app/backend/.env; set +a; node '$remote/lookup.cjs' '$SERIAL' '$DELIVERY_PUBLIC_KEY'" > "$RUNNER_TEMP/cylinder-report.sealed.json"
+          ssh "$server" "set -a; source /opt/reestr/app/backend/.env; set +a; node '$remote/lookup.cjs' '$SERIAL' '$DELIVERY_PUBLIC_KEY' '$LOOKUP_KIND'" > "$RUNNER_TEMP/cylinder-report.sealed.json"
           test -s "$RUNNER_TEMP/cylinder-report.sealed.json"
       - uses: actions/upload-artifact@v4
         with:

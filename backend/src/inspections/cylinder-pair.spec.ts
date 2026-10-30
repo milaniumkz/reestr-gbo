@@ -1,5 +1,5 @@
 import { jest } from '@jest/globals';
-import { cylinderPair } from './cylinder-pair';
+import { activeCylinderPhotos, cylinderPair } from './cylinder-pair';
 import { InspectionsService } from './inspections.service';
 
 describe('Two cylinders', () => {
@@ -26,5 +26,26 @@ describe('Two cylinders', () => {
     expect((await svc.readiness('i',user)).ready).toBe(true);
     state.secondCylinderSerial='C';
     expect((await svc.readiness('i',user)).ready).toBe(false);
+  });
+});
+
+describe('Exact photo duplicates', () => {
+  it('shows 10 documents rather than 16 after six repeated uploads, preserving the newest copies', () => {
+    const originals = Array.from({length:10}, (_,i)=>({id:`original-${i}`,type:`type-${i}`,checksum:`checksum-${i}`,createdAt:new Date(1000)}));
+    const repeats = originals.slice(0,6).map(photo=>({...photo,id:`repeat-${photo.id}`,createdAt:new Date(2000)}));
+    const visible = activeCylinderPhotos({}, [...repeats,...originals]);
+    expect(visible).toHaveLength(10);
+    expect(visible.map(photo=>photo.id)).toEqual([...repeats,...originals.slice(6)].map(photo=>photo.id));
+    expect(activeCylinderPhotos({}, [...originals,...repeats])).toHaveLength(10);
+  });
+  it('retains different files, separate slots, separate cylinder serials and legacy files without checksums', () => {
+    const photos = [
+      {type:'photo',checksum:'A',cylinderSerial:'1'},
+      {type:'photo',checksum:'B',cylinderSerial:'1'},
+      {type:'photo',checksum:'A',cylinderSerial:'2'},
+      {type:'tech_passport',checksum:'A'},
+      {type:'photo'}, {type:'photo'},
+    ];
+    expect(activeCylinderPhotos({},photos)).toEqual(photos);
   });
 });

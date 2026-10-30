@@ -16,6 +16,7 @@ const actions: Record<string, string> = {
   "inspection.status.update": "Изменение статуса инспекции",
   "inspection.photo.rotate": "Поворот фотографии инспекции",
   "inspection.photo.upload": "Загрузка документа инспекции",
+  "inspection.photo.duplicate_ignored": "Повторная загрузка: сохранён ранее загруженный документ",
   "organization.member.add": "Добавление сотрудника ИО",
   "organization.member.remove": "Удаление сотрудника ИО",
 };
