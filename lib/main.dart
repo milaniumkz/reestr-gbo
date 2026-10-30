@@ -102,6 +102,8 @@ const inspectionRequiredLabels = <String, String>{
   'cylinder_produced_at': 'дату выпуска баллона',
   'vehicle_owner': 'данные владельца',
 };
+const cylinderShapeRequiredMessage =
+    'Выберите тип баллона: тороидальный либо цилиндрический';
 const lawExtractTitle = 'Приказ №600 от 18 ноября 2021 года';
 const independentServiceNotice =
     'ЕРСИ ГБО — независимый частный сервис. Приложение и разработчик не связаны с государственными органами, не представляют их и не предоставляют государственные услуги. Материалы о законодательстве приведены только для справки.';
@@ -564,7 +566,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
   String cylinderFuel = '';
   String reducerName = '';
   String controlUnitName = '';
-  String cylinderShape = 'Тороидальный';
+  String cylinderShape = '';
   String publicPlateNumber = '';
   String publicVinLast3 = '';
   String? draftVehicleId;
@@ -1699,7 +1701,13 @@ class _ErsiDemoState extends State<ErsiDemo> {
     }
   }
 
+  bool get _hasCylinderShape =>
+      const ['Тороидальный', 'Цилиндрический'].contains(cylinderShape);
+
   Future<String> _ensureInspectionDraft() async {
+    if (draftInspectionId == null && !_hasCylinderShape) {
+      throw StateError(cylinderShapeRequiredMessage);
+    }
     final missing = <String>[
       if (ownerName.trim().isEmpty) 'ФИО владельца',
       if (inspectionCertificateNumber.trim().isEmpty) 'номер свидетельства',
@@ -2124,6 +2132,10 @@ class _ErsiDemoState extends State<ErsiDemo> {
   }
 
   Future<void> _goCylinderNext() async {
+    if (!_hasCylinderShape) {
+      setState(() => apiState = cylinderShapeRequiredMessage);
+      return;
+    }
     final missing = <String>[
       if (!const ['СНГ', 'КПГ'].contains(cylinderFuel.trim()))
         'тип газа (СНГ или КПГ)',
@@ -2174,7 +2186,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       cylinderFuel = '';
       reducerName = '';
       controlUnitName = '';
-      cylinderShape = 'Тороидальный';
+      cylinderShape = '';
       cylinderPhotoName = null;
       cylinderPhotoBytes = null;
       cylinderPhotoPosition = null;
@@ -2360,6 +2372,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         vehicleMakeModel = detail.vehicleName;
         vehicleYear = detail.vehicleYear;
         cylinderNumber = detail.cylinderSerial;
+        cylinderShape = '';
         usesTwoCylinders = detail.usesTwoCylinders;
         secondCylinderNumber = detail.secondCylinderSerial;
         cylinderMaker = detail.cylinderManufacturer;
@@ -2731,7 +2744,10 @@ class _ErsiDemoState extends State<ErsiDemo> {
         onFuel: (value) => setState(() => cylinderFuel = value),
         onReducerName: (value) => setState(() => reducerName = value),
         onControlUnitName: (value) => setState(() => controlUnitName = value),
-        onShape: (value) => setState(() => cylinderShape = value),
+        onShape: (value) => setState(() {
+          cylinderShape = value;
+          if (apiState == cylinderShapeRequiredMessage) apiState = '';
+        }),
         onNext: _goCylinderNext,
       ),
       18 => _PhotoStep(
@@ -3302,7 +3318,8 @@ class _AppAlertBanner extends StatelessWidget {
         lower.contains('не удалось')) {
       return _AlertTone.error;
     }
-    if (lower.contains('введите') ||
+    if (lower.contains('выберите') ||
+        lower.contains('введите') ||
         lower.contains('заполните') ||
         lower.contains('не хватает') ||
         lower.contains('не найден') ||
