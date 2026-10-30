@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../camera/document_bounds.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'document_crop.dart';
@@ -12,9 +13,11 @@ class DocumentCameraScreen extends StatefulWidget {
     super.key,
     required this.title,
     this.frameAspectRatio = 0.71,
+    this.requireDocumentBounds = true,
   });
   final String title;
   final double frameAspectRatio;
+  final bool requireDocumentBounds;
   @override
   State<DocumentCameraScreen> createState() => _DocumentCameraScreenState();
 }
@@ -24,7 +27,66 @@ class _DocumentCameraScreenState extends State<DocumentCameraScreen>
   CameraController? _controller;
   bool _initializing = false;
   bool _busy = false;
+  bool _completed = false;
   String? _error;
+  final _gate = DocumentFrameGate();
+  bool _analyzing = false;
+  int _generation = 0;
+  DateTime _lastFrame = DateTime.fromMillisecondsSinceEpoch(0);
+  Timer? _freshness;
+  bool get _ready =>
+      !widget.requireDocumentBounds || _gate.ready(DateTime.now());
+
+  Future<void> _startAnalysis(CameraController controller) async {
+    if (!widget.requireDocumentBounds) return;
+    final generation = ++_generation;
+    _gate.reset();
+    await controller.startImageStream((image) async {
+      final now = DateTime.now();
+      if (_analyzing ||
+          _busy ||
+          now.difference(_lastFrame).inMilliseconds < 300) {
+        return;
+      }
+      _lastFrame = now;
+      _analyzing = true;
+      try {
+        final bgra = image.format.group == ImageFormatGroup.bgra8888;
+        if (!bgra &&
+            image.format.group != ImageFormatGroup.yuv420 &&
+            image.format.group != ImageFormatGroup.nv21) {
+          throw StateError('Unsupported camera format');
+        }
+        final plane = image.planes.first;
+        final rotation = image.width > image.height
+            ? controller.description.sensorOrientation
+            : 0;
+        final input = sampleDocumentLuma(
+          bytes: plane.bytes,
+          width: image.width,
+          height: image.height,
+          rowStride: plane.bytesPerRow,
+          pixelStride: bgra ? 4 : plane.bytesPerPixel ?? 1,
+          rotation: rotation,
+          bgra: bgra,
+        );
+        input['frameRatio'] = widget.frameAspectRatio;
+        final result = await compute(analyzeDocumentFrame, input);
+        if (mounted && generation == _generation && !_busy) {
+          setState(() => _gate.update(result, now));
+        }
+      } catch (_) {
+        if (mounted && generation == _generation) setState(() => _gate.reset());
+      } finally {
+        _analyzing = false;
+      }
+    });
+    _freshness?.cancel();
+    _freshness = Timer.periodic(const Duration(milliseconds: 400), (_) {
+      if (mounted && !_busy) setState(() {});
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -57,7 +119,8 @@ class _DocumentCameraScreenState extends State<DocumentCameraScreen>
         await controller.dispose();
         return;
       }
-      setState(() => _error = null);
+      await _startAnalysis(controller);
+      if (mounted) setState(() => _error = null);
     } catch (error) {
       if (mounted) {
         setState(
@@ -77,6 +140,9 @@ class _DocumentCameraScreenState extends State<DocumentCameraScreen>
     final controller = _controller;
     if (state == AppLifecycleState.inactive &&
         controller?.value.isInitialized == true) {
+      _generation++;
+      _gate.reset();
+      _freshness?.cancel();
       _controller = null;
       unawaited(controller!.dispose());
       if (mounted) setState(() {});
@@ -87,36 +153,67 @@ class _DocumentCameraScreenState extends State<DocumentCameraScreen>
 
   Future<void> _capture() async {
     final controller = _controller;
-    if (_busy || controller?.value.isInitialized != true) return;
+    if (_busy || !_ready || controller?.value.isInitialized != true) return;
     setState(() => _busy = true);
     try {
-      final photo = await controller!.takePicture();
+      _generation++;
+      if (controller!.value.isStreamingImages) {
+        await controller.stopImageStream();
+      }
+      final photo = await controller.takePicture();
       final cropped = await compute(cropDocumentPhoto, <String, Object>{
         'bytes': await photo.readAsBytes(),
         'previewRatio': 1 / controller.value.aspectRatio,
         'frameRatio': widget.frameAspectRatio,
+        'requireDocumentBounds': widget.requireDocumentBounds,
       });
       final file = PickedLocalFile(
         name: 'document-${DateTime.now().millisecondsSinceEpoch}.jpg',
         bytes: cropped,
       );
-      if (mounted) Navigator.of(context).pop(file);
-    } catch (_) {
+      if (mounted) {
+        _completed = true;
+        Navigator.of(context).pop(file);
+      }
+    } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Не удалось сделать фото. Попробуйте ещё раз.'),
+          SnackBar(
+            content: Text(
+              error is StateError
+                  ? error.message.toString()
+                  : 'Не удалось сделать фото. Попробуйте ещё раз.',
+            ),
           ),
         );
       }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+        if (!_completed &&
+            identical(controller, _controller) &&
+            controller!.value.isInitialized &&
+            !controller.value.isStreamingImages) {
+          try {
+            await _startAnalysis(controller);
+          } catch (_) {
+            if (mounted) {
+              setState(
+                () => _error =
+                    'Не удалось проверить границы документа. Откройте камеру заново.',
+              );
+            }
+          }
+        }
+      }
     }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _generation++;
+    _freshness?.cancel();
     final controller = _controller;
     if (controller != null) unawaited(controller.dispose());
     super.dispose();
@@ -167,6 +264,7 @@ class _DocumentCameraScreenState extends State<DocumentCameraScreen>
                                 child: CustomPaint(
                                   painter: DocumentFramePainter(
                                     widget.frameAspectRatio,
+                                    ready: _ready,
                                   ),
                                 ),
                               ),
@@ -191,6 +289,20 @@ class _DocumentCameraScreenState extends State<DocumentCameraScreen>
                     },
                   ),
                 ),
+                if (widget.requireDocumentBounds)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    child: Text(
+                      _ready ? documentReadyMessage : _gate.message,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: _ready ? Colors.greenAccent : Colors.white,
+                      ),
+                    ),
+                  ),
                 SafeArea(
                   top: false,
                   child: Padding(
@@ -199,7 +311,7 @@ class _DocumentCameraScreenState extends State<DocumentCameraScreen>
                       width: double.infinity,
                       height: 56,
                       child: FilledButton.icon(
-                        onPressed: _busy ? null : _capture,
+                        onPressed: _busy || !_ready ? null : _capture,
                         icon: const Icon(Icons.camera_alt),
                         label: Text(_busy ? 'Съёмка…' : 'Сделать фото'),
                       ),
@@ -213,7 +325,8 @@ class _DocumentCameraScreenState extends State<DocumentCameraScreen>
 }
 
 class DocumentFramePainter extends CustomPainter {
-  const DocumentFramePainter(this.aspectRatio);
+  const DocumentFramePainter(this.aspectRatio, {this.ready = false});
+  final bool ready;
   final double aspectRatio;
   @override
   void paint(Canvas canvas, Size size) {
@@ -226,7 +339,7 @@ class DocumentFramePainter extends CustomPainter {
     canvas.drawRRect(
       RRect.fromRectAndRadius(rect, const Radius.circular(12)),
       Paint()
-        ..color = Colors.white
+        ..color = ready ? Colors.greenAccent : Colors.orangeAccent
         ..style = PaintingStyle.stroke
         ..strokeWidth = 3,
     );
@@ -234,5 +347,5 @@ class DocumentFramePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(DocumentFramePainter oldDelegate) =>
-      oldDelegate.aspectRatio != aspectRatio;
+      oldDelegate.aspectRatio != aspectRatio || oldDelegate.ready != ready;
 }

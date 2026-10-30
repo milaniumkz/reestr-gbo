@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import '../camera/document_bounds.dart';
 import 'dart:typed_data';
 import 'dart:ui';
 import 'package:image/image.dart' as img;
@@ -25,6 +26,34 @@ Uint8List cropDocumentPhoto(Map<String, Object> input) {
     image.height * previewRatio,
   );
   final visibleHeight = visibleWidth / previewRatio;
+  if (input['requireDocumentBounds'] == true) {
+    final visible = img.copyCrop(
+      image,
+      x: ((image.width - visibleWidth) / 2).round(),
+      y: ((image.height - visibleHeight) / 2).round(),
+      width: visibleWidth.round(),
+      height: visibleHeight.round(),
+    );
+    final scale = math.min(1.0, 320 / math.max(visible.width, visible.height));
+    final small = img.copyResize(
+      visible,
+      width: (visible.width * scale).round(),
+      height: (visible.height * scale).round(),
+    );
+    final gray = Uint8List(small.width * small.height);
+    for (var y = 0; y < small.height; y++) {
+      for (var x = 0; x < small.width; x++) {
+        gray[y * small.width + x] = small.getPixel(x, y).luminance.round();
+      }
+    }
+    final result = analyzeDocumentFrame({
+      'gray': gray,
+      'width': small.width,
+      'height': small.height,
+      'frameRatio': frameRatio,
+    });
+    if (!result.fits) throw StateError(result.message);
+  }
   final left =
       (image.width - visibleWidth) / 2 +
       frame.left / previewRatio * visibleWidth;

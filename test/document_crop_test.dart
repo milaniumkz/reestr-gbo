@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'dart:ui';
+import 'package:reestr_ts_demo/camera/document_bounds.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:reestr_ts_demo/widgets/document_crop.dart';
@@ -34,6 +35,48 @@ void main() {
       expect(pixel.b, greaterThan(235));
     }
   });
+  test(
+    'still-photo validation rejects a moved document before any crop is returned',
+    () {
+      final source = img.Image(width: 400, height: 600);
+      img.fill(source, color: img.ColorRgb8(35, 35, 35));
+      img.fillRect(
+        source,
+        x1: 70,
+        y1: 110,
+        x2: 330,
+        y2: 480,
+        color: img.ColorRgb8(225, 225, 225),
+      );
+      final input = <String, Object>{
+        'bytes': Uint8List.fromList(img.encodePng(source)),
+        'previewRatio': 400 / 600,
+        'frameRatio': .71,
+        'requireDocumentBounds': true,
+      };
+      expect(cropDocumentPhoto(input), isNotEmpty);
+      img.fill(source, color: img.ColorRgb8(35, 35, 35));
+      img.fillRect(
+        source,
+        x1: 2,
+        y1: 110,
+        x2: 330,
+        y2: 480,
+        color: img.ColorRgb8(225, 225, 225),
+      );
+      input['bytes'] = Uint8List.fromList(img.encodePng(source));
+      expect(
+        () => cropDocumentPhoto(input),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'reason',
+            documentOutsideMessage,
+          ),
+        ),
+      );
+    },
+  );
   test('a portrait document frame stays within the camera preview', () {
     for (final size in [const Size(360, 480), const Size(800, 400)]) {
       final frame = documentFrameRect(size, .71);

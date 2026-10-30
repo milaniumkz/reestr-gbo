@@ -1551,6 +1551,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
           camera: true,
           languageCode: languageCode,
           frameAspectRatio: 1.6,
+          requireDocumentBounds: kind != 'vehicle',
         );
         final pickedBytes = file?.bytes;
         if (file == null || pickedBytes == null || pickedBytes.isEmpty) {
@@ -1570,6 +1571,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
                   ? 'Фото бирки баллона'
                   : 'Фото автомобиля',
               frameAspectRatio: 1.6,
+              requireDocumentBounds: kind != 'vehicle',
             ),
           ),
         );
@@ -1643,7 +1645,10 @@ class _ErsiDemoState extends State<ErsiDemo> {
           MaterialPageRoute(
             builder: (_) => DocumentCameraScreen(
               title: label,
-              frameAspectRatio: type == 'tech_passport_back' ? 1.6 : .71,
+              frameAspectRatio:
+                  (type == 'tech_passport_back' || type == 'cylinder_label_2')
+                  ? 1.6
+                  : .71,
             ),
           ),
         );
@@ -1657,7 +1662,10 @@ class _ErsiDemoState extends State<ErsiDemo> {
                 extensions,
                 camera: camera,
                 languageCode: Localizations.localeOf(context).languageCode,
-                frameAspectRatio: type == 'tech_passport_back' ? 1.6 : .71,
+                frameAspectRatio:
+                    (type == 'tech_passport_back' || type == 'cylinder_label_2')
+                    ? 1.6
+                    : .71,
               )
             : await _pickPluginFile(extensions);
       }
@@ -6883,7 +6891,11 @@ class _ValidityStep extends StatelessWidget {
 }
 
 class _ReviewStep extends StatelessWidget {
-  const _ReviewStep({required this.onSubmit, this.editingQuality = false, this.busy = false});
+  const _ReviewStep({
+    required this.onSubmit,
+    this.editingQuality = false,
+    this.busy = false,
+  });
   final bool busy;
   final bool editingQuality;
   final VoidCallback onSubmit;

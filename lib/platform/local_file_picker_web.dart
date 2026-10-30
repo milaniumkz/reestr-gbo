@@ -13,10 +13,12 @@ Future<PickedLocalFile?> pickLocalFile(
   bool camera = false,
   String languageCode = 'ru',
   double frameAspectRatio = 0.71,
+  bool requireDocumentBounds = true,
 }) async {
   if (camera) {
     return captureDocumentPhoto(
       frameAspectRatio: frameAspectRatio,
+      requireDocumentBounds: requireDocumentBounds,
       languageCode: languageCode,
     );
   }
