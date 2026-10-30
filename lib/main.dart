@@ -1410,6 +1410,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
   void _applyPartialXlsxImport(CertificateImportResult result) {
     final data = result.partial;
     setState(() {
+      cylinderShape = '';
       inspectionCertificateNumber = _nonEmpty(
         data['certificateNumber'],
         inspectionCertificateNumber,
