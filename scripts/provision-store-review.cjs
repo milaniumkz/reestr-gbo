@@ -31,6 +31,16 @@ async function main() {
       if (type === 'inspection_org') {
         await tx.organizationMember.upsert({ where: { organizationId_userId_role: { organizationId: organization.id, userId: user.id, role: 'admin' } }, update: {}, create: { organizationId: organization.id, userId: user.id, role: 'admin' } });
         await tx.balance.upsert({ where: { organizationId: organization.id }, update: {}, create: { organizationId: organization.id, amount: 0, currency: 'KZT' } });
+        const qualityPhone = '+77000000993';
+        const qualityName = 'Store Review Quality — ERSI GBO';
+        const existingQuality = await tx.user.findUnique({ where: { phone: qualityPhone } });
+        if (existingQuality && existingQuality.fullName !== qualityName) throw Error('Review quality phone identifier collision');
+        if (existingQuality && !await bcrypt.compare(password, existingQuality.passwordHash)) throw Error('Review quality password differs; no reset performed');
+        const quality = existingQuality || await tx.user.create({ data: { phone: qualityPhone, fullName: qualityName, passwordHash, mustChangePassword: false } });
+        const otherMembership = await tx.organizationMember.findFirst({ where: { userId: quality.id, organizationId: { not: organization.id } } });
+        if (otherMembership) throw Error('Review quality account belongs to another organization');
+        await tx.userRole.upsert({ where: { userId_role: { userId: quality.id, role: 'inspection_org' } }, update: {}, create: { userId: quality.id, role: 'inspection_org' } });
+        await tx.organizationMember.upsert({ where: { organizationId_userId_role: { organizationId: organization.id, userId: quality.id, role: 'quality_control' } }, update: {}, create: { organizationId: organization.id, userId: quality.id, role: 'quality_control' } });
       }
     }
   });

@@ -86,8 +86,9 @@ void main() {
         for (var i = 0, j = 3; i < 4; j = i++) {
           final a = polygon[i], b = polygon[j];
           if ((a[1] > y) != (b[1] > y) &&
-              x < (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0])
+              x < (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0]) {
             inside = !inside;
+          }
         }
         gray[y * 200 + x] = (inside ? 225 : 35) + random.nextInt(17) - 8;
       }
