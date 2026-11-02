@@ -1,0 +1,36 @@
+name: Publish web QR download
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+      - name: Publish QR image and download page
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          server="${DEPLOY_USER:-root}@${DEPLOY_HOST}"
+          remote="$(ssh "$server" 'mktemp -d /tmp/reestr-qr.XXXXXX')"
+          trap 'ssh "$server" "rm -rf -- \"$remote\""' EXIT
+          scp web/downloads/ersi-gbo-web-qr.png web/qr.html "$server:$remote/"
+          ssh "$server" "set -e; mkdir -p /opt/reestr/app/build/web/downloads; install -m644 '$remote/ersi-gbo-web-qr.png' /opt/reestr/app/build/web/downloads/ersi-gbo-web-qr.png; install -m644 '$remote/qr.html' /opt/reestr/app/build/web/qr.html"
+          curl --fail --silent --show-error https://89-207-255-42.sslip.io/downloads/ersi-gbo-web-qr.png -o "$RUNNER_TEMP/public-qr.png"
+          cmp web/downloads/ersi-gbo-web-qr.png "$RUNNER_TEMP/public-qr.png"
+          curl --fail --silent --show-error https://89-207-255-42.sslip.io/qr.html -o "$RUNNER_TEMP/public-qr.html"
+          cmp web/qr.html "$RUNNER_TEMP/public-qr.html"
