@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { TechPassportService } from '../tech-passport/tech-passport.service';
 import { passportProofMatches } from '../tech-passport/passport-content';
 import { assertSecondCylinderUnique } from './second-cylinder-uniqueness';
@@ -492,7 +493,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       user,
     );
     const photoTypes = new Set(inspection.photos.filter(photo => !allSecondCylinderDocuments.includes(photo.type) || (inspection.usesTwoCylinders && photo.cylinderSerial === inspection.secondCylinderSerial)).map((photo) => photo.type));
-    const verifiedPassport=inspection.photos.find(photo=>photo.type==='tech_passport'&&photo.documentVerification);
+    const verifiedPassport=inspection.photos.find(photo=>photo.type==='tech_passport'&&/\.pdf$/i.test(photo.objectKey)&&photo.documentVerification);
     const passportChanged=verifiedPassport && !passportProofMatches(verifiedPassport.documentVerification,inspection.vehicle);
     const required = [
       "cylinder_label",
@@ -653,7 +654,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
     try{
       if(['tech_passport','tech_passport_back'].includes(type) && file.originalname.toLowerCase().endsWith('.pdf') && file.buffer.subarray(0,5).toString()!=='%PDF-') throw new BadRequestException('Выберите настоящий PDF-файл техпаспорта');
       moderation=await this.photoModeration.check(file.buffer,file.originalname,type.endsWith("_2") ? type.slice(0,-2) : type);
-      if(['tech_passport','tech_passport_back'].includes(type)){
+      if(['tech_passport','tech_passport_back'].includes(type) && file.buffer.subarray(0,5).toString()==='%PDF-'){
         const vehicle=await this.prisma.vehicle.findUnique({where:{id:inspection.vehicleId}});
         if(!vehicle) throw new BadRequestException('Автомобиль не найден');
         const primary=type==='tech_passport_back'?await this.prisma.inspectionPhoto.findFirst({where:{inspectionId:id,type:'tech_passport'},orderBy:{createdAt:'desc'}}):null;
@@ -707,14 +708,15 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       if (locked.status === "submitted" && locked.qualityReviewerId !== user!.sub) throw new ConflictException("Инспекцию уже проверяет другой сотрудник");
       const existing = await tx.inspectionPhoto.findFirst({where:{inspectionId:id,type,checksum,cylinderSerial:photoData.cylinderSerial},orderBy:{createdAt:"desc"}});
       if (existing) {
-        if(documentVerification) {
-          await tx.inspectionPhoto.update({where:{id:existing.id},data:{documentVerification,...moderation}});
+        const passportSlot=['tech_passport','tech_passport_back'].includes(type);
+        if(passportSlot) {
+          await tx.inspectionPhoto.update({where:{id:existing.id},data:{documentVerification:documentVerification ?? Prisma.DbNull,...moderation,moderationReason:moderation.moderationReason ?? null}});
           await tx.inspectionPhoto.deleteMany({where:{inspectionId:id,type,id:{not:existing.id}}});
           if(type==='tech_passport' && pdf) await tx.inspectionPhoto.deleteMany({where:{inspectionId:id,type:'tech_passport_back'}});
         }
         if (isCertificate && !locked[qualityUploadField]) await tx.inspection.update({where:{id},data:{[qualityUploadField]:new Date()}});
         await tx.auditLog.create({data:{actorId:user?.sub,action:"inspection.photo.duplicate_ignored",entity:"inspection",entityId:id,metadata:{photoId:existing.id,fileId:storedObject.id,type,checksum,lat,lng}}});
-        return documentVerification ? {...existing,documentVerification,...moderation} : existing;
+        return passportSlot ? {...existing,documentVerification:documentVerification ?? null,...moderation,moderationReason:moderation.moderationReason ?? null} : existing;
       }
       if(['tech_passport','tech_passport_back'].includes(type)) {
         await tx.inspectionPhoto.deleteMany({where:{inspectionId:id,type}});

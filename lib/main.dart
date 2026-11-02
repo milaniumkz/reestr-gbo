@@ -1658,7 +1658,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
             ..remove('tech_passport_back');
         }
         apiState =
-            'Техпаспорт выбран. Содержимое и данные автомобиля будут проверены при отправке';
+            'Техпаспорт выбран. PDF проверяется по содержимому и данным автомобиля; фотография — только по качеству снимка';
       });
     } catch (error) {
       if (mounted) {
@@ -2044,7 +2044,9 @@ class _ErsiDemoState extends State<ErsiDemo> {
       required bool uploaded,
     }) async {
       if (uploaded || filename == null || bytes == null) return;
-      if (kind == 'tech_passport' && mounted) {
+      if (kind == 'tech_passport' &&
+          filename.toLowerCase().endsWith('.pdf') &&
+          mounted) {
         setState(
           () => apiState =
               'Проверка техпаспорта: распознавание документа и данных автомобиля',
@@ -6917,7 +6919,7 @@ class _PhotoStep extends StatelessWidget {
             const _InfoBox(
               title: 'Проверка техпаспорта',
               text:
-                  'Файл должен содержать техпаспорт этого автомобиля. Для электронного PDF проверяются VIN и государственный номер. Каспи и другие приложения: сохраните PDF и выберите его в файлах.',
+                  'PDF должен содержать техпаспорт этого автомобиля: проверяются VIN и государственный номер. Для фотографии проверяется только качество снимка, без распознавания текста. Каспи и другие приложения: сохраните PDF и выберите его в файлах.',
             )
           else
             const _InfoBox(

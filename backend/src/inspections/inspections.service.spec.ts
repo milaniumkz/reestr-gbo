@@ -263,10 +263,32 @@ describe('Inspection quality control workflow', () => {
     f.state.vehicle.plateNumber='888AAA02';
     expect((await f.service.readiness('inspection_1',f.user('inspector'))).missing).toContain('tech_passport_vehicle_mismatch');
   });
+  it('checks photo quality but never OCRs a photographed tech passport',async()=>{
+    const f=fixture();
+    f.passport.verify.mockRejectedValue(new BadRequestException('OCR must not run for photos'));
+    await f.service.uploadPhoto('inspection_1','tech_passport',{originalname:'passport.jpg',buffer:Buffer.from('readable-photo')},f.user('inspector'));
+    await f.service.uploadPhoto('inspection_1','tech_passport_back',{originalname:'back.png',buffer:Buffer.from('readable-back')},f.user('inspector'));
+    expect(f.moderation.check).toHaveBeenCalledTimes(2);
+    expect(f.passport.verify).not.toHaveBeenCalled();
+    expect(f.prisma.inspectionPhoto.create).toHaveBeenCalledTimes(2);
+  });
+  it('does not block old photographed passports because of obsolete OCR bindings',async()=>{
+    const f=fixture();
+    const passport=f.state.photos.find(p=>p.type==='tech_passport')!;
+    passport.objectKey='inspections/old-passport.jpg';
+    passport.documentVerification={kind:'vehicle_registration',status:'content_matched',source:'image_ocr',vinHash:codeHash('OLD-VIN'),plateHash:codeHash('OLD-PLATE')};
+    expect((await f.service.readiness('inspection_1',f.user('inspector'))).ready).toBe(true);
+  });
+  it('still refuses an unreadable photo without using passport OCR',async()=>{
+    const f=fixture();f.moderation.check.mockRejectedValueOnce(new BadRequestException('Фотография размыта'));
+    await expect(f.service.uploadPhoto('inspection_1','tech_passport',{originalname:'blur.jpg',buffer:Buffer.from('blurred')},f.user('inspector'))).rejects.toThrow('размыта');
+    expect(f.passport.verify).not.toHaveBeenCalled();
+    expect(f.prisma.inspectionPhoto.create).not.toHaveBeenCalled();
+  });
   it('rejects unrelated passport content without saving an inspection attachment and records the refusal', async () => {
     const f=fixture();
     f.passport.verify.mockRejectedValueOnce(new BadRequestException('Техпаспорт: Файл не распознан как техпаспорт'));
-    await expect(f.service.uploadPhoto('inspection_1','tech_passport',{originalname:'passport.jpg',buffer:Buffer.from('unrelated')},f.user('inspector'))).rejects.toThrow('Файл не распознан');
+    await expect(f.service.uploadPhoto('inspection_1','tech_passport',{originalname:'passport.pdf',buffer:Buffer.from('%PDF-unrelated')},f.user('inspector'))).rejects.toThrow('Файл не распознан');
     expect(f.prisma.inspectionPhoto.create).not.toHaveBeenCalled();
     expect(f.prisma.technicalEvent.create).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({action:"inspection.photo.rejected",actorId:"inspector"})}));
     expect(f.prisma.notification.create).toHaveBeenCalledTimes(3);
