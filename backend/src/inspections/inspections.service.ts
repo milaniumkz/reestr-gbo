@@ -188,11 +188,13 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
     const lat = this.coordinate(input.lat, -90, 90);
     const lng = this.coordinate(input.lng, -180, 180);
     const address = organization?.address?.trim() || undefined;
-    let pair = cylinderPair(input, "");
-    if (pair.usesTwoCylinders) {
+    let pair: ReturnType<typeof cylinderPair>;
+    if (input.usesTwoCylinders === true) {
       const vehicle = await this.prisma.vehicle.findUnique({where:{id:vehicleId},include:{cylinders:true}});
       if (!vehicle) throw new BadRequestException("Автомобиль не найден");
       pair = cylinderPair(input, vehicle.cylinders[0]?.serialNumber ?? "", undefined, vehicle.cylinders[0]?.inspectedAt ?? new Date(), true, vehicle.cylinders[0]?.fuelType ?? undefined);
+    } else {
+      pair = cylinderPair(input, "");
     }
     await assertSecondCylinderUnique(this.prisma,pair,vehicleId);
     const inspection = await this.prisma.inspection.create({
