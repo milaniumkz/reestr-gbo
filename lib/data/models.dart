@@ -8,6 +8,37 @@ String accreditationPeriodLabel(String from, String until) {
   return "Аттестат аккредитации от ${date(from)} до ${date(until)}";
 }
 
+class CylinderDetails {
+  const CylinderDetails({
+    this.manufacturer = '',
+    this.volume = '',
+    this.shape = '',
+    this.producedAt = '',
+    this.inspectedAt = '',
+    this.validUntil = '',
+  });
+  final String manufacturer, volume, shape, producedAt, inspectedAt, validUntil;
+  factory CylinderDetails.fromInspection(Map<String, dynamic> json) =>
+      CylinderDetails(
+        manufacturer: json['secondCylinderManufacturer']?.toString() ?? '',
+        volume: json['secondCylinderVolumeLiters']?.toString() ?? '',
+        shape: json['secondCylinderShape']?.toString() ?? '',
+        producedAt:
+            json['secondCylinderProducedAt']?.toString().split('T').first ?? '',
+        inspectedAt:
+            json['secondCylinderInspectedAt']?.toString().split('T').first ??
+            '',
+        validUntil:
+            json['secondCylinderValidUntil']?.toString().split('T').first ?? '',
+      );
+  Map<String, String> get formValues => {
+    'manufacturer': manufacturer,
+    'volumeLiters': volume,
+    'shape': shape,
+    'producedAt': producedAt,
+  };
+}
+
 class AppUser {
   const AppUser({required this.id, required this.phone, required this.roles});
 
@@ -59,6 +90,7 @@ class RegistryVehicle {
   const RegistryVehicle({
     this.usesTwoCylinders = false,
     this.secondCylinderSerial = '',
+    this.secondCylinder = const CylinderDetails(),
     required this.vin,
     required this.plateNumber,
     required this.make,
@@ -73,6 +105,7 @@ class RegistryVehicle {
     this.ownerAddress = '',
     this.vehicleYear = '',
     this.cylinderSerial = '',
+    this.cylinderShape = '',
     this.cylinderManufacturer = '',
     this.cylinderVolume = '',
     this.reducerName = '',
@@ -99,6 +132,7 @@ class RegistryVehicle {
 
   final bool usesTwoCylinders;
   final String secondCylinderSerial;
+  final CylinderDetails secondCylinder;
   final String accreditationValidFrom;
   final String accreditationValidUntil;
   String get accreditationLabel =>
@@ -116,6 +150,7 @@ class RegistryVehicle {
   final String ownerAddress;
   final String vehicleYear;
   final String cylinderSerial;
+  final String cylinderShape;
   final String cylinderManufacturer;
   final String cylinderVolume;
   final String reducerName;
@@ -163,6 +198,7 @@ class RegistryVehicle {
       usesTwoCylinders: inspection['usesTwoCylinders'] == true,
       secondCylinderSerial:
           inspection['secondCylinderSerial']?.toString() ?? '',
+      secondCylinder: CylinderDetails.fromInspection(inspection),
       vin: json['vin']?.toString() ?? '',
       plateNumber: json['plateNumber']?.toString() ?? '',
       make: json['make']?.toString() ?? '',
@@ -178,6 +214,7 @@ class RegistryVehicle {
       ownerAddress: owner['address']?.toString() ?? '',
       vehicleYear: json['year']?.toString() ?? '',
       cylinderSerial: cylinder['serialNumber']?.toString() ?? '',
+      cylinderShape: cylinder['shape']?.toString() ?? '',
       cylinderManufacturer: cylinder['manufacturer']?.toString() ?? '',
       cylinderVolume: cylinder['volumeLiters']?.toString() ?? '',
       reducerName: cylinder['reducerName']?.toString() ?? '',
@@ -238,6 +275,7 @@ class RegistryVehicle {
       usesTwoCylinders: inspection['usesTwoCylinders'] == true,
       secondCylinderSerial:
           inspection['secondCylinderSerial']?.toString() ?? '',
+      secondCylinder: CylinderDetails.fromInspection(inspection),
       vin: vehicle['vin']?.toString() ?? '',
       plateNumber: vehicle['plateNumber']?.toString() ?? '',
       make: vehicle['make']?.toString() ?? '',
@@ -253,6 +291,7 @@ class RegistryVehicle {
       ownerAddress: owner['address']?.toString() ?? '',
       vehicleYear: vehicle['year']?.toString() ?? '',
       cylinderSerial: cylinder['serialNumber']?.toString() ?? '',
+      cylinderShape: cylinder['shape']?.toString() ?? '',
       cylinderManufacturer: cylinder['manufacturer']?.toString() ?? '',
       cylinderVolume: cylinder['volumeLiters']?.toString() ?? '',
       reducerName: cylinder['reducerName']?.toString() ?? '',
@@ -494,6 +533,7 @@ class InspectionSummary {
   const InspectionSummary({
     this.usesTwoCylinders = false,
     this.secondCylinderSerial = '',
+    this.secondCylinder = const CylinderDetails(),
     required this.id,
     required this.status,
     required this.createdAt,
@@ -514,6 +554,7 @@ class InspectionSummary {
     this.vehicleId = '',
     this.vehicleYear = '',
     this.cylinderSerial = '',
+    this.cylinderShape = '',
     this.cylinderManufacturer = '',
     this.cylinderVolume = '',
     this.reducerName = '',
@@ -533,6 +574,7 @@ class InspectionSummary {
     this.approvedByPhone = '',
     this.submittedAt = '',
     this.qualityDocumentUploaded = false,
+    this.secondQualityDocumentUploaded = false,
     this.qualityConfirmedAt = '',
     this.qualityConfirmedByName = '',
     this.requireApplicantPhotos = false,
@@ -545,6 +587,7 @@ class InspectionSummary {
 
   final bool usesTwoCylinders;
   final String secondCylinderSerial;
+  final CylinderDetails secondCylinder;
   final String accreditationValidFrom;
   final String accreditationValidUntil;
   String get accreditationLabel =>
@@ -568,6 +611,7 @@ class InspectionSummary {
   final String ownerAddress;
   final String vehicleYear;
   final String cylinderSerial;
+  final String cylinderShape;
   final String cylinderManufacturer;
   final String cylinderVolume;
   final String reducerName;
@@ -587,6 +631,7 @@ class InspectionSummary {
   final String approvedByPhone;
   final String submittedAt;
   final bool qualityDocumentUploaded;
+  final bool secondQualityDocumentUploaded;
   final String qualityConfirmedAt;
   final String qualityConfirmedByName;
   final bool requireApplicantPhotos;
@@ -632,6 +677,7 @@ class InspectionSummary {
                     'cylinder_label_2',
                     'cylinder_work_record_2',
                     'cylinder_inspection_report_2',
+                    'certificate_document_2',
                   }.contains(photo['type']) ||
                   (json['usesTwoCylinders'] == true &&
                       photo['cylinderSerial'] == json['secondCylinderSerial'])),
@@ -650,6 +696,7 @@ class InspectionSummary {
     return InspectionSummary(
       usesTwoCylinders: json['usesTwoCylinders'] == true,
       secondCylinderSerial: json['secondCylinderSerial']?.toString() ?? '',
+      secondCylinder: CylinderDetails.fromInspection(json),
       id: json['id']?.toString() ?? '',
       status: json['status']?.toString() ?? '',
       createdAt: json['createdAt']?.toString().split('T').first ?? '',
@@ -678,6 +725,7 @@ class InspectionSummary {
       ownerAddress: owner['address']?.toString() ?? '',
       vehicleYear: vehicle['year']?.toString() ?? '',
       cylinderSerial: cylinder['serialNumber']?.toString() ?? '',
+      cylinderShape: cylinder['shape']?.toString() ?? '',
       cylinderManufacturer: cylinder['manufacturer']?.toString() ?? '',
       cylinderVolume: cylinder['volumeLiters']?.toString() ?? '',
       reducerName: cylinder['reducerName']?.toString() ?? '',
@@ -700,6 +748,8 @@ class InspectionSummary {
       approvedByPhone: approvedBy['phone']?.toString() ?? '',
       submittedAt: json['submittedAt']?.toString() ?? '',
       qualityDocumentUploaded: json['qualityDocumentUploadedAt'] != null,
+      secondQualityDocumentUploaded:
+          json['secondQualityDocumentUploadedAt'] != null,
       qualityConfirmedAt: json['qualityConfirmedAt']?.toString() ?? '',
       qualityConfirmedByName: qualityConfirmedBy['fullName']?.toString() ?? '',
       requireApplicantPhotos: json['requireApplicantPhotos'] == true,

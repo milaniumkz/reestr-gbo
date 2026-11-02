@@ -96,6 +96,7 @@ const inspectionRequiredLabels = <String, String>{
   'tech_passport': 'фото техпаспорта',
   ...inspectionPackageDocuments,
   'certificate_document': 'Свидетельство (рус./каз.)',
+  'certificate_document_2': 'Свидетельство второго баллона (рус./каз.)',
   'gas_cylinder': 'данные баллона',
   'tech_passport_back': 'Техпаспорт — обратная сторона',
   'fuel_type': 'тип газа (СНГ или КПГ)',
@@ -538,13 +539,42 @@ class _ErsiDemoState extends State<ErsiDemo> {
   String cylinderNumber = '';
   bool usesTwoCylinders = false;
   String secondCylinderNumber = '';
+  Map<String, String> secondCylinderValues = {};
+  Map<String, dynamic>? get _secondCylinderPayload => !usesTwoCylinders
+      ? null
+      : {
+          ...secondCylinderValues,
+          'volumeLiters':
+              int.tryParse(secondCylinderValues['volumeLiters'] ?? '') ?? 0,
+        };
+  List<String> get _missingSecondCylinderFields => !usesTwoCylinders
+      ? []
+      : [
+          if ((secondCylinderValues['manufacturer'] ?? '').trim().isEmpty)
+            'производитель второго баллона',
+          if ((int.tryParse(secondCylinderValues['volumeLiters'] ?? '') ?? 0) <=
+              0)
+            'объем второго баллона',
+          if (!const [
+            'Тороидальный',
+            'Цилиндрический',
+          ].contains(secondCylinderValues['shape']))
+            'тип второго баллона',
+          if (!_validCylinderProductionDate(
+            secondCylinderValues['producedAt'] ?? '',
+          ))
+            'дату выпуска второго баллона',
+        ];
   Map<String, String> get _inspectionPackageDocuments =>
       cylinderPackageDocuments(usesTwoCylinders);
 
   void _setTwoCylinders(bool value) {
     setState(() {
       usesTwoCylinders = value;
-      if (!value) secondCylinderNumber = '';
+      if (!value) {
+        secondCylinderNumber = '';
+        secondCylinderValues = {};
+      }
       _resetSecondCylinderDocuments();
     });
   }
@@ -922,7 +952,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
     }
   }
 
-  Future<void> _uploadQualityCertificate() async {
+  Future<void> _uploadQualityCertificate({bool second = false}) async {
     final inspection = selectedInspection;
     if (inspection == null || qualityBusy || !_isQualityControl) return;
     try {
@@ -937,7 +967,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       });
       await repositories.inspections.uploadPhoto(
         inspectionId: inspection.id,
-        type: 'certificate_document',
+        type: second ? 'certificate_document_2' : 'certificate_document',
         filename: file.name,
         bytes: file.bytes,
       );
@@ -1412,6 +1442,9 @@ class _ErsiDemoState extends State<ErsiDemo> {
     final data = result.partial;
     setState(() {
       cylinderShape = '';
+      usesTwoCylinders = false;
+      secondCylinderNumber = '';
+      secondCylinderValues = {};
       inspectionCertificateNumber = _nonEmpty(
         data['certificateNumber'],
         inspectionCertificateNumber,
@@ -1731,7 +1764,9 @@ class _ErsiDemoState extends State<ErsiDemo> {
           secondCylinderNumber.trim().toUpperCase() ==
               cylinderNumber.trim().toUpperCase())
         'разные номера первого и второго баллонов',
-      if (cylinderVolume.trim().isEmpty) 'объем баллона',
+      if ((int.tryParse(cylinderVolume.trim()) ?? 0) <= 0) 'объем баллона',
+      if (cylinderMaker.trim().isEmpty) 'производитель баллона',
+      ..._missingSecondCylinderFields,
       if (!_validCylinderProductionDate(cylinderProductionDate))
         'полную дату выпуска баллона',
       if (!const ['СНГ', 'КПГ'].contains(cylinderFuel.trim()))
@@ -1753,6 +1788,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
           ),
           'inspectionDate': _dateOnly(inspectionIssuedAt),
           'usesTwoCylinders': usesTwoCylinders,
+          'secondCylinder': _secondCylinderPayload,
           'secondCylinderSerial': usesTwoCylinders
               ? secondCylinderNumber.trim()
               : null,
@@ -1771,6 +1807,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
           },
           'cylinder': {
             'serialNumber': cylinderNumber.trim(),
+            'shape': cylinderShape,
             'manufacturer': cylinderMaker.trim(),
             'volumeLiters': int.tryParse(cylinderVolume.trim()) ?? 0,
             'fuelType': cylinderFuel,
@@ -1808,6 +1845,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       ownerIin: ownerId.trim(),
       ownerAddress: ownerAddress.trim(),
       cylinderSerial: cylinderNumber.trim(),
+      cylinderShape: cylinderShape,
       cylinderManufacturer: cylinderMaker.trim().isEmpty
           ? 'Не указано'
           : cylinderMaker.trim(),
@@ -1825,6 +1863,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         certificateNumber: certificateNumber,
         usesTwoCylinders: usesTwoCylinders,
         secondCylinderSerial: secondCylinderNumber.trim(),
+        secondCylinder: _secondCylinderPayload,
       );
       draftVehicleId = vehicleId;
       selectedInspection = detail;
@@ -1837,6 +1876,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       certificateNumber: certificateNumber,
       usesTwoCylinders: usesTwoCylinders,
       secondCylinderSerial: secondCylinderNumber.trim(),
+      secondCylinder: _secondCylinderPayload,
       lat: position.latitude,
       lng: position.longitude,
     );
@@ -2160,7 +2200,9 @@ class _ErsiDemoState extends State<ErsiDemo> {
           secondCylinderNumber.trim().toUpperCase() ==
               cylinderNumber.trim().toUpperCase())
         'разные номера первого и второго баллонов',
-      if (cylinderVolume.trim().isEmpty) 'объем баллона',
+      if ((int.tryParse(cylinderVolume.trim()) ?? 0) <= 0) 'объем баллона',
+      if (cylinderMaker.trim().isEmpty) 'производитель баллона',
+      ..._missingSecondCylinderFields,
       if (!_validCylinderProductionDate(cylinderProductionDate))
         'полную дату выпуска баллона',
       if (reducerName.trim().isEmpty) 'название редуктора',
@@ -2194,6 +2236,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       cylinderNumber = '';
       usesTwoCylinders = false;
       secondCylinderNumber = '';
+      secondCylinderValues = {};
       cylinderMaker = '';
       cylinderVolume = '';
       cylinderProductionDate = '';
@@ -2389,6 +2432,8 @@ class _ErsiDemoState extends State<ErsiDemo> {
         cylinderShape = '';
         usesTwoCylinders = detail.usesTwoCylinders;
         secondCylinderNumber = detail.secondCylinderSerial;
+        secondCylinderValues = detail.secondCylinder.formValues;
+        cylinderShape = detail.cylinderShape;
         cylinderMaker = detail.cylinderManufacturer;
         cylinderVolume = detail.cylinderVolume;
         reducerName = detail.reducerName;
@@ -2735,6 +2780,10 @@ class _ErsiDemoState extends State<ErsiDemo> {
         editingQuality: _editingQualityInspection,
         usesTwoCylinders: usesTwoCylinders,
         secondNumber: secondCylinderNumber,
+        secondValues: secondCylinderValues,
+        onSecondValue: (key, value) => setState(
+          () => secondCylinderValues = {...secondCylinderValues, key: value},
+        ),
         onTwoCylinders: _setTwoCylinders,
         onSecondNumber: (value) => setState(() {
           secondCylinderNumber = value;
@@ -3053,7 +3102,8 @@ class _ErsiDemoState extends State<ErsiDemo> {
         canQualityReview: _ownsQualityReview,
         qualityConfirmed: qualityConfirmed,
         qualityBusy: qualityBusy,
-        onUploadQuality: _uploadQualityCertificate,
+        onUploadQuality: () => _uploadQualityCertificate(),
+        onUploadSecondQuality: () => _uploadQualityCertificate(second: true),
         onConfirmQuality: _confirmQuality,
         onQualityChecked: (value) => setState(() => qualityConfirmed = value),
         onApprove: selectedInspection == null
@@ -4598,12 +4648,9 @@ class _Certificate extends StatelessWidget {
                         : '${item.cylinderVolume} л',
                   ].where((value) => value.trim().isNotEmpty).join(' · '),
                 ),
-                if (item.usesTwoCylinders)
-                  (
-                    Icons.horizontal_rule_rounded,
-                    'БАЛЛОН 2',
-                    item.secondCylinderSerial,
-                  ),
+                if (item.cylinderShape.isNotEmpty)
+                  (Icons.category_rounded, 'ТИП БАЛЛОНА', item.cylinderShape),
+
                 (
                   Icons.event_rounded,
                   'ДАТА ВЫПУСКА БАЛЛОНА',
@@ -4630,6 +4677,11 @@ class _Certificate extends StatelessWidget {
                       ? 'Срок не указан'
                       : 'до ${item.cylinderValidUntil}',
                 ),
+                if (item.usesTwoCylinders)
+                  ..._secondCylinderRows(
+                    item.secondCylinder,
+                    item.secondCylinderSerial,
+                  ),
                 if (item.organizationName.isNotEmpty)
                   (
                     Icons.apartment_rounded,
@@ -4834,6 +4886,7 @@ class _InspectionDetailScreen extends StatelessWidget {
     required this.qualityConfirmed,
     required this.qualityBusy,
     required this.onUploadQuality,
+    required this.onUploadSecondQuality,
     required this.onConfirmQuality,
     required this.onQualityChecked,
     required this.onApprove,
@@ -4850,6 +4903,7 @@ class _InspectionDetailScreen extends StatelessWidget {
   final bool qualityConfirmed;
   final bool qualityBusy;
   final VoidCallback onUploadQuality;
+  final VoidCallback onUploadSecondQuality;
   final VoidCallback onConfirmQuality;
   final ValueChanged<bool> onQualityChecked;
   final VoidCallback? onApprove;
@@ -4907,10 +4961,18 @@ class _InspectionDetailScreen extends StatelessWidget {
               const SizedBox(height: 12),
               const Text('Контроль качества', style: _section),
               _PrimaryButton(
-                text: 'Загрузить свидетельство',
+                text: item.usesTwoCylinders
+                    ? 'Загрузить свидетельство первого баллона'
+                    : 'Загрузить свидетельство',
                 icon: Icons.upload_file_rounded,
                 onTap: qualityBusy ? null : onUploadQuality,
               ),
+              if (item.usesTwoCylinders)
+                _PrimaryButton(
+                  text: 'Загрузить свидетельство второго баллона',
+                  icon: Icons.upload_file_rounded,
+                  onTap: qualityBusy ? null : onUploadSecondQuality,
+                ),
               CheckboxListTile(
                 title: const Text('Подтверждаю'),
                 subtitle: const Text(
@@ -4919,6 +4981,13 @@ class _InspectionDetailScreen extends StatelessWidget {
                 value: qualityConfirmed,
                 onChanged:
                     qualityBusy ||
+                        !item.qualityDocumentUploaded ||
+                        (item.usesTwoCylinders &&
+                            (!item.secondQualityDocumentUploaded ||
+                                !files.any(
+                                  (file) =>
+                                      file.type == 'certificate_document_2',
+                                ))) ||
                         !files.any(
                           (file) => file.type == 'certificate_document',
                         )
@@ -4930,6 +4999,13 @@ class _InspectionDetailScreen extends StatelessWidget {
                 onTap:
                     qualityBusy ||
                         !qualityConfirmed ||
+                        !item.qualityDocumentUploaded ||
+                        (item.usesTwoCylinders &&
+                            (!item.secondQualityDocumentUploaded ||
+                                !files.any(
+                                  (file) =>
+                                      file.type == 'certificate_document_2',
+                                ))) ||
                         !files.any(
                           (file) => file.type == 'certificate_document',
                         )
@@ -5009,7 +5085,12 @@ class _InspectionDetailScreen extends StatelessWidget {
             _QualityDataWithPhotos(
               enabled: qualityLayout,
               files: files
-                  .where((file) => ['certificate_document'].contains(file.type))
+                  .where(
+                    (file) => [
+                      'certificate_document',
+                      'certificate_document_2',
+                    ].contains(file.type),
+                  )
                   .toList(),
               child: _CertificateDetailsCard(
                 rows: [
@@ -5144,12 +5225,9 @@ class _InspectionDetailScreen extends StatelessWidget {
                           : '${item.cylinderVolume} л',
                     ].where((value) => value.trim().isNotEmpty).join(' · '),
                   ),
-                  if (item.usesTwoCylinders)
-                    (
-                      Icons.horizontal_rule_rounded,
-                      'БАЛЛОН 2',
-                      item.secondCylinderSerial,
-                    ),
+                  if (item.cylinderShape.isNotEmpty)
+                    (Icons.category_rounded, 'ТИП БАЛЛОНА', item.cylinderShape),
+
                   (
                     Icons.event_rounded,
                     'ДАТА ВЫПУСКА БАЛЛОНА',
@@ -5176,6 +5254,11 @@ class _InspectionDetailScreen extends StatelessWidget {
                         ? 'Не указан'
                         : item.controlUnitName,
                   ),
+                  if (item.usesTwoCylinders)
+                    ..._secondCylinderRows(
+                      item.secondCylinder,
+                      item.secondCylinderSerial,
+                    ),
                 ],
               ),
             ),
@@ -5193,6 +5276,7 @@ class _InspectionDetailScreen extends StatelessWidget {
                     !qualityLayout ||
                     ![
                       'certificate_document',
+                      'certificate_document_2',
                       'applicant_application',
                       'tech_passport',
                       'tech_passport_back',
@@ -6404,6 +6488,8 @@ class _CylinderStep extends StatelessWidget {
   const _CylinderStep({
     this.usesTwoCylinders = false,
     this.secondNumber = '',
+    this.secondValues = const {},
+    this.onSecondValue,
     this.onTwoCylinders,
     this.onSecondNumber,
     this.reviewFiles = const [],
@@ -6431,6 +6517,8 @@ class _CylinderStep extends StatelessWidget {
   });
   final bool usesTwoCylinders;
   final String secondNumber;
+  final Map<String, String> secondValues;
+  final void Function(String, String)? onSecondValue;
   final ValueChanged<bool>? onTwoCylinders;
   final ValueChanged<String>? onSecondNumber;
   final String number;
@@ -6472,6 +6560,15 @@ class _CylinderStep extends StatelessWidget {
           children: [
             _ProgressDots(step: 3),
             const SizedBox(height: 12),
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(tr(context, 'Используются два баллона')),
+              value: usesTwoCylinders,
+              onChanged: onTwoCylinders == null
+                  ? null
+                  : (value) => onTwoCylinders!(value ?? false),
+            ),
+            if (usesTwoCylinders) const Text('Первый баллон', style: _section),
             _Pills(
               values: const ['Тороидальный', 'Цилиндрический'],
               selected: shape,
@@ -6486,26 +6583,6 @@ class _CylinderStep extends StatelessWidget {
               hint: 'Введите номер баллона',
               onChanged: onNumber,
             ),
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(tr(context, 'Используются два баллона')),
-              value: usesTwoCylinders,
-              onChanged: onTwoCylinders == null
-                  ? null
-                  : (value) => onTwoCylinders!(value ?? false),
-            ),
-            if (usesTwoCylinders) ...[
-              _Input(
-                label: 'Номер второго баллона',
-                value: secondNumber,
-                onChanged: onSecondNumber,
-              ),
-              const _InfoBox(
-                title: 'Два баллона',
-                text:
-                    'Остальные параметры общие для обоих баллонов. Документы и бирки загружаются отдельно.',
-              ),
-            ],
             _EquipmentPicker(
               label: 'Производитель',
               value: maker,
@@ -6527,6 +6604,47 @@ class _CylinderStep extends StatelessWidget {
               lastDate: DateTime.now(),
               onChanged: onYear,
             ),
+            if (usesTwoCylinders) ...[
+              const SizedBox(height: 24),
+              const Text('Второй баллон', style: _section),
+              const SizedBox(height: 12),
+              const Text('Тип второго баллона', style: _section),
+              _Pills(
+                values: const ['Тороидальный', 'Цилиндрический'],
+                selected: secondValues['shape'] ?? '',
+                onSelected: (v) => onSecondValue?.call('shape', v),
+              ),
+              _Input(
+                label: 'Номер второго баллона',
+                value: secondNumber,
+                onChanged: onSecondNumber,
+              ),
+              _EquipmentPicker(
+                label: 'Производитель второго баллона',
+                value: secondValues['manufacturer'] ?? '',
+                options: makerOptions,
+                otherHint: 'Введите производителя',
+                onChanged: (v) => onSecondValue?.call('manufacturer', v),
+              ),
+              _Input(
+                label: 'Объем второго баллона',
+                value: secondValues['volumeLiters'] ?? '',
+                keyboardType: TextInputType.number,
+                onChanged: (v) => onSecondValue?.call('volumeLiters', v),
+              ),
+              _DateFilterInput(
+                label: 'Дата выпуска второго баллона',
+                value: secondValues['producedAt'] ?? '',
+                firstDate: DateTime(1900),
+                lastDate: DateTime.now(),
+                onChanged: (v) => onSecondValue?.call('producedAt', v),
+              ),
+            ],
+            if (usesTwoCylinders)
+              const Padding(
+                padding: EdgeInsets.only(top: 20, bottom: 12),
+                child: Text('Общие данные ГБО', style: _section),
+              ),
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: Column(
@@ -10978,3 +11096,39 @@ const _muted = TextStyle(
   fontWeight: FontWeight.w700,
   height: 1.35,
 );
+
+List<(IconData, String, String)> _secondCylinderRows(
+  CylinderDetails data,
+  String serial,
+) {
+  String show(String value) => value.isEmpty ? 'Не указано' : value;
+  return [
+    (Icons.horizontal_rule_rounded, 'БАЛЛОН 2', show(serial)),
+    (
+      Icons.factory_rounded,
+      'ПРОИЗВОДИТЕЛЬ ВТОРОГО БАЛЛОНА',
+      show(data.manufacturer),
+    ),
+    (Icons.category_rounded, 'ТИП ВТОРОГО БАЛЛОНА', show(data.shape)),
+    (
+      Icons.propane_tank_rounded,
+      'ОБЪЕМ ВТОРОГО БАЛЛОНА',
+      data.volume.isEmpty ? 'Не указано' : '${data.volume} л',
+    ),
+    (
+      Icons.event_rounded,
+      'ДАТА ВЫПУСКА ВТОРОГО БАЛЛОНА',
+      data.producedAt.isEmpty ? 'Не указано' : _displayDate(data.producedAt),
+    ),
+    (
+      Icons.event_available_rounded,
+      'ДАТА ИНСПЕКЦИИ ВТОРОГО БАЛЛОНА',
+      data.inspectedAt.isEmpty ? 'Не указано' : _displayDate(data.inspectedAt),
+    ),
+    (
+      Icons.event_available_rounded,
+      'СРОК ВТОРОГО БАЛЛОНА',
+      data.validUntil.isEmpty ? 'Не указано' : _displayDate(data.validUntil),
+    ),
+  ];
+}

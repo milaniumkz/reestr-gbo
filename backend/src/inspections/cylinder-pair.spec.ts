@@ -4,7 +4,7 @@ import { InspectionsService } from './inspections.service';
 
 describe('Two cylinders', () => {
   it('keeps legacy inspections single and retains a pair for legacy updates', () => {
-    expect(cylinderPair({}, 'A')).toEqual({usesTwoCylinders:false,secondCylinderSerial:null});
+    expect(cylinderPair({}, 'A')).toMatchObject({usesTwoCylinders:false,secondCylinderSerial:null});
     expect(cylinderPair({}, 'A', {usesTwoCylinders:true,secondCylinderSerial:'B'}).secondCylinderSerial).toBe('B');
     expect(cylinderPair({usesTwoCylinders:false}, 'A', {usesTwoCylinders:true,secondCylinderSerial:'B'}).secondCylinderSerial).toBeNull();
   });
@@ -48,4 +48,31 @@ describe('Exact photo duplicates', () => {
     ];
     expect(activeCylinderPhotos({},photos)).toEqual(photos);
   });
+});
+
+describe('Independent cylinder data',()=>{
+ const details={manufacturer:'SECOND MAKER',volumeLiters:80,shape:'Цилиндрический',producedAt:'2025-02-01'};
+ it('stores all second values and calculates its own period from the inspection date',()=>{
+  const pair=cylinderPair({usesTwoCylinders:true,secondCylinderSerial:'SECOND-2',secondCylinder:details},'FIRST-1',undefined,'2026-11-02',true,'КПГ');
+  expect(pair).toMatchObject({secondCylinderSerial:'SECOND-2',secondCylinderManufacturer:'SECOND MAKER',secondCylinderVolumeLiters:80,secondCylinderShape:'Цилиндрический',secondCylinderProducedAt:new Date('2025-02-01'),secondCylinderInspectedAt:new Date('2026-11-02'),secondCylinderValidUntil:new Date('2029-11-02')});
+  const lpg=cylinderPair({usesTwoCylinders:true,secondCylinderSerial:'SECOND-2',secondCylinder:details},'FIRST-1',undefined,'2026-11-02',true,'СНГ');
+  expect(lpg.secondCylinderValidUntil).toEqual(new Date('2028-11-02'));
+  expect(cylinderPair({usesTwoCylinders:false},'FIRST-1',pair)).toMatchObject({secondCylinderSerial:null,secondCylinderManufacturer:null,secondCylinderProducedAt:null,secondCylinderVolumeLiters:null});
+  const legacyUpdate=cylinderPair({},'FIRST-1',pair,'2027-01-15',false,'КПГ');
+  expect(legacyUpdate.secondCylinderValidUntil).toEqual(new Date('2030-01-15'));
+ });
+ it.each(['manufacturer','shape','producedAt'])('requires independent %s',field=>{
+  expect(()=>cylinderPair({usesTwoCylinders:true,secondCylinderSerial:'SECOND-2',secondCylinder:{...details,[field]:''}},'FIRST-1',undefined,'2026-11-02',true,'КПГ')).toThrow();
+ });
+ it('rejects missing details from an old client for new two-cylinder inspections',()=>{
+  expect(()=>cylinderPair({usesTwoCylinders:true,secondCylinderSerial:'SECOND-2'},'FIRST-1',undefined,'2026-11-02',true,'КПГ')).toThrow('Обновите приложение');
+  expect(()=>cylinderPair({usesTwoCylinders:true,secondCylinderSerial:'SECOND-2',secondCylinder:{...details,volumeLiters:-1}},'FIRST-1',undefined,'2026-11-02',true,'КПГ')).toThrow('объем');
+ });
+});
+
+it('uses the shared gas type and does not persist a second ECU, reducer or gas type',()=>{
+ const second={manufacturer:'SECOND',volumeLiters:80,shape:'Цилиндрический',producedAt:'2025-01-01',fuelType:'КПГ',reducerName:'UNUSED',controlUnitName:'UNUSED'};
+ const result=cylinderPair({usesTwoCylinders:true,secondCylinderSerial:'B',secondCylinder:second},'A',undefined,'2026-11-02',true,'СНГ');
+ expect(result.secondCylinderValidUntil).toEqual(new Date('2028-11-02'));
+ for(const key of ['secondCylinderFuelType','secondCylinderReducerName','secondCylinderControlUnitName']) expect(result).not.toHaveProperty(key);
 });

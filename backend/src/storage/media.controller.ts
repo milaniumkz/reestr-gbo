@@ -70,6 +70,7 @@ export class MediaController {
         !photo ||
         ![
           "certificate_document",
+          "certificate_document_2",
           "tech_passport",
           "tech_passport_back",
         ].includes(photo.type) ||

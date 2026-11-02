@@ -499,6 +499,7 @@ class InspectionRepository {
     required String ownerName,
     required String ownerIin,
     required String ownerAddress,
+    String cylinderShape = '',
     required String cylinderSerial,
     required String cylinderManufacturer,
     required int volumeLiters,
@@ -534,6 +535,7 @@ class InspectionRepository {
         'fuelType': fuelType,
         'inspectedAt': inspectionDate,
         'serialNumber': cylinderSerial,
+        if (cylinderShape.isNotEmpty) 'shape': cylinderShape,
         'manufacturer': cylinderManufacturer,
         'volumeLiters': volumeLiters,
         'reducerName': reducerName,
@@ -551,6 +553,7 @@ class InspectionRepository {
     required String certificateNumber,
     bool usesTwoCylinders = false,
     String secondCylinderSerial = '',
+    Map<String, dynamic>? secondCylinder,
     double? lat,
     double? lng,
   }) async {
@@ -561,6 +564,8 @@ class InspectionRepository {
       'certificateNumber': certificateNumber,
       'usesTwoCylinders': usesTwoCylinders,
       'secondCylinderSerial': usesTwoCylinders ? secondCylinderSerial : null,
+      if (secondCylinder != null && usesTwoCylinders)
+        'secondCylinder': secondCylinder,
       ...lat == null ? const <String, dynamic>{} : {'lat': lat},
       ...lng == null ? const <String, dynamic>{} : {'lng': lng},
     });
@@ -627,12 +632,15 @@ class InspectionRepository {
     required String certificateNumber,
     bool usesTwoCylinders = false,
     String secondCylinderSerial = '',
+    Map<String, dynamic>? secondCylinder,
   }) async {
     final response = await _api.patchJson('/inspections/$inspectionId/data', {
       'vehicleId': vehicleId,
       'certificateNumber': certificateNumber,
       'usesTwoCylinders': usesTwoCylinders,
       'secondCylinderSerial': usesTwoCylinders ? secondCylinderSerial : null,
+      if (secondCylinder != null && usesTwoCylinders)
+        'secondCylinder': secondCylinder,
     });
     return InspectionSummary.fromJson(response);
   }

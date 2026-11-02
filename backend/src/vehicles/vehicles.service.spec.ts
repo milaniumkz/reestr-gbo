@@ -13,6 +13,7 @@ describe('Inspection vehicle owner data', () => {
       userRole: {upsert:jest.fn(),create:jest.fn()},
       vehicle: {upsert:jest.fn(async()=>({id:'vehicle',vin:'VIN',plateNumber:'123'})),findUniqueOrThrow:jest.fn(async()=>({id:'vehicle'}))},
       vehicleOwner: {findFirst:jest.fn(async()=>existing ? {id:'owner'} : null),update:jest.fn(async()=>({})),create:jest.fn(async()=>({}))},
+      inspection:{findFirst:jest.fn(async()=>null)},
       gasCylinder: {findFirst:jest.fn(async()=>null),create:jest.fn(async()=>({}))},
       auditLog: {create:jest.fn(async()=>({}))},
     };

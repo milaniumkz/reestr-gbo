@@ -184,6 +184,7 @@ model VehicleOwner {
 }
 
 model GasCylinder {
+  shape           String?
   fuelType        String?
   inspectedAt     DateTime?
   id              String    @id @default(uuid())
@@ -215,10 +216,17 @@ model Inspection {
   autoPublishAt     DateTime?
   submittedAt       DateTime?
   qualityDocumentUploadedAt DateTime?
+  secondQualityDocumentUploadedAt DateTime?
   qualityConfirmedAt DateTime?
   requireApplicantPhotos Boolean @default(false)
   usesTwoCylinders Boolean @default(false)
   secondCylinderSerial String?
+  secondCylinderManufacturer String?
+  secondCylinderVolumeLiters Int?
+  secondCylinderShape String?
+  secondCylinderProducedAt DateTime?
+  secondCylinderInspectedAt DateTime?
+  secondCylinderValidUntil DateTime?
   qualityReviewerId String?
   qualityReviewStartedAt DateTime?
   qualityConfirmedById String?

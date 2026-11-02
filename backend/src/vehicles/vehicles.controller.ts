@@ -32,6 +32,7 @@ export class VehiclesController {
     year?: number;
     owner: { phone: string; fullName: string; iin?: string; address?: string };
     cylinder: {
+      shape?: string;
       serialNumber: string;
       manufacturer: string;
       volumeLiters: number;

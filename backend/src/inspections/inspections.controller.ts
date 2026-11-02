@@ -57,6 +57,7 @@ export class InspectionsController {
       vehicleId: string;
       usesTwoCylinders?: boolean;
       secondCylinderSerial?: string | null;
+      secondCylinder?: CylinderPairInput["secondCylinder"];
       certificateNumber?: string;
       lat?: number | string;
       lng?: number | string;
@@ -111,6 +112,7 @@ export class InspectionsController {
       vehicleId: string;
       usesTwoCylinders?: boolean;
       secondCylinderSerial?: string | null;
+      secondCylinder?: CylinderPairInput["secondCylinder"];
       certificateNumber?: string;
     },
   ) {

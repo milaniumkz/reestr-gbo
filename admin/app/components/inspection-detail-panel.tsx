@@ -1,3 +1,4 @@
+import { SecondCylinderInfo } from './second-cylinder-info';
 import { accreditationPeriod } from '../lib/accreditation';
 import { AuditRow, Inspection } from '@/lib/api';
 import { statusLabel } from '../lib/labels';
@@ -37,7 +38,7 @@ export function InspectionDetailPanel({
         <Info label="ИИН/БИН владельца" value={owner?.iin ?? '-'} />
         <Info label="Адрес проживания" value={owner?.address ?? '-'} />
         <Info label="Баллон" value={cylinder?.serialNumber ?? '-'} />
-        {inspection?.usesTwoCylinders && <Info label="Второй баллон" value={inspection?.secondCylinderSerial ?? '-'} />}
+        <Info label="Тип баллона" value={cylinder?.shape ?? '-'} />
         <Info label="Дата выпуска баллона" value={cylinder?.producedAt ? new Date(cylinder.producedAt).toLocaleDateString('ru-RU', { timeZone: 'UTC' }) : '-'} />
         <Info label="Тип газа" value={cylinder?.fuelType ?? '-'} />
         <Info label="Производитель баллона" value={cylinder?.manufacturer ?? '-'} />
@@ -45,6 +46,7 @@ export function InspectionDetailPanel({
         <Info label="Срок баллона" value={cylinder?.validUntil ? new Date(cylinder.validUntil).toLocaleDateString('ru-RU') : '-'} />
         <Info label="Редуктор" value={cylinder?.reducerName ?? '-'} />
         <Info label="ЭБУ" value={cylinder?.controlUnitName ?? '-'} />
+        {inspection?.usesTwoCylinders && <SecondCylinderInfo value={inspection} />}
         <Info label="Место инспекции" value={inspection.address ?? coords(inspection.lat, inspection.lng)} />
         <Info label="Создал свидетельство" value={inspection.createdBy ? `${inspection.createdBy.fullName} · ${inspection.createdBy.phone}` : '-'} />
         <Info label="Отправил на проверку" value={inspection.submittedBy ? `${inspection.submittedBy.fullName} · ${inspection.submittedBy.phone}` : '-'} />

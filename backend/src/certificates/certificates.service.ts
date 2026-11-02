@@ -288,9 +288,11 @@ export class CertificatesService {
     if (!inspection) throw new NotFoundException("Inspection not found");
 
     const cylinder = inspection.vehicle.cylinders?.[0];
-    const validUntil = cylinder?.fuelType
+    let validUntil = cylinder?.fuelType
       ? inspectionPeriod(cylinder.fuelType, cylinder.inspectedAt ?? inspection.createdAt).validUntil
       : new Date(new Date().setFullYear(new Date().getFullYear() + 2));
+
+    if (inspection.usesTwoCylinders && inspection.secondCylinderValidUntil && inspection.secondCylinderValidUntil < validUntil) validUntil = inspection.secondCylinderValidUntil;
 
     const number =
       inspection.certificateNumber?.trim() || (await this.nextNumber());
@@ -1363,10 +1365,25 @@ export class CertificatesService {
       );
       this.row(doc, "Владелец", owner?.fullName ?? "-");
       this.row(doc, "ИИН", owner?.iin ?? "-");
+      const date=(value:Date|null|undefined)=>value?value.toISOString().slice(0,10).split('-').reverse().join('.'):'Не указана';
       this.row(doc, "Баллон 1", cylinder?.serialNumber ?? "-");
-      if (certificate.inspection.usesTwoCylinders) this.row(doc, "Баллон 2", certificate.inspection.secondCylinderSerial ?? "-");
-      this.row(doc, "Дата выпуска баллона", cylinder?.producedAt ? cylinder.producedAt.toISOString().slice(0,10).split("-").reverse().join(".") : "Не указана");
-      this.row(doc, "Тип газа", cylinder?.fuelType ?? "Не указан");
+      this.row(doc, "Производитель баллона 1", cylinder?.manufacturer ?? '-');
+      this.row(doc, "Объем баллона 1", cylinder?.volumeLiters ? `${cylinder.volumeLiters} л` : '-');
+      this.row(doc, "Тип баллона 1", cylinder?.shape ?? '-');
+      this.row(doc, "Дата выпуска баллона 1", date(cylinder?.producedAt));
+      this.row(doc, "Тип газа ГБО", cylinder?.fuelType ?? '-');
+      this.row(doc, "Редуктор ГБО", cylinder?.reducerName ?? '-');
+      this.row(doc, "ЭБУ ГБО", cylinder?.controlUnitName ?? '-');
+      this.row(doc, "Освидетельствование баллона 1", date(cylinder?.validUntil));
+      if (certificate.inspection.usesTwoCylinders) {
+        const second=certificate.inspection;
+        this.row(doc, "Баллон 2", second.secondCylinderSerial ?? '-');
+        this.row(doc, "Производитель баллона 2", second.secondCylinderManufacturer ?? '-');
+        this.row(doc, "Объем баллона 2", second.secondCylinderVolumeLiters ? `${second.secondCylinderVolumeLiters} л` : '-');
+        this.row(doc, "Тип баллона 2", second.secondCylinderShape ?? '-');
+        this.row(doc, "Дата выпуска баллона 2", date(second.secondCylinderProducedAt));
+        this.row(doc, "Освидетельствование баллона 2", date(second.secondCylinderValidUntil));
+      }
       this.row(
         doc,
         "Инспекционный орган",
@@ -1382,6 +1399,7 @@ export class CertificatesService {
         certificate.validUntil.toISOString().slice(0, 10),
       );
 
+      if (doc.y + 160 > doc.page.height - doc.page.margins.bottom) doc.addPage();
       doc.moveDown(1.2);
       doc
         .roundedRect(doc.x, doc.y, 500, 82, 8)
@@ -1409,12 +1427,14 @@ export class CertificatesService {
   }
 
   private row(doc: PDFKit.PDFDocument, label: string, value: string) {
-    doc
-      .fillColor("#7F918A")
-      .text(label, { continued: true, width: 160 })
-      .fillColor("#173A30")
-      .text(`  ${value}`);
-    doc.moveDown(0.35);
+    const x=doc.page.margins.left, gap=14, labelWidth=185;
+    const valueWidth=doc.page.width-doc.page.margins.left-doc.page.margins.right-labelWidth-gap;
+    const height=Math.max(doc.heightOfString(label,{width:labelWidth}),doc.heightOfString(value,{width:valueWidth}));
+    if(doc.y+height>doc.page.height-doc.page.margins.bottom) doc.addPage();
+    const y=doc.y;
+    doc.fillColor('#7F918A').text(label,x,y,{width:labelWidth});
+    doc.fillColor('#173A30').text(value,x+labelWidth+gap,y,{width:valueWidth});
+    doc.x=x;doc.y=y+height+5;
   }
 
   private fontPath() {

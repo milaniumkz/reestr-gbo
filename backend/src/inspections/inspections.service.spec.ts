@@ -201,13 +201,14 @@ describe('Inspection quality control workflow', () => {
     const state = {
       id: 'inspection_1', organizationId: 'org_1', status: 'draft', certificateNumber: 'TEST-1',
       qualityDocumentUploadedAt: null as Date | null,
+      secondQualityDocumentUploadedAt: null as Date | null,
       qualityConfirmedAt: null as Date | null,
       qualityConfirmedById: null as string | null,
       qualityReviewerId: null as string | null,
       qualityReviewStartedAt: null as Date | null,
       qualityReviewer: null as {id:string;fullName:string}|null,
       vehicleId:'vehicle_1',
-      photos: ['applicant_application','applicant_questionnaire','cylinder_label','vehicle_photo','tech_passport','gas_work_record','cylinder_work_record','gas_inspection_report','cylinder_inspection_report'].map(type => ({ id:type, type, objectKey:type, checksum: undefined as string | undefined })),
+      photos: ['applicant_application','applicant_questionnaire','cylinder_label','vehicle_photo','tech_passport','gas_work_record','cylinder_work_record','gas_inspection_report','cylinder_inspection_report'].map(type => ({ id:type, type, objectKey:type, checksum: undefined as string | undefined })) as Array<{id:string;type:string;objectKey:string;checksum?:string;cylinderSerial?:string|null}>,
       requireApplicantPhotos: false,
       vehicle: { cylinders:[{id:'cylinder_1',fuelType:'СНГ',producedAt:new Date('2024-07-15') as Date|null}], owners:[{id:'owner_1',userId:'owner_user',user:{phone:'+77001234567'}}] },
     };
@@ -230,7 +231,7 @@ describe('Inspection quality control workflow', () => {
       vehicleOwner: {update:jest.fn(async()=>({}))},
       gasCylinder: {findFirst:jest.fn(async()=>null),update:jest.fn(async()=>({}))},
       user: {findUnique:jest.fn(async()=>({id:'existing_user'})),create:jest.fn(async()=>({id:'new_user'}))},
-      inspectionPhoto: { findFirst: jest.fn(async ({where}:{where:{type:string;checksum:string}}) => state.photos.find(p=>p.type===where.type && p.checksum===where.checksum) ?? null), deleteMany: jest.fn(async ({where}:{where:{inspectionId:string;type:string}}) => { const before=state.photos.length; state.photos=state.photos.filter(p=>p.type!==where.type); return {count:before-state.photos.length}; }), create: jest.fn(async ({ data }: { data: { type:string; objectKey:string; checksum:string } }) => {
+      inspectionPhoto: { findFirst: jest.fn(async ({where}:{where:{type:string;checksum:string;cylinderSerial?:string|null}}) => state.photos.find(p=>p.type===where.type && p.checksum===where.checksum && (p.cylinderSerial??null)===(where.cylinderSerial??null)) ?? null), deleteMany: jest.fn(async ({where}:{where:{inspectionId:string;type:string}}) => { const before=state.photos.length; state.photos=state.photos.filter(p=>p.type!==where.type); return {count:before-state.photos.length}; }), create: jest.fn(async ({ data }: { data: { type:string; objectKey:string; checksum:string } }) => {
         const photo={id:'certificate-photo',...data}; state.photos.push(photo); return photo;
       }) },
       organizationMember: {
@@ -278,6 +279,24 @@ describe('Inspection quality control workflow', () => {
     ]);
     expect(first).toEqual(second);
     expect(f.prisma.inspectionPhoto.create).toHaveBeenCalledTimes(1);
+  });
+  it('requires a quality-uploaded second certificate for two cylinders and keeps it tied to that cylinder',async()=>{
+    const f=fixture();
+    Object.assign(f.state,{usesTwoCylinders:true,secondCylinderSerial:'B'});
+    for(const type of ['cylinder_label_2','cylinder_work_record_2','cylinder_inspection_report_2']) f.state.photos.push({id:type,type,objectKey:type,cylinderSerial:'B'});
+    expect((await f.service.readiness('inspection_1',f.user('inspector'))).ready).toBe(true);
+    await f.service.setStatus(f.user('inspector'),'inspection_1','submitted');
+    await f.service.uploadPhoto('inspection_1','certificate_document',{originalname:'first.pdf',buffer:Buffer.from('first-cert')},f.user('qc'));
+    await expect(f.service.setStatus(f.user('qc'),'inspection_1','quality_approved',true)).rejects.toThrow('свидетельство второго баллона');
+    await expect(f.service.uploadPhoto('inspection_1','certificate_document_2',{originalname:'second.pdf',buffer:Buffer.from('second-cert')},f.user('inspector'))).rejects.toThrow('Только контроль качества');
+    const second=await f.service.uploadPhoto('inspection_1','certificate_document_2',{originalname:'second.pdf',buffer:Buffer.from('second-cert')},f.user('qc'));
+    expect(second).toMatchObject({type:'certificate_document_2',cylinderSerial:'B'});
+    expect(f.state.secondQualityDocumentUploadedAt).toBeInstanceOf(Date);
+    await f.service.setStatus(f.user('qc'),'inspection_1','quality_approved',true);
+    await f.service.setStatus(f.user('leader'),'inspection_1','approved');
+    expect(f.certificates.issueForInspection).toHaveBeenCalledTimes(1);
+    Object.assign(f.state,{status:'submitted',secondCylinderSerial:'C'});
+    expect((await f.service.readiness('inspection_1',f.user('qc'))).missing).toContain('certificate_document_2');
   });
   it('prevents submission when the saved cylinder has no gas type',async()=>{
     const f=fixture();f.state.vehicle.cylinders[0].fuelType='';

@@ -375,3 +375,15 @@ describe('Full cylinder production date in Excel',()=>{
     expect(parser.parseFullCylinderDate(value)?.toISOString()).toBe('2024-07-15T00:00:00.000Z');
   });
 });
+
+describe('Certificate period with independent cylinders',()=>{
+ it('uses the earlier cylinder expiry while retaining both cylinder values',async()=>{
+  const inspection={id:'inspection-pair',vehicleId:'vehicle-pair',certificateNumber:'PAIR-1',createdAt:new Date('2026-11-02'),usesTwoCylinders:true,secondCylinderValidUntil:new Date('2028-11-02'),vehicle:{cylinders:[{fuelType:'КПГ',inspectedAt:new Date('2026-11-02')}]}};
+  const create=jest.fn(async({data}:any)=>data);
+  const db={inspection:{findUnique:jest.fn(async()=>inspection)},certificate:{findUnique:jest.fn(async()=>null),create}};
+  const service=new CertificatesService(db as never,storageMock());
+  const result=await service.issueForInspection(inspection.id);
+  expect(result.validUntil).toEqual(new Date('2028-11-02'));
+  expect(result.issuedAt).toEqual(new Date('2026-11-02'));
+ });
+});

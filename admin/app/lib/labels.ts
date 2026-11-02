@@ -53,6 +53,7 @@ const fileTypeLabels: Record<string, string> = {
   gas_inspection_report: 'Отчет инспекции ГБО',
   cylinder_inspection_report: 'Отчет инспекции баллона',
   certificate_document: 'Свидетельство',
+  certificate_document_2:'Свидетельство второго баллона',
 };
 
 export function roleLabel(value?: string | null) {

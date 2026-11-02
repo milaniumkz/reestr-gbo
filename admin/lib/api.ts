@@ -1,3 +1,6 @@
+export type SecondCylinderFields = {
+ secondCylinderManufacturer?:string|null;secondCylinderVolumeLiters?:number|null;secondCylinderShape?:string|null;secondCylinderProducedAt?:string|null;secondCylinderInspectedAt?:string|null;secondCylinderValidUntil?:string|null;
+};
 import {diagnosticHeaders} from './location-telemetry';
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? '/api/v1';
 export const API_BASE_URL = API_URL;
@@ -185,7 +188,7 @@ export type LegalDocumentRow = {
   updatedAt: string;
 };
 
-export type Inspection = {
+export type Inspection = SecondCylinderFields & {
   usesTwoCylinders?: boolean;
   secondCylinderSerial?: string | null;
   id: string;
@@ -205,6 +208,7 @@ export type Inspection = {
     year?: number;
     owners?: Array<{ fullName?: string; iin?: string; address?: string }>;
     cylinders?: Array<{
+      shape?: string;
       serialNumber?: string;
       manufacturer?: string;
       producedAt?: string;
@@ -245,6 +249,7 @@ export type CertificateRow = {
     year?: number;
     owners?: Array<{ fullName?: string; iin?: string; address?: string; phone?: string; user?: { phone?: string } }>;
     cylinders?: Array<{
+      shape?: string;
       serialNumber: string;
       manufacturer?: string;
       producedAt?: string;
@@ -255,7 +260,7 @@ export type CertificateRow = {
       validUntil?: string;
     }>;
   };
-  inspection?: {
+  inspection?: SecondCylinderFields & {
     usesTwoCylinders?: boolean;
     secondCylinderSerial?: string | null;
     id?: string;
@@ -315,7 +320,7 @@ export type RegistryVehicle = {
     number: string;
     status: string;
     validUntil: string;
-    inspection?: { organization?: Organization; usesTwoCylinders?: boolean; secondCylinderSerial?: string | null };
+    inspection?: SecondCylinderFields & { organization?: Organization; usesTwoCylinders?: boolean; secondCylinderSerial?: string | null };
   }>;
   cylinders?: Array<{ serialNumber: string; validUntil: string; producedAt?: string }>;
   owners?: Array<{ fullName: string; iin?: string }>;

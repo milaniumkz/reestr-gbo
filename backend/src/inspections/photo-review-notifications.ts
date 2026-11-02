@@ -16,6 +16,7 @@ const PHOTO_NAMES: Record<string, string> = {
   cylinder_work_record: "рабочая запись баллона",
   gas_inspection_report: "отчёт инспекции ГБО",
   cylinder_inspection_report: "отчёт инспекции баллона",
+  certificate_document_2: "свидетельство второго баллона",
   certificate_document: "свидетельство",
 };
 // One current review notice per inspection/recipient; uploads never notify another IO.

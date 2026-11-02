@@ -102,7 +102,7 @@ export function RegistryTable({
                       </>
                     ) : '-'}
                   </td>
-                  <td>{cylinder?.serialNumber ?? '-'}{certificate?.inspection?.usesTwoCylinders && <div>Баллон 2: {certificate.inspection.secondCylinderSerial}</div>}<div className="muted">ВЫПУСК: {cylinder?.producedAt ? new Date(cylinder.producedAt).toLocaleDateString('ru-RU', {timeZone:'UTC'}) : '-'}</div></td>
+                  <td>{cylinder?.serialNumber ?? '-'}{certificate?.inspection?.usesTwoCylinders && <div>Баллон 2: {certificate.inspection.secondCylinderSerial}<br/>{certificate.inspection.secondCylinderManufacturer ?? 'Производитель не указан'} · {certificate.inspection.secondCylinderVolumeLiters ?? '-'} л · {certificate.inspection.secondCylinderShape ?? '-'}<br/>Выпуск: {certificate.inspection.secondCylinderProducedAt ? new Date(certificate.inspection.secondCylinderProducedAt).toLocaleDateString('ru-RU',{timeZone:'UTC'}) : '-'}<br/>Срок: {certificate.inspection.secondCylinderValidUntil ? new Date(certificate.inspection.secondCylinderValidUntil).toLocaleDateString('ru-RU',{timeZone:'UTC'}) : '-'}</div>}<div className="muted">ВЫПУСК: {cylinder?.producedAt ? new Date(cylinder.producedAt).toLocaleDateString('ru-RU', {timeZone:'UTC'}) : '-'}</div></td>
                 </tr>
               );
             })}

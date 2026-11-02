@@ -1,3 +1,4 @@
+import { cylinderShape } from '../inspections/cylinder-pair';
 import { cylinderProducedAt } from '../common/cylinder-date';
 import { ownerPhone as normalizeOwnerPhone } from '../common/owner-phone';
 import { hasGlobalAccess } from '../common/access-scope';
@@ -64,6 +65,7 @@ export class VehiclesService {
     year?: number;
     owner: { phone: string; fullName: string; iin?: string; address?: string };
     cylinder: {
+      shape?: string;
       serialNumber: string;
       manufacturer: string;
       volumeLiters: number;
@@ -82,6 +84,7 @@ export class VehiclesService {
       }
     }
     const period = inspectionPeriod(input.cylinder.fuelType ?? "", input.cylinder.inspectedAt ?? new Date());
+    const shape = cylinderShape(input.cylinder.shape);
     const producedAt = cylinderProducedAt(input.cylinder.producedAt);
     const ownerPhone = normalizeOwnerPhone(input.owner.phone);
     return this.prisma.vehicle
@@ -154,6 +157,7 @@ export class VehiclesService {
               volumeLiters: input.cylinder.volumeLiters,
               reducerName: input.cylinder.reducerName,
               controlUnitName: input.cylinder.controlUnitName,
+              shape,
               producedAt,
               ...(period ?? { validUntil: new Date(input.cylinder.validUntil) }),
             },
@@ -166,6 +170,7 @@ export class VehiclesService {
               volumeLiters: input.cylinder.volumeLiters,
               reducerName: input.cylinder.reducerName,
               controlUnitName: input.cylinder.controlUnitName,
+              shape,
               producedAt,
               ...(period ?? { validUntil: new Date(input.cylinder.validUntil) }),
             },
@@ -206,7 +211,8 @@ export class VehiclesService {
       },
       select: { id: true },
     });
-    if (duplicate) {
+    const second = await this.prisma.inspection.findFirst({where:{usesTwoCylinders:true,secondCylinderSerial:{equals:serial,mode:'insensitive'},secondCylinderManufacturer:{equals:maker,mode:'insensitive'},vehicleId:{not:vehicleId}},select:{id:true}});
+    if (duplicate || second) {
       throw new BadRequestException(
         "Баллон с таким номером и производителем уже есть в системе. Обратитесь к администратору",
       );
