@@ -312,7 +312,24 @@ class _DocumentCameraScreenState extends State<DocumentCameraScreen>
                       height: 56,
                       child: FilledButton.icon(
                         onPressed: _busy || !_ready ? null : _capture,
-                        icon: const Icon(Icons.camera_alt),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF007A4D),
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: const Color(0xFF455A64),
+                          disabledForegroundColor: Colors.white,
+                          side: const BorderSide(color: Colors.white54),
+                          textStyle: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        icon: Icon(
+                          _busy
+                              ? Icons.hourglass_top_rounded
+                              : !_ready
+                              ? Icons.lock_outline_rounded
+                              : Icons.camera_alt,
+                        ),
                         label: Text(_busy ? 'Съёмка…' : 'Сделать фото'),
                       ),
                     ),

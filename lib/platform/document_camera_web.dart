@@ -110,6 +110,8 @@ Future<PickedLocalFile?> captureDocumentPhoto({
   void refreshGate() {
     final ready = gate.ready(DateTime.now());
     capture.disabled = !ready;
+    capture.style.backgroundColor = ready ? '#007a4d' : '#455a64';
+    capture.style.color = '#ffffff';
     frame.style.borderColor = ready ? '#65ffad' : '#ffb74d';
     hint.text = translateKazakh(
       ready ? documentReadyMessage : gate.message,

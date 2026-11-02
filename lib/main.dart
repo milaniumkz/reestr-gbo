@@ -1584,7 +1584,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
           camera: true,
           languageCode: languageCode,
           frameAspectRatio: 1.6,
-          requireDocumentBounds: kind != 'vehicle',
+          requireDocumentBounds: kind == 'tech_passport',
         );
         final pickedBytes = file?.bytes;
         if (file == null || pickedBytes == null || pickedBytes.isEmpty) {
@@ -1604,7 +1604,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
                   ? 'Фото бирки баллона'
                   : 'Фото автомобиля',
               frameAspectRatio: 1.6,
-              requireDocumentBounds: kind != 'vehicle',
+              requireDocumentBounds: kind == 'tech_passport',
             ),
           ),
         );
@@ -1678,6 +1678,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
           MaterialPageRoute(
             builder: (_) => DocumentCameraScreen(
               title: label,
+              requireDocumentBounds: type != 'cylinder_label_2',
               frameAspectRatio:
                   (type == 'tech_passport_back' || type == 'cylinder_label_2')
                   ? 1.6
@@ -1694,6 +1695,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
             ? await pickLocalFile(
                 extensions,
                 camera: camera,
+                requireDocumentBounds: type != 'cylinder_label_2',
                 languageCode: Localizations.localeOf(context).languageCode,
                 frameAspectRatio:
                     (type == 'tech_passport_back' || type == 'cylinder_label_2')
