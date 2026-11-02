@@ -1,0 +1,37 @@
+name: Read-only deployment diagnostics
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 5
+    steps:
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+      - name: Inspect resources and release progress without credentials or process arguments
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          ssh -o ConnectTimeout=20 "${DEPLOY_USER:-root}@${DEPLOY_HOST}" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          date -u
+          df -h /opt/reestr
+          free -m
+          ps -eo comm=,etimes=,pcpu= | awk '$1 ~ /^(node|npm|npx|tar|gzip|rsync|ssh|bash|sh|esbuild|next-server|jest)$/ {print}'
+          latest="$(find /opt/reestr/releases -mindepth 1 -maxdepth 1 -type d | sort | tail -1)"
+          printf 'Latest release: %s\n' "${latest##*/}"
+          for entry in backend/package-lock.json backend/dist/src/main.js tech/.next/BUILD_ID admin/.next/BUILD_ID build/web/version.json; do
+            if [ -e "$latest/$entry" ]; then stat --format='%y %s %n' "$latest/$entry"; else printf 'Pending: %s\n' "$entry"; fi
+          done
+          curl --silent --show-error --max-time 15 --output /dev/null --write-out 'npm registry HTTP %{http_code}, time %{time_total}s\n' https://registry.npmjs.org/
+          REMOTE
