@@ -77,6 +77,23 @@ void main() {
       );
     },
   );
+  test(
+    'manual capture saves the frame even when report edges cannot be detected',
+    () {
+      final source = img.Image(width: 400, height: 600);
+      img.fill(source, color: img.ColorRgb8(180, 180, 180));
+      final input = <String, Object>{
+        'bytes': Uint8List.fromList(img.encodePng(source)),
+        'previewRatio': 400 / 600,
+        'frameRatio': .71,
+        'requireDocumentBounds': false,
+      };
+      final saved = img.decodeJpg(cropDocumentPhoto(input))!;
+      expect(saved.width / saved.height, closeTo(.71, .01));
+      input['requireDocumentBounds'] = true;
+      expect(() => cropDocumentPhoto(input), throwsStateError);
+    },
+  );
   test('a portrait document frame stays within the camera preview', () {
     for (final size in [const Size(360, 480), const Size(800, 400)]) {
       final frame = documentFrameRect(size, .71);

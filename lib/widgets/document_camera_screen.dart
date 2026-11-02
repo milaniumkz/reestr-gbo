@@ -37,7 +37,7 @@ class _DocumentCameraScreenState extends State<DocumentCameraScreen>
   Timer? _autoCapture;
   bool _waitForDocumentExit = false;
   bool get _aligned =>
-      !widget.requireDocumentBounds || _gate.aligned(DateTime.now());
+      !widget.requireDocumentBounds || _gate.visualAligned(DateTime.now());
   bool get _ready =>
       !widget.requireDocumentBounds || _gate.ready(DateTime.now());
 
@@ -80,7 +80,7 @@ class _DocumentCameraScreenState extends State<DocumentCameraScreen>
           setState(() => _gate.update(result, now));
           if (!result.fits) _waitForDocumentExit = false;
           if (_ready && !_waitForDocumentExit && _autoCapture == null) {
-            _autoCapture = Timer(const Duration(milliseconds: 200), () {
+            _autoCapture = Timer(const Duration(milliseconds: 120), () {
               _autoCapture = null;
               if (mounted && generation == _generation && _ready && !_busy) {
                 unawaited(_capture(automatic: true));
@@ -110,6 +110,19 @@ class _DocumentCameraScreenState extends State<DocumentCameraScreen>
     unawaited(_initialize());
   }
 
+  Future<void> _focusDocument(CameraController controller) async {
+    // Unsupported autofocus or metering controls must never prevent a photo.
+    for (final configure in <Future<void> Function()>[
+      () => controller.setFocusMode(FocusMode.auto),
+      () => controller.setFocusPoint(const Offset(.5, .5)),
+      () => controller.setExposurePoint(const Offset(.5, .5)),
+    ]) {
+      try {
+        await configure().timeout(const Duration(milliseconds: 300));
+      } catch (_) {}
+    }
+  }
+
   Future<void> _initialize() async {
     if (_initializing) return;
     _initializing = true;
@@ -131,6 +144,7 @@ class _DocumentCameraScreenState extends State<DocumentCameraScreen>
       _controller = controller;
       await controller.initialize();
       await controller.lockCaptureOrientation(DeviceOrientation.portraitUp);
+      await _focusDocument(controller);
       if (!mounted) {
         await controller.dispose();
         return;
@@ -171,19 +185,26 @@ class _DocumentCameraScreenState extends State<DocumentCameraScreen>
 
   Future<void> _capture({bool automatic = false}) async {
     final controller = _controller;
-    if (_busy || !_ready || controller?.value.isInitialized != true) return;
+    if (_busy ||
+        _completed ||
+        (automatic && !_ready) ||
+        controller?.value.isInitialized != true) {
+      return;
+    }
     setState(() => _busy = true);
     try {
       _generation++;
       if (controller!.value.isStreamingImages) {
         await controller.stopImageStream();
       }
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      if (!mounted || !identical(controller, _controller)) return;
       final photo = await controller.takePicture();
       final cropped = await compute(cropDocumentPhoto, <String, Object>{
         'bytes': await photo.readAsBytes(),
         'previewRatio': 1 / controller.value.aspectRatio,
         'frameRatio': widget.frameAspectRatio,
-        'requireDocumentBounds': widget.requireDocumentBounds,
+        'requireDocumentBounds': automatic && widget.requireDocumentBounds,
       });
       final file = PickedLocalFile(
         name: 'document-${DateTime.now().millisecondsSinceEpoch}.jpg',
@@ -316,7 +337,7 @@ class _DocumentCameraScreenState extends State<DocumentCameraScreen>
                       vertical: 8,
                     ),
                     child: Text(
-                      _ready ? documentAutoMessage : _gate.message,
+                      _ready ? documentAutoMessage : documentManualMessage,
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: _aligned ? Colors.greenAccent : Colors.white,
@@ -331,7 +352,7 @@ class _DocumentCameraScreenState extends State<DocumentCameraScreen>
                       width: double.infinity,
                       height: 56,
                       child: FilledButton.icon(
-                        onPressed: _busy || !_ready ? null : _capture,
+                        onPressed: _busy ? null : _capture,
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xFF007A4D),
                           foregroundColor: Colors.white,
@@ -346,8 +367,6 @@ class _DocumentCameraScreenState extends State<DocumentCameraScreen>
                         icon: Icon(
                           _busy
                               ? Icons.hourglass_top_rounded
-                              : !_ready
-                              ? Icons.lock_outline_rounded
                               : Icons.camera_alt,
                         ),
                         label: Text(_busy ? 'Съёмка…' : 'Сделать фото'),

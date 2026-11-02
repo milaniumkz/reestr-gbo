@@ -9,6 +9,8 @@ const documentSmallMessage =
 const documentHoldMessage = 'Документ в рамке. Удерживайте камеру неподвижно';
 const documentReadyMessage = 'Документ в рамке. Можно фотографировать';
 const documentAutoMessage = 'Документ в рамке. Автоматическая съёмка…';
+const documentManualMessage =
+    'Наведите документ в рамку. Можно сделать фото вручную';
 
 class DocumentPoint {
   const DocumentPoint(this.x, this.y);
@@ -298,18 +300,18 @@ bool _boundary(
   return true;
 }
 
-// Three consistent frames are required. Any failure or stale preview relocks
-// the shutter; the still image is independently checked before it is returned.
+// Automatic capture needs two consistent visible frames. Brief outline misses
+// retain the visual hint, but can never authorize an automatic shutter.
 class DocumentFrameGate {
-  DocumentBounds? _last;
-  DateTime? _checkedAt;
+  DocumentBounds? _last, _lastGood;
+  DateTime? _checkedAt, _lastGoodAt;
   int _stable = 0;
   String get message => _last?.fits == true
       ? documentHoldMessage
       : _last?.message ?? documentMissingMessage;
   void reset() {
-    _last = null;
-    _checkedAt = null;
+    _last = _lastGood = null;
+    _checkedAt = _lastGoodAt = null;
     _stable = 0;
   }
 
@@ -317,16 +319,15 @@ class DocumentFrameGate {
       _last?.fits == true &&
       _checkedAt != null &&
       now.difference(_checkedAt!) <= const Duration(milliseconds: 900);
-  bool ready(DateTime now) =>
-      aligned(now) &&
-      _stable >= 3 &&
-      _checkedAt != null &&
-      now.difference(_checkedAt!) <= const Duration(milliseconds: 900);
+  bool visualAligned(DateTime now) =>
+      _lastGoodAt != null &&
+      now.difference(_lastGoodAt!) <= const Duration(milliseconds: 650);
+  bool ready(DateTime now) => aligned(now) && _stable >= 2;
   void update(DocumentBounds result, DateTime now) {
-    final previous = _last;
+    final previous = _lastGood;
     final continuous =
-        _checkedAt != null &&
-        now.difference(_checkedAt!) <= const Duration(milliseconds: 900);
+        _lastGoodAt != null &&
+        now.difference(_lastGoodAt!) <= const Duration(milliseconds: 750);
     final stable =
         previous?.fits == true &&
         result.fits &&
@@ -336,8 +337,14 @@ class DocumentFrameGate {
             (previous!.corners[i].x - result.corners[i].x).abs(),
             (previous.corners[i].y - result.corners[i].y).abs(),
           ),
-        ).every((d) => d < .035);
-    _stable = result.fits ? (stable && continuous ? _stable + 1 : 1) : 0;
+        ).every((d) => d < .06);
+    if (result.fits) {
+      _stable = stable && continuous ? _stable + 1 : 1;
+      _lastGood = result;
+      _lastGoodAt = now;
+    } else if (!continuous) {
+      _stable = 0;
+    }
     _last = result;
     _checkedAt = now;
   }

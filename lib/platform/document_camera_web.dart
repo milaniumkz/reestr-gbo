@@ -19,13 +19,50 @@ Future<PickedLocalFile?> captureDocumentPhoto({
   if (devices == null) {
     throw StateError('Камера недоступна. Откройте веб-версию по HTTPS.');
   }
-  final stream = await devices.getUserMedia({
-    'audio': false,
-    'video': {
-      'facingMode': {'ideal': 'environment'},
-      'width': {'ideal': 1800},
-    },
-  });
+  final html.MediaStream stream;
+  try {
+    stream = await devices.getUserMedia({
+      'audio': false,
+      'video': {
+        'facingMode': {'ideal': 'environment'},
+        'width': {'ideal': 1800},
+      },
+    });
+  } catch (error) {
+    final name = error is html.DomException ? error.name : error.toString();
+    if (name.contains('NotAllowed') || name.contains('PermissionDenied')) {
+      throw StateError(
+        'Разрешите камеру в браузере: нажмите значок слева от адреса сайта, включите доступ к камере и повторите съёмку',
+      );
+    }
+    if (name.contains('NotFound') || name.contains('DevicesNotFound')) {
+      throw StateError(
+        'Камера не найдена. Подключите камеру или загрузите готовую фотографию',
+      );
+    }
+    throw StateError(
+      'Не удалось открыть камеру. Закройте другие приложения с камерой, проверьте разрешение браузера и повторите съёмку',
+    );
+  }
+  try {
+    final tracks = (stream as JSObject)
+        .callMethod<JSArray<JSObject>>('getVideoTracks'.toJS)
+        .toDart;
+    for (final track in tracks) {
+      // Optional constraint: browsers without focus controls keep their default.
+      await track
+          .callMethod<JSPromise<JSAny?>>(
+            'applyConstraints'.toJS,
+            {
+              'advanced': [
+                {'focusMode': 'continuous'},
+              ],
+            }.jsify(),
+          )
+          .toDart
+          .timeout(const Duration(milliseconds: 400));
+    }
+  } catch (_) {}
   final result = Completer<PickedLocalFile?>();
   final overlay = html.DivElement()
     ..setAttribute('role', 'dialog')
@@ -79,6 +116,7 @@ Future<PickedLocalFile?> captureDocumentPhoto({
   final gate = DocumentFrameGate();
   Timer? analysisTimer;
   Timer? autoCapture;
+  var automaticCapture = false;
   final analysisCanvas = html.CanvasElement();
   DocumentBounds checkFrame([html.CanvasElement? snapshot]) {
     if (video.videoWidth == 0 || video.videoHeight == 0) {
@@ -110,23 +148,30 @@ Future<PickedLocalFile?> captureDocumentPhoto({
 
   void refreshGate() {
     final ready = gate.ready(DateTime.now());
-    capture.disabled = !ready;
-    capture.style.backgroundColor = ready ? '#007a4d' : '#455a64';
+    capture.disabled = false;
+    capture.style.backgroundColor = '#007a4d';
     capture.style.color = '#ffffff';
-    frame.style.borderColor = gate.aligned(DateTime.now())
+    frame.style.borderColor = gate.visualAligned(DateTime.now())
         ? '#65ffad'
         : '#ffb74d';
     hint.text = translateKazakh(
-      ready ? documentAutoMessage : gate.message,
+      ready ? documentAutoMessage : documentManualMessage,
       languageCode,
     ).toUpperCase();
     if (ready &&
         requireDocumentBounds &&
         autoCapture == null &&
         !result.isCompleted) {
-      autoCapture = Timer(const Duration(milliseconds: 200), () {
+      autoCapture = Timer(const Duration(milliseconds: 120), () {
         autoCapture = null;
-        if (!result.isCompleted && gate.ready(DateTime.now())) capture.click();
+        if (!result.isCompleted && gate.ready(DateTime.now())) {
+          automaticCapture = true;
+          try {
+            capture.click();
+          } finally {
+            automaticCapture = false;
+          }
+        }
       });
     } else if (!ready) {
       autoCapture?.cancel();
@@ -136,7 +181,9 @@ Future<PickedLocalFile?> captureDocumentPhoto({
 
   final captureSub = capture.onClick.listen((_) {
     try {
-      if (requireDocumentBounds && !gate.ready(DateTime.now())) {
+      if (result.isCompleted) return;
+      final automatic = automaticCapture;
+      if (automatic && requireDocumentBounds && !gate.ready(DateTime.now())) {
         refreshGate();
         return;
       }
@@ -146,7 +193,7 @@ Future<PickedLocalFile?> captureDocumentPhoto({
         height: video.videoHeight,
       );
       snapshot.context2D.drawImage(video, 0, 0);
-      if (requireDocumentBounds) {
+      if (automatic && requireDocumentBounds) {
         gate.update(checkFrame(snapshot), DateTime.now());
         refreshGate();
         if (!gate.ready(DateTime.now())) return;

@@ -111,11 +111,11 @@ void main() {
     expect(analyzeDocumentFrame(input).fits, isTrue);
   });
   test(
-    'shutter needs three stable frames, relocks immediately and expires',
+    'automatic shutter needs two stable frames and refuses a lost outline',
     () {
       final gate = DocumentFrameGate(), now = DateTime(2026);
       final valid = analyzeDocumentFrame(scene());
-      for (var i = 0; i < 2; i++) {
+      for (var i = 0; i < 1; i++) {
         gate.update(valid, now.add(Duration(milliseconds: i * 300)));
         expect(gate.ready(now.add(Duration(milliseconds: i * 300))), isFalse);
       }
@@ -127,6 +127,47 @@ void main() {
         now.add(const Duration(milliseconds: 700)),
       );
       expect(gate.ready(now.add(const Duration(milliseconds: 700))), isFalse);
+    },
+  );
+  test(
+    'green hint tolerates brief outline loss but automatic capture does not',
+    () {
+      final gate = DocumentFrameGate(), now = DateTime(2026);
+      final valid = analyzeDocumentFrame(scene());
+      gate.update(valid, now);
+      gate.update(valid, now.add(const Duration(milliseconds: 300)));
+      expect(gate.ready(now.add(const Duration(milliseconds: 300))), isTrue);
+      gate.update(
+        const DocumentBounds(documentMissingMessage),
+        now.add(const Duration(milliseconds: 600)),
+      );
+      expect(
+        gate.visualAligned(now.add(const Duration(milliseconds: 600))),
+        isTrue,
+      );
+      expect(gate.ready(now.add(const Duration(milliseconds: 600))), isFalse);
+      gate.update(valid, now.add(const Duration(milliseconds: 900)));
+      expect(gate.ready(now.add(const Duration(milliseconds: 900))), isTrue);
+      expect(
+        gate.visualAligned(now.add(const Duration(milliseconds: 1600))),
+        isFalse,
+      );
+    },
+  );
+  test(
+    'small hand movement is tolerated, large movement restarts stabilization',
+    () {
+      final gate = DocumentFrameGate(), now = DateTime(2026);
+      final valid = analyzeDocumentFrame(scene());
+      DocumentBounds shifted(double dx) => DocumentBounds(
+        documentReadyMessage,
+        valid.corners.map((p) => DocumentPoint(p.x + dx, p.y)).toList(),
+      );
+      gate.update(valid, now);
+      gate.update(shifted(.04), now.add(const Duration(milliseconds: 300)));
+      expect(gate.ready(now.add(const Duration(milliseconds: 300))), isTrue);
+      gate.update(shifted(.16), now.add(const Duration(milliseconds: 600)));
+      expect(gate.ready(now.add(const Duration(milliseconds: 600))), isFalse);
     },
   );
   test(
