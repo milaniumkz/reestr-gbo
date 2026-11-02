@@ -1,3 +1,4 @@
+import { codeHash } from '../tech-passport/passport-content';
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { describe, expect, it, jest } from '@jest/globals';
 import { InspectionsService } from './inspections.service';
@@ -208,9 +209,9 @@ describe('Inspection quality control workflow', () => {
       qualityReviewStartedAt: null as Date | null,
       qualityReviewer: null as {id:string;fullName:string}|null,
       vehicleId:'vehicle_1',
-      photos: ['applicant_application','applicant_questionnaire','cylinder_label','vehicle_photo','tech_passport','gas_work_record','cylinder_work_record','gas_inspection_report','cylinder_inspection_report'].map(type => ({ id:type, type, objectKey:type, checksum: undefined as string | undefined })) as Array<{id:string;type:string;objectKey:string;checksum?:string;cylinderSerial?:string|null}>,
+      photos: ['applicant_application','applicant_questionnaire','cylinder_label','vehicle_photo','tech_passport','gas_work_record','cylinder_work_record','gas_inspection_report','cylinder_inspection_report'].map(type => ({ id:type, type, objectKey:type, checksum: undefined as string | undefined })) as Array<{id:string;type:string;objectKey:string;checksum?:string;cylinderSerial?:string|null;documentVerification?:unknown}>,
       requireApplicantPhotos: false,
-      vehicle: { cylinders:[{id:'cylinder_1',fuelType:'СНГ',producedAt:new Date('2024-07-15') as Date|null}], owners:[{id:'owner_1',userId:'owner_user',user:{phone:'+77001234567'}}] },
+      vehicle: {vin:'TESTVIN0000000001',plateNumber:'777AAA02', cylinders:[{id:'cylinder_1',fuelType:'СНГ',producedAt:new Date('2024-07-15') as Date|null}], owners:[{id:'owner_1',userId:'owner_user',user:{phone:'+77001234567'}}] },
     };
     const prisma = {
       inspection: {
@@ -221,17 +222,18 @@ describe('Inspection quality control workflow', () => {
           return {count:1};
         }),
         findUnique: jest.fn(async () => state),
+        findUniqueOrThrow: jest.fn(async () => ({...state,organization:{name:"Test organization"}})),
         update: jest.fn(async ({ data }: { data: Record<string, unknown> }) => {
           Object.assign(state,Object.fromEntries(Object.entries(data).filter(([,v])=>v!==undefined)));
           return {...state};
         }),
       },
       certificate: {findUnique:jest.fn(async()=>null)},
-      vehicle: {findUnique:jest.fn(async()=>({id:'vehicle_1'})), update:jest.fn(async()=>({}))},
+      vehicle: {findUnique:jest.fn(async()=>({id:'vehicle_1',vin:'TESTVIN0000000001',plateNumber:'777AAA02'})), update:jest.fn(async()=>({}))},
       vehicleOwner: {update:jest.fn(async()=>({}))},
       gasCylinder: {findFirst:jest.fn(async()=>null),update:jest.fn(async()=>({}))},
       user: {findUnique:jest.fn(async()=>({id:'existing_user'})),create:jest.fn(async()=>({id:'new_user'}))},
-      inspectionPhoto: { findFirst: jest.fn(async ({where}:{where:{type:string;checksum:string;cylinderSerial?:string|null}}) => state.photos.find(p=>p.type===where.type && p.checksum===where.checksum && (p.cylinderSerial??null)===(where.cylinderSerial??null)) ?? null), deleteMany: jest.fn(async ({where}:{where:{inspectionId:string;type:string}}) => { const before=state.photos.length; state.photos=state.photos.filter(p=>p.type!==where.type); return {count:before-state.photos.length}; }), create: jest.fn(async ({ data }: { data: { type:string; objectKey:string; checksum:string } }) => {
+      inspectionPhoto: { update: jest.fn(async ({where,data}:{where:{id:string};data:Record<string,unknown>})=>Object.assign(state.photos.find(p=>p.id===where.id)!,data)), findFirst: jest.fn(async ({where}:{where:{type:string;checksum:string;cylinderSerial?:string|null}}) => state.photos.find(p=>p.type===where.type && p.checksum===where.checksum && (p.cylinderSerial??null)===(where.cylinderSerial??null)) ?? null), deleteMany: jest.fn(async ({where}:{where:{inspectionId:string;type:string;id?:{not:string}}}) => { const before=state.photos.length; state.photos=state.photos.filter(p=>p.type!==where.type || p.id===where.id?.not); return {count:before-state.photos.length}; }), create: jest.fn(async ({ data }: { data: { type:string; objectKey:string; checksum:string } }) => {
         const photo={id:'certificate-photo',...data}; state.photos.push(photo); return photo;
       }) },
       organizationMember: {
@@ -239,16 +241,36 @@ describe('Inspection quality control workflow', () => {
         findFirst: jest.fn(async ({ where }: { where: { userId:string; role:string } }) =>
           (['qc','qc2'].includes(where.userId) && where.role==='quality_control') || (where.userId==='leader' && where.role==='admin') ? {id:'membership'} : null),
       },
+      notification:{create:jest.fn(async()=>({}))},
+      technicalAlert:{create:jest.fn(async()=>({}))},
+      technicalEvent:{create:jest.fn(async()=>({}))},
       auditLog: { create: jest.fn(async () => ({})) },
       $transaction: jest.fn(async (action: (tx: unknown) => Promise<unknown>) => action(prisma)),
     };
     const storage={putObject:jest.fn(async()=>({})),objectUrl:jest.fn((key:string)=>({url:`https://example.test/${key}`}))};
     const certificates={issueForInspection:jest.fn(async()=>({id:'certificate_1'}))};
     const moderation={check:jest.fn(async()=>({moderationStatus:'approved'})),status:()=>({enabled:true,configured:true})};
-    const service=new InspectionsService(prisma as never,storage as never,certificates as never,moderation as never);
+    const passport={verify:jest.fn(async()=>({proof:{kind:'vehicle_registration',status:'content_matched',vinHash:codeHash('TESTVIN0000000001'),plateHash:codeHash('777AAA02')},reason:'Тестовая проверка техпаспорта'}))};
+    const service=new InspectionsService(prisma as never,storage as never,certificates as never,moderation as never,passport as never);
     const user=(id:string)=>({sub:id,phone:'test',roles:['inspection_org']});
-    return {state,prisma,storage,certificates,service,user,moderation};
+    return {state,prisma,storage,certificates,service,user,moderation,passport};
   }
+  it('stores passport verification and blocks submission after vehicle identifiers change', async () => {
+    const f=fixture();
+    await f.service.uploadPhoto('inspection_1','tech_passport',{originalname:'passport.pdf',buffer:Buffer.from('%PDF-valid-fixture')},f.user('inspector'));
+    expect(f.state.photos.find(p=>p.type==='tech_passport')?.documentVerification).toMatchObject({kind:'vehicle_registration',status:'content_matched'});
+    expect((await f.service.readiness('inspection_1',f.user('inspector'))).ready).toBe(true);
+    f.state.vehicle.plateNumber='888AAA02';
+    expect((await f.service.readiness('inspection_1',f.user('inspector'))).missing).toContain('tech_passport_vehicle_mismatch');
+  });
+  it('rejects unrelated passport content without saving an inspection attachment and records the refusal', async () => {
+    const f=fixture();
+    f.passport.verify.mockRejectedValueOnce(new BadRequestException('Техпаспорт: Файл не распознан как техпаспорт'));
+    await expect(f.service.uploadPhoto('inspection_1','tech_passport',{originalname:'passport.jpg',buffer:Buffer.from('unrelated')},f.user('inspector'))).rejects.toThrow('Файл не распознан');
+    expect(f.prisma.inspectionPhoto.create).not.toHaveBeenCalled();
+    expect(f.prisma.technicalEvent.create).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({action:"inspection.photo.rejected",actorId:"inspector"})}));
+    expect(f.prisma.notification.create).toHaveBeenCalledTimes(3);
+  });
   it('reuses a saved photo on repeated upload, while retaining distinct images in the same document slot', async () => {
     const f = fixture();
     const file = {originalname:'report.jpg',buffer:Buffer.from('same-report')};

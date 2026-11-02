@@ -696,6 +696,7 @@ class InspectionRepository {
 String _contentTypeFor(String filename) {
   final lower = filename.toLowerCase();
   if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.webp')) return 'image/webp';
   if (lower.endsWith('.pdf')) return 'application/pdf';
   return 'image/jpeg';
 }

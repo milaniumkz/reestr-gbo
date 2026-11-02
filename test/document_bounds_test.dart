@@ -71,6 +71,16 @@ void main() {
       expect(analyzeDocumentFrame(input).fits, isFalse);
     },
   );
+  test('accepts low contrast paper when its complete outline is visible', () {
+    expect(
+      analyzeDocumentFrame(scene(paper: 160, background: 135)).fits,
+      isTrue,
+    );
+    expect(
+      analyzeDocumentFrame(scene(paper: 135, background: 160)).fits,
+      isTrue,
+    );
+  });
   test('accepts perspective and sensor noise with printed text inside', () {
     final input = scene(paper: 35), gray = input['gray'] as Uint8List;
     final polygon = [

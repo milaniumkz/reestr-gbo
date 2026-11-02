@@ -93,7 +93,9 @@ const inspectionRequiredLabels = <String, String>{
       'Отчет инспекции второго баллона (подпись и печать)',
   'second_cylinder_serial': 'номер второго баллона',
   'vehicle_photo': 'фото автомобиля',
-  'tech_passport': 'фото техпаспорта',
+  'tech_passport': 'техпаспорт (фото или PDF)',
+  'tech_passport_vehicle_mismatch':
+      'техпаспорт для текущих VIN и государственного номера',
   ...inspectionPackageDocuments,
   'certificate_document': 'Свидетельство (рус./каз.)',
   'certificate_document_2': 'Свидетельство второго баллона (рус./каз.)',
@@ -1647,6 +1649,64 @@ class _ErsiDemoState extends State<ErsiDemo> {
     }
   }
 
+  bool get _techPassportPdf =>
+      techPassportPhotoName?.toLowerCase().endsWith('.pdf') ??
+      (selectedInspection?.files.any(
+            (file) =>
+                file.type == 'tech_passport' &&
+                file.objectKey.toLowerCase().endsWith('.pdf'),
+          ) ??
+          false);
+
+  Future<void> _pickTechPassportFile({required bool pdf}) async {
+    try {
+      final extensions = pdf
+          ? const ['pdf']
+          : const ['jpg', 'jpeg', 'png', 'webp'];
+      final file = kIsWeb
+          ? await pickLocalFile(extensions)
+          : await _pickPluginFile(extensions);
+      if (file == null) return;
+      if (file.bytes.isEmpty) throw StateError('Файл пустой');
+      if (file.bytes.length > 12 * 1024 * 1024) {
+        throw StateError('Максимальный размер техпаспорта — 12 МБ');
+      }
+      if (pdf &&
+          (file.bytes.length < 5 ||
+              String.fromCharCodes(file.bytes.take(5)) != '%PDF-')) {
+        throw StateError('Выберите настоящий PDF-файл техпаспорта');
+      }
+      final position = await _tryCurrentPosition();
+      if (!mounted) return;
+      setState(() {
+        techPassportPhotoName = file.name;
+        techPassportPhotoBytes = file.bytes;
+        techPassportPhotoPosition = position;
+        techPassportPhotoUploaded = false;
+        if (pdf) {
+          packageDocumentNames = {...packageDocumentNames}
+            ..remove('tech_passport_back');
+          packageDocumentBytes = {...packageDocumentBytes}
+            ..remove('tech_passport_back');
+          packageDocumentUploaded = {...packageDocumentUploaded}
+            ..remove('tech_passport_back');
+          packageDocumentPositions = {...packageDocumentPositions}
+            ..remove('tech_passport_back');
+        }
+        apiState =
+            'Техпаспорт выбран. Содержимое и данные автомобиля будут проверены при отправке';
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () => apiState = error is StateError
+              ? error.message.toString()
+              : 'Не удалось выбрать техпаспорт',
+        );
+      }
+    }
+  }
+
   String _uploadErrorText(Object error) {
     if (error is ApiException && [400, 413, 503].contains(error.statusCode)) {
       return error.message;
@@ -1985,6 +2045,10 @@ class _ErsiDemoState extends State<ErsiDemo> {
   }
 
   void _goToMissingInspectionStep(String message) {
+    if (message.toLowerCase().contains('техпаспорт')) {
+      go(20);
+      return;
+    }
     if (message.contains('владель') ||
         message.contains('свидетель') ||
         message.contains('телефон') ||
@@ -2017,6 +2081,12 @@ class _ErsiDemoState extends State<ErsiDemo> {
       required bool uploaded,
     }) async {
       if (uploaded || filename == null || bytes == null) return;
+      if (kind == 'tech_passport' && mounted) {
+        setState(
+          () => apiState =
+              'Проверка техпаспорта: распознавание документа и данных автомобиля',
+        );
+      }
       await repositories.inspections.uploadPhoto(
         inspectionId: inspectionId,
         type: _inspectionPhotoType(kind),
@@ -2890,47 +2960,68 @@ class _ErsiDemoState extends State<ErsiDemo> {
       ),
       20 => _PhotoStep(
         step: 6,
-        title: 'Фото техпаспорта',
-        caption: 'Лицевая сторона',
+        title: 'Техпаспорт',
+        passportMode: true,
+        onUploadPhoto: () => _pickTechPassportFile(pdf: false),
+        onUploadPdf: () => _pickTechPassportFile(pdf: true),
+        existingFiles:
+            selectedInspection?.files
+                .where((file) => file.type == 'tech_passport')
+                .toList() ??
+            const [],
+        caption: 'Сфотографируйте бумажный техпаспорт или загрузите файл',
         photoName: techPassportPhotoName,
         photoBytes: techPassportPhotoBytes,
         uploaded: techPassportPhotoUploaded,
-        locked: protectedInspectionPhotosLocked && techPassportPhotoUploaded,
-        secondary: Column(
-          children: [
-            const SizedBox(height: 16),
-            const Text(
-              'ОБРАТНАЯ СТОРОНА ТЕХПАСПОРТА — НЕОБЯЗАТЕЛЬНО',
-              style: _section,
-            ),
-            if (packageDocumentBytes['tech_passport_back'] != null)
-              _PhotoBox(
-                caption: 'Обратная сторона техпаспорта',
-                imageBytes: packageDocumentBytes['tech_passport_back'],
-                onTap: () => _pickInspectionDocument(
-                  'tech_passport_back',
-                  'Обратная сторона техпаспорта',
-                  camera: true,
-                ),
+        locked:
+            !_editingQualityInspection &&
+            protectedInspectionPhotosLocked &&
+            techPassportPhotoUploaded,
+        secondary: _techPassportPdf
+            ? null
+            : Column(
+                children: [
+                  const SizedBox(height: 16),
+                  const Text(
+                    'ОБРАТНАЯ СТОРОНА ТЕХПАСПОРТА — НЕОБЯЗАТЕЛЬНО',
+                    style: _section,
+                  ),
+                  if (packageDocumentBytes['tech_passport_back'] != null)
+                    _PhotoBox(
+                      caption: 'Обратная сторона техпаспорта',
+                      imageBytes: packageDocumentBytes['tech_passport_back'],
+                      onTap: () => _pickInspectionDocument(
+                        'tech_passport_back',
+                        'Обратная сторона техпаспорта',
+                        camera: true,
+                      ),
+                    ),
+                  for (final file
+                      in selectedInspection?.files.where(
+                            (file) => file.type == 'tech_passport_back',
+                          ) ??
+                          <InspectionFileInfo>[])
+                    if (packageDocumentBytes['tech_passport_back'] == null)
+                      _InspectionFileCard(file: file),
+                  _PrimaryButton(
+                    text: 'Загрузить фото второй стороны',
+                    icon: Icons.upload_file_rounded,
+                    onTap: () => _pickInspectionDocument(
+                      'tech_passport_back',
+                      'Обратная сторона техпаспорта',
+                    ),
+                  ),
+                  _PrimaryButton(
+                    text: 'Сфотографировать вторую сторону',
+                    icon: Icons.camera_alt_rounded,
+                    onTap: () => _pickInspectionDocument(
+                      'tech_passport_back',
+                      'Обратная сторона техпаспорта',
+                      camera: true,
+                    ),
+                  ),
+                ],
               ),
-            for (final file
-                in selectedInspection?.files.where(
-                      (file) => file.type == 'tech_passport_back',
-                    ) ??
-                    <InspectionFileInfo>[])
-              if (packageDocumentBytes['tech_passport_back'] == null)
-                _InspectionFileCard(file: file),
-            _PrimaryButton(
-              text: 'Сфотографировать вторую сторону',
-              icon: Icons.camera_alt_rounded,
-              onTap: () => _pickInspectionDocument(
-                'tech_passport_back',
-                'Обратная сторона техпаспорта',
-                camera: true,
-              ),
-            ),
-          ],
-        ),
         onCamera: () => _captureInspectionPhoto('tech_passport'),
         onNext: () => go(21),
       ),
@@ -6780,6 +6871,10 @@ class _PhotoStep extends StatelessWidget {
     required this.photoBytes,
     required this.uploaded,
     this.locked = false,
+    this.passportMode = false,
+    this.onUploadPhoto,
+    this.onUploadPdf,
+    this.existingFiles = const [],
     this.secondary,
     required this.onCamera,
     required this.onNext,
@@ -6791,6 +6886,9 @@ class _PhotoStep extends StatelessWidget {
   final List<int>? photoBytes;
   final bool uploaded;
   final bool locked;
+  final bool passportMode;
+  final VoidCallback? onUploadPhoto, onUploadPdf;
+  final List<InspectionFileInfo> existingFiles;
   final Widget? secondary;
   final VoidCallback onCamera;
   final VoidCallback onNext;
@@ -6799,7 +6897,9 @@ class _PhotoStep extends StatelessWidget {
   Widget build(BuildContext context) {
     return _AppScreen(
       title: title,
-      subtitle: 'Фото оригинала',
+      subtitle: passportMode
+          ? 'Бумажный техпаспорт или электронный PDF'
+          : 'Фото оригинала',
       activeNav: 1,
       leadingBack: true,
       paymentNav: true,
@@ -6807,29 +6907,70 @@ class _PhotoStep extends StatelessWidget {
         children: [
           _ProgressDots(step: step),
           const SizedBox(height: 14),
-          _PhotoBox(
-            caption: locked
-                ? 'Фото уже загружено и зафиксировано'
-                : photoName == null
-                ? caption
-                : 'Фото выбрано: $photoName',
-            imageBytes: photoBytes,
-            onTap: locked ? null : onCamera,
-            tall: true,
-          ),
-          const _InfoBox(
-            title: 'Контроль качества',
-            text: '• без бликов\n• номер читается\n• год выпуска виден',
-          ),
-          _PrimaryButton(
-            text: locked
-                ? 'Фото зафиксировано'
-                : photoName == null
-                ? 'Сделать фото'
-                : 'Выбрать другое фото',
-            icon: locked ? Icons.lock_rounded : Icons.camera_alt_rounded,
-            onTap: locked ? null : onCamera,
-          ),
+          if (passportMode) ...[
+            _PrimaryButton(
+              text: 'Сфотографировать бумажный техпаспорт',
+              icon: Icons.camera_alt_rounded,
+              onTap: locked ? null : onCamera,
+            ),
+            _PrimaryButton(
+              text: 'Загрузить фото техпаспорта',
+              icon: Icons.photo_library_rounded,
+              onTap: locked ? null : onUploadPhoto,
+            ),
+            _PrimaryButton(
+              text: 'Загрузить электронный PDF',
+              icon: Icons.picture_as_pdf_rounded,
+              onTap: locked ? null : onUploadPdf,
+            ),
+          ],
+          if (passportMode && photoName?.toLowerCase().endsWith('.pdf') == true)
+            _InfoBox(
+              title: 'Электронный техпаспорт PDF',
+              text:
+                  '${photoName!}\nПроверка содержимого выполняется при отправке',
+            )
+          else if (passportMode &&
+              uploaded &&
+              photoBytes == null &&
+              existingFiles.isNotEmpty)
+            for (final file in existingFiles) _InspectionFileCard(file: file)
+          else
+            _PhotoBox(
+              caption: locked
+                  ? 'Фото уже загружено и зафиксировано'
+                  : photoName == null
+                  ? caption
+                  : 'Фото выбрано: $photoName',
+              imageBytes: photoBytes,
+              onTap: locked ? null : onCamera,
+              tall: true,
+            ),
+          if (passportMode)
+            const _InfoBox(
+              title: 'Проверка техпаспорта',
+              text:
+                  'Файл должен содержать техпаспорт этого автомобиля. Для электронного PDF проверяются VIN и государственный номер. Каспи и другие приложения: сохраните PDF и выберите его в файлах.',
+            )
+          else
+            const _InfoBox(
+              title: 'Контроль качества',
+              text: '• без бликов\n• номер читается\n• год выпуска виден',
+            ),
+          if (!passportMode)
+            _PrimaryButton(
+              text: locked
+                  ? 'Фото зафиксировано'
+                  : photoName == null
+                  ? (passportMode
+                        ? 'Сфотографировать бумажный техпаспорт'
+                        : 'Сделать фото')
+                  : (passportMode
+                        ? 'Сфотографировать бумажный техпаспорт'
+                        : 'Выбрать другое фото'),
+              icon: locked ? Icons.lock_rounded : Icons.camera_alt_rounded,
+              onTap: locked ? null : onCamera,
+            ),
           ?secondary,
           if (photoName != null || uploaded) ...[
             const SizedBox(height: 12),

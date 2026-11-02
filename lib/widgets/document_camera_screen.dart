@@ -34,6 +34,10 @@ class _DocumentCameraScreenState extends State<DocumentCameraScreen>
   int _generation = 0;
   DateTime _lastFrame = DateTime.fromMillisecondsSinceEpoch(0);
   Timer? _freshness;
+  Timer? _autoCapture;
+  bool _waitForDocumentExit = false;
+  bool get _aligned =>
+      !widget.requireDocumentBounds || _gate.aligned(DateTime.now());
   bool get _ready =>
       !widget.requireDocumentBounds || _gate.ready(DateTime.now());
 
@@ -74,6 +78,18 @@ class _DocumentCameraScreenState extends State<DocumentCameraScreen>
         final result = await compute(analyzeDocumentFrame, input);
         if (mounted && generation == _generation && !_busy) {
           setState(() => _gate.update(result, now));
+          if (!result.fits) _waitForDocumentExit = false;
+          if (_ready && !_waitForDocumentExit && _autoCapture == null) {
+            _autoCapture = Timer(const Duration(milliseconds: 200), () {
+              _autoCapture = null;
+              if (mounted && generation == _generation && _ready && !_busy) {
+                unawaited(_capture(automatic: true));
+              }
+            });
+          } else if (!_ready) {
+            _autoCapture?.cancel();
+            _autoCapture = null;
+          }
         }
       } catch (_) {
         if (mounted && generation == _generation) setState(() => _gate.reset());
@@ -143,6 +159,8 @@ class _DocumentCameraScreenState extends State<DocumentCameraScreen>
       _generation++;
       _gate.reset();
       _freshness?.cancel();
+      _autoCapture?.cancel();
+      _autoCapture = null;
       _controller = null;
       unawaited(controller!.dispose());
       if (mounted) setState(() {});
@@ -151,7 +169,7 @@ class _DocumentCameraScreenState extends State<DocumentCameraScreen>
     }
   }
 
-  Future<void> _capture() async {
+  Future<void> _capture({bool automatic = false}) async {
     final controller = _controller;
     if (_busy || !_ready || controller?.value.isInitialized != true) return;
     setState(() => _busy = true);
@@ -176,6 +194,7 @@ class _DocumentCameraScreenState extends State<DocumentCameraScreen>
         Navigator.of(context).pop(file);
       }
     } catch (error) {
+      if (automatic) _waitForDocumentExit = true;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -214,6 +233,7 @@ class _DocumentCameraScreenState extends State<DocumentCameraScreen>
     WidgetsBinding.instance.removeObserver(this);
     _generation++;
     _freshness?.cancel();
+    _autoCapture?.cancel();
     final controller = _controller;
     if (controller != null) unawaited(controller.dispose());
     super.dispose();
@@ -264,7 +284,7 @@ class _DocumentCameraScreenState extends State<DocumentCameraScreen>
                                 child: CustomPaint(
                                   painter: DocumentFramePainter(
                                     widget.frameAspectRatio,
-                                    ready: _ready,
+                                    ready: _aligned,
                                   ),
                                 ),
                               ),
@@ -296,10 +316,10 @@ class _DocumentCameraScreenState extends State<DocumentCameraScreen>
                       vertical: 8,
                     ),
                     child: Text(
-                      _ready ? documentReadyMessage : _gate.message,
+                      _ready ? documentAutoMessage : _gate.message,
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: _ready ? Colors.greenAccent : Colors.white,
+                        color: _aligned ? Colors.greenAccent : Colors.white,
                       ),
                     ),
                   ),

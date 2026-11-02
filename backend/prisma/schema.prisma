@@ -254,6 +254,7 @@ model InspectionPhoto {
   moderationModel String?
   moderationCheckedAt DateTime?
   moderationReason String?
+  documentVerification Json?
   checksum     String?
   lat          Float?
   lng          Float?

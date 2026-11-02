@@ -1,3 +1,5 @@
+import { TechPassportService } from '../tech-passport/tech-passport.service';
+import { passportProofMatches } from '../tech-passport/passport-content';
 import { assertSecondCylinderUnique } from './second-cylinder-uniqueness';
 import { CylinderPairInput, cylinderPair, secondCylinderDocuments, activeCylinderPhotos, cylinderShape, allSecondCylinderDocuments } from './cylinder-pair';
 import sharp from 'sharp';
@@ -43,6 +45,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
     private readonly storage: StorageService,
     private readonly certificates: CertificatesService,
     private readonly photoModeration: PhotoModerationService = new PhotoModerationService(),
+    private readonly techPassport: TechPassportService = new TechPassportService(),
   ) {}
 
   onModuleInit() {
@@ -488,6 +491,8 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       user,
     );
     const photoTypes = new Set(inspection.photos.filter(photo => !allSecondCylinderDocuments.includes(photo.type) || (inspection.usesTwoCylinders && photo.cylinderSerial === inspection.secondCylinderSerial)).map((photo) => photo.type));
+    const verifiedPassport=inspection.photos.find(photo=>photo.type==='tech_passport'&&photo.documentVerification);
+    const passportChanged=verifiedPassport && !passportProofMatches(verifiedPassport.documentVerification,inspection.vehicle);
     const required = [
       "cylinder_label",
       ...(inspection.usesTwoCylinders ? secondCylinderDocuments : []),
@@ -502,6 +507,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
     ];
     const missing = [
       ...required.filter((type) => !photoTypes.has(type)),
+      ...(passportChanged?['tech_passport_vehicle_mismatch']:[]),
       ...(inspection.usesTwoCylinders && !inspection.secondCylinderSerial?.trim() ? ["second_cylinder_serial"] : []),
       ...(inspection.vehicle.cylinders.length ? [] : ["gas_cylinder"]),
       ...(inspection.vehicle.owners.length ? [] : ["vehicle_owner"]),
@@ -642,8 +648,21 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
     if (allSecondCylinderDocuments.includes(type) && (!inspection.usesTwoCylinders || !inspection.secondCylinderSerial)) throw new BadRequestException("Сначала укажите второй баллон в данных инспекции");
     if (!file?.buffer?.length) throw new BadRequestException("Выберите непустой файл");
     let moderation:Awaited<ReturnType<PhotoModerationService['check']>>;
-    try{moderation=await this.photoModeration.check(file.buffer,file.originalname,type.endsWith("_2") ? type.slice(0,-2) : type);}
+    let documentVerification:Awaited<ReturnType<TechPassportService['verify']>>['proof']|undefined;
+    try{
+      if(['tech_passport','tech_passport_back'].includes(type) && file.originalname.toLowerCase().endsWith('.pdf') && file.buffer.subarray(0,5).toString()!=='%PDF-') throw new BadRequestException('Выберите настоящий PDF-файл техпаспорта');
+      moderation=await this.photoModeration.check(file.buffer,file.originalname,type.endsWith("_2") ? type.slice(0,-2) : type);
+      if(['tech_passport','tech_passport_back'].includes(type)){
+        const vehicle=await this.prisma.vehicle.findUnique({where:{id:inspection.vehicleId}});
+        if(!vehicle) throw new BadRequestException('Автомобиль не найден');
+        const primary=type==='tech_passport_back'?await this.prisma.inspectionPhoto.findFirst({where:{inspectionId:id,type:'tech_passport'},orderBy:{createdAt:'desc'}}):null;
+        const verified=await this.techPassport.verify(file.buffer,vehicle,type==='tech_passport_back',passportProofMatches(primary?.documentVerification,vehicle));
+        documentVerification=verified.proof;
+        moderation={...moderation,moderationReason:[moderation.moderationReason,verified.reason].filter(Boolean).join('\n')};
+      }
+    }
     catch(error){
+      if(error instanceof BadRequestException && ['tech_passport','tech_passport_back'].includes(type) && !error.message.startsWith('Техпаспорт:')) error=new BadRequestException('Техпаспорт: '+error.message);
       if(error instanceof BadRequestException){
         let evidenceFileId:string|undefined;
         try {
@@ -658,19 +677,20 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
     }
     const lat = this.coordinate(location.lat, -90, 90);
     const lng = this.coordinate(location.lng, -180, 180);
-    const extension =
-      file.originalname.split(".").pop()?.toLowerCase() ?? "bin";
+    const pdf = file.buffer.subarray(0,5).toString()==='%PDF-';
+    const extension = pdf ? 'pdf' : (file.originalname.split(".").pop()?.toLowerCase() ?? "bin");
     const objectKey = `inspections/${id}/${type}-${randomUUID()}.${extension}`;
     const checksum = createHash("sha256").update(file.buffer).digest("hex");
     const storedObject=await this.storage.putObject({
       key: objectKey,
       body: file.buffer,
-      contentType: file.mimetype,
+      contentType: pdf ? "application/pdf" : file.mimetype,
       createdById: user?.sub,
     });
     const photoData = {
         inspectionId: id,
         ...moderation,
+        documentVerification,
         type,
         cylinderSerial: allSecondCylinderDocuments.includes(type) ? inspection.secondCylinderSerial : null,
         objectKey,
@@ -686,11 +706,19 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       if (locked.status === "submitted" && locked.qualityReviewerId !== user!.sub) throw new ConflictException("Инспекцию уже проверяет другой сотрудник");
       const existing = await tx.inspectionPhoto.findFirst({where:{inspectionId:id,type,checksum,cylinderSerial:photoData.cylinderSerial},orderBy:{createdAt:"desc"}});
       if (existing) {
+        if(documentVerification) {
+          await tx.inspectionPhoto.update({where:{id:existing.id},data:{documentVerification,...moderation}});
+          await tx.inspectionPhoto.deleteMany({where:{inspectionId:id,type,id:{not:existing.id}}});
+          if(type==='tech_passport' && pdf) await tx.inspectionPhoto.deleteMany({where:{inspectionId:id,type:'tech_passport_back'}});
+        }
         if (isCertificate && !locked[qualityUploadField]) await tx.inspection.update({where:{id},data:{[qualityUploadField]:new Date()}});
         await tx.auditLog.create({data:{actorId:user?.sub,action:"inspection.photo.duplicate_ignored",entity:"inspection",entityId:id,metadata:{photoId:existing.id,fileId:storedObject.id,type,checksum,lat,lng}}});
-        return existing;
+        return documentVerification ? {...existing,documentVerification,...moderation} : existing;
       }
-      if(inspection.status === "submitted" && !isCertificate){
+      if(['tech_passport','tech_passport_back'].includes(type)) {
+        await tx.inspectionPhoto.deleteMany({where:{inspectionId:id,type}});
+        if(type==='tech_passport' && pdf) await tx.inspectionPhoto.deleteMany({where:{inspectionId:id,type:'tech_passport_back'}});
+      } else if(inspection.status === "submitted" && !isCertificate){
         await tx.inspectionPhoto.deleteMany({where:{inspectionId:id,type}});
       }else if(isCertificate){
         await tx.inspection.update({where:{id,status:"submitted",qualityReviewerId:user!.sub},data:{[qualityUploadField]:new Date()}});

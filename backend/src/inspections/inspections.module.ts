@@ -1,3 +1,4 @@
+import { TechPassportService } from '../tech-passport/tech-passport.service';
 import { PhotoModerationService } from '../photo-moderation/photo-moderation.service';
 import { Module } from '@nestjs/common';
 import { CertificatesModule } from '../certificates/certificates.module';
@@ -8,7 +9,7 @@ import { InspectionsService } from './inspections.service';
 @Module({
   imports: [CertificatesModule, StorageModule],
   controllers: [InspectionsController],
-  providers: [InspectionsService, PhotoModerationService],
+  providers: [InspectionsService, PhotoModerationService,TechPassportService],
   exports: [PhotoModerationService],
 })
 export class InspectionsModule {}

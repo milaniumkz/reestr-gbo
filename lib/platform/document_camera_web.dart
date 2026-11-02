@@ -78,6 +78,7 @@ Future<PickedLocalFile?> captureDocumentPhoto({
   StreamSubscription<html.Event>? resizeSub;
   final gate = DocumentFrameGate();
   Timer? analysisTimer;
+  Timer? autoCapture;
   final analysisCanvas = html.CanvasElement();
   DocumentBounds checkFrame([html.CanvasElement? snapshot]) {
     if (video.videoWidth == 0 || video.videoHeight == 0) {
@@ -112,11 +113,25 @@ Future<PickedLocalFile?> captureDocumentPhoto({
     capture.disabled = !ready;
     capture.style.backgroundColor = ready ? '#007a4d' : '#455a64';
     capture.style.color = '#ffffff';
-    frame.style.borderColor = ready ? '#65ffad' : '#ffb74d';
+    frame.style.borderColor = gate.aligned(DateTime.now())
+        ? '#65ffad'
+        : '#ffb74d';
     hint.text = translateKazakh(
-      ready ? documentReadyMessage : gate.message,
+      ready ? documentAutoMessage : gate.message,
       languageCode,
     ).toUpperCase();
+    if (ready &&
+        requireDocumentBounds &&
+        autoCapture == null &&
+        !result.isCompleted) {
+      autoCapture = Timer(const Duration(milliseconds: 200), () {
+        autoCapture = null;
+        if (!result.isCompleted && gate.ready(DateTime.now())) capture.click();
+      });
+    } else if (!ready) {
+      autoCapture?.cancel();
+      autoCapture = null;
+    }
   }
 
   final captureSub = capture.onClick.listen((_) {
@@ -236,6 +251,7 @@ Future<PickedLocalFile?> captureDocumentPhoto({
     );
   } finally {
     analysisTimer?.cancel();
+    autoCapture?.cancel();
     video.pause();
     final tracks = (stream as JSObject).callMethod<JSArray<JSObject>>(
       'getTracks'.toJS,

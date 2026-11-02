@@ -64,6 +64,7 @@ if [ -f '${APP_DIR}/backend/.env' ]; then
   cp '${APP_DIR}/backend/.env' '$REMOTE_RELEASE/backend/.env'
 fi
 if [ '$DEPLOY_COMPONENTS' != admin ]; then
+bash '$REMOTE_RELEASE/ops/ensure-passport-tools.sh'
 cd '$REMOTE_RELEASE/backend'
 if [ -f .env ]; then
   set -a
