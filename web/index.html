@@ -22,6 +22,8 @@
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0B3D2E">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="ЕРСИ ГБО">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
@@ -34,6 +36,7 @@
 </head>
 <body>
   <div id="startup" role="status" style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:#f0f8f5;color:#103d37;font:16px Arial,sans-serif;text-align:center;padding:24px;z-index:9999">
+    <img src="icons/Icon-192.png" alt="ЕРСИ ГБО" width="96" height="96" style="border-radius:20px">
     <strong>ЕРСИ ГБО</strong>
     <span id="startup-message">Загрузка приложения… / Қолданба жүктелуде…</span>
     <button id="startup-retry" type="button" hidden style="padding:12px 24px;border:0;border-radius:8px;background:#007e56;color:white;font:inherit">Повторить / Қайталау</button>
@@ -66,6 +69,7 @@
     }, true);
     window.addEventListener('flutter-first-frame', function () {
       started = true;
+      window.ersiFlutterReady = true;
       clearTimeout(startupTimeout);
       startup.remove();
     }, {once: true});
@@ -76,7 +80,10 @@
           (async function () {
             if ('serviceWorker' in navigator) {
               const registrations = await navigator.serviceWorker.getRegistrations();
-              await Promise.all(registrations.map((registration) => registration.unregister()));
+              await Promise.all(registrations.filter((registration) => {
+                const worker = registration.active || registration.waiting || registration.installing;
+                return worker && /\/flutter_service_worker\.js(?:\?|$)/.test(worker.scriptURL);
+              }).map((registration) => registration.unregister()));
             }
             if ('caches' in window) {
               const keys = await caches.keys();
@@ -96,6 +103,7 @@
       }
     })();
   </script>
+  <script src="install.js?v=1" defer></script>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader

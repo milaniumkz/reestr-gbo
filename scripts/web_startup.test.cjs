@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const index = readFileSync(new URL('../web/index.html', `file://${__filename}`), 'utf8');
 const inline = index.match(/<script>([\s\S]*?)<\/script>/)[1];
 
-function harness({storageHangs = false} = {}) {
+function harness({storageHangs = false, workers} = {}) {
   const listeners = {}, timers = new Map(), scripts = [], removed = [], deleted = [];
   const nodes = Object.fromEntries(['startup', 'startup-message', 'startup-retry'].map(id => [id, {
     hidden: id === 'startup-retry', textContent: '',
@@ -13,7 +13,7 @@ function harness({storageHangs = false} = {}) {
   }]));
   const context = {
     console: {warn() {}, error() {}}, HTMLScriptElement: class {},
-    navigator: {}, document: {getElementById: id => nodes[id], createElement: () => ({}), body: {appendChild: s => scripts.push(s)}},
+    navigator: workers ? {serviceWorker:workers} : {}, document: {getElementById: id => nodes[id], createElement: () => ({}), body: {appendChild: s => scripts.push(s)}},
     setTimeout: (fn, ms) => { timers.set(ms, fn); return ms; }, clearTimeout: ms => timers.delete(ms),
   };
   context.window = {location: {reload: () => removed.push('reload')},
@@ -45,6 +45,19 @@ test('normal startup preserves unrelated caches and removes splash only on first
   assert.equal(h.nodes['startup-retry'].hidden, true);
 });
 
+test('cache cleanup removes only legacy Flutter workers and preserves the install worker', async () => {
+  const removed = [];
+  const workers = {getRegistrations: async () => [
+    {active:{scriptURL:'https://example.org/flutter_service_worker.js'},unregister:async()=>removed.push('flutter')},
+    {active:{scriptURL:'https://example.org/ersi-pwa-sw.js'},unregister:async()=>removed.push('install')},
+    {active:{scriptURL:'https://example.org/push-sw.js'},unregister:async()=>removed.push('push')},
+  ]};
+  // Re-run startup with the worker API present before the cleanup begins.
+  const h = harness({workers});
+  await settle();
+  assert.deepEqual(removed,['flutter']);
+});
+
 test('failed entrypoint and startup timeout offer a reload instead of a blank page', async () => {
   const h = harness(); await settle();
   h.listeners.error({target: new h.context.HTMLScriptElement()});
@@ -67,4 +80,36 @@ test('Flutter loads its renderer from the current server and reports bootstrap r
   await settle();
   assert.equal(options.config.canvasKitBaseUrl, 'https://example.org/canvaskit/');
   assert.equal(event, 'ersi-bootstrap-error');
+});
+
+test('install worker does not cache API data and gives a clear offline navigation response', async () => {
+  const handlers = {};
+  vm.runInNewContext(readFileSync(new URL('../web/ersi-pwa-sw.js', `file://${__filename}`), 'utf8'), {
+    self:{location:{origin:'https://example.org'},addEventListener:(name,fn)=>handlers[name]=fn},
+    URL,Response,fetch:async()=>{throw new Error('offline');},
+  });
+  let response;
+  handlers.fetch({request:{mode:'cors',url:'https://example.org/api/v1/me'},respondWith:()=>{throw new Error('API must not be intercepted');}});
+  handlers.fetch({request:{mode:'navigate',url:'https://example.org/'},respondWith:r=>{response=r;}});
+  const offline = await response;
+  assert.equal(offline.status,503);
+  assert.equal(offline.headers.get('Cache-Control'),'no-store');
+  assert.match(await offline.text(),/Нет подключения/);
+});
+
+test('frontend publisher stamps a versioned bundle and install script', () => {
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+  const {execFileSync} = require('node:child_process');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(),'ersi-web-stamp-'));
+  try {
+    const sha='a'.repeat(40);
+    fs.writeFileSync(path.join(dir,'main.dart.js'),'bundle');
+    fs.writeFileSync(path.join(dir,'index.html'),'<script src="install.js?v=1"></script>');
+    fs.writeFileSync(path.join(dir,'flutter_bootstrap.js'),'const cfg={"mainJsPath":"main.dart.js"};'+
+      readFileSync(new URL('../web/flutter_bootstrap.js', `file://${__filename}`),'utf8'));
+    execFileSync('python3',['scripts/stamp_web_frontend.py',sha,dir]);
+    assert.equal(fs.readFileSync(path.join(dir,`main.${sha}.dart.js`),'utf8'),'bundle');
+    assert.match(fs.readFileSync(path.join(dir,'flutter_bootstrap.js'),'utf8'),new RegExp(`main\\.${sha}\\.dart\\.js`));
+    assert.match(fs.readFileSync(path.join(dir,'index.html'),'utf8'),new RegExp('install.js\\?v='+sha));
+  } finally {fs.rmSync(dir,{recursive:true,force:true});}
 });

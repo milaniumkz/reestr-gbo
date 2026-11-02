@@ -1,3 +1,4 @@
+import 'platform/web_install.dart';
 import 'widgets/bank_invoice_screen.dart';
 import 'widgets/password_access_screen.dart';
 import 'widgets/photo_rotation_scope.dart';
@@ -8511,6 +8512,12 @@ class _ProfileSecurity extends StatelessWidget {
             icon: const Icon(Icons.password),
             label: const Text('Сменить пароль'),
           ),
+          if (kIsWeb)
+            TextButton.icon(
+              onPressed: openWebInstall,
+              icon: const Icon(Icons.install_mobile),
+              label: const Text('Установить на главный экран'),
+            ),
           if (isInspectionManager)
             TextButton.icon(
               onPressed: onRecoveryRequests,
@@ -10102,118 +10109,31 @@ class _DualButtons extends StatelessWidget {
 
 class _LogoBig extends StatelessWidget {
   const _LogoBig();
-
   @override
-  Widget build(BuildContext context) {
-    return Container(
+  Widget build(BuildContext context) => ClipRRect(
+    borderRadius: BorderRadius.circular(28),
+    child: Image.asset(
+      'assets/branding/ersi-gbo.png',
       width: 146,
       height: 146,
-      decoration: BoxDecoration(
-        color: const Color(0xFF073D66),
-        borderRadius: BorderRadius.circular(34),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x4000112C),
-            blurRadius: 18,
-            offset: Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Positioned(
-            right: 16,
-            top: 18,
-            child: Container(
-              width: 34,
-              height: 50,
-              decoration: BoxDecoration(
-                color: const Color(0xFF8AD12B),
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-          ),
-          Container(
-            width: 76,
-            height: 88,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: const Icon(
-              Icons.description_rounded,
-              color: Color(0xFF0A4774),
-              size: 50,
-            ),
-          ),
-          const Positioned(
-            left: 21,
-            bottom: 31,
-            child: Icon(
-              Icons.directions_car_rounded,
-              color: Colors.white,
-              size: 74,
-            ),
-          ),
-          Positioned(
-            right: 24,
-            top: 51,
-            child: Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                border: Border.all(color: const Color(0xFF0A4774), width: 4),
-              ),
-              child: const Icon(
-                Icons.check_rounded,
-                color: Color(0xFF7AC943),
-                size: 34,
-              ),
-            ),
-          ),
-          const Positioned(
-            left: 31,
-            bottom: 13,
-            child: Icon(
-              Icons.propane_tank_rounded,
-              color: Colors.white,
-              size: 35,
-            ),
-          ),
-          const Positioned(
-            right: 22,
-            bottom: 13,
-            child: Icon(
-              Icons.propane_tank_rounded,
-              color: Color(0xFF7AC943),
-              size: 40,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+      fit: BoxFit.contain,
+      semanticLabel: 'ЕРСИ ГБО',
+    ),
+  );
 }
 
 class _MiniLogo extends StatelessWidget {
   const _MiniLogo({this.size = 42});
   final double size;
-
   @override
-  Widget build(BuildContext context) => Container(
-    width: size,
-    height: size,
-    decoration: BoxDecoration(
-      color: green,
-      borderRadius: BorderRadius.circular(size / 3),
-    ),
-    child: Icon(
-      Icons.fact_check_rounded,
-      color: Colors.white,
-      size: size * 0.62,
+  Widget build(BuildContext context) => ClipRRect(
+    borderRadius: BorderRadius.circular(size / 5),
+    child: Image.asset(
+      'assets/branding/ersi-gbo.png',
+      width: size,
+      height: size,
+      fit: BoxFit.contain,
+      semanticLabel: 'ЕРСИ ГБО',
     ),
   );
 }

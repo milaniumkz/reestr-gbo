@@ -71,6 +71,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/fonts/LICENSE-Roboto.txt
+    - assets/branding/ersi-gbo.png
   fonts:
     - family: Roboto
       fonts:
