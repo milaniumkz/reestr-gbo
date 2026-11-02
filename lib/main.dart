@@ -429,7 +429,7 @@ String _roleLabelFromCode(String roleCode) {
 Future<Position?> _tryCurrentPosition() async {
   try {
     if (kIsWeb) {
-      return requestBrowserPosition();
+      return await requestBrowserPosition();
     }
     if (!kIsWeb) {
       final enabled = await Geolocator.isLocationServiceEnabled();
@@ -443,7 +443,7 @@ Future<Position?> _tryCurrentPosition() async {
         permission == LocationPermission.deniedForever) {
       return null;
     }
-    return Geolocator.getCurrentPosition(
+    return await Geolocator.getCurrentPosition(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.high,
         timeLimit: Duration(seconds: 15),
