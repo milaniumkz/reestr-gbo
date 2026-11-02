@@ -3397,8 +3397,12 @@ class _AppAlertBanner extends StatelessWidget {
                   const SizedBox(height: 3),
                   Text(
                     body,
-                    maxLines: 4,
-                    overflow: TextOverflow.ellipsis,
+                    maxLines: text.toLowerCase().contains('геолокац')
+                        ? null
+                        : 4,
+                    overflow: text.toLowerCase().contains('геолокац')
+                        ? TextOverflow.visible
+                        : TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: ink,
                       fontSize: 12,
