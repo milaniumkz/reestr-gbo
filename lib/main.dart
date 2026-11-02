@@ -454,21 +454,6 @@ Future<Position?> _tryCurrentPosition() async {
   }
 }
 
-Position _positionFromLatLng(double lat, double lng) {
-  return Position(
-    latitude: lat,
-    longitude: lng,
-    timestamp: DateTime.now(),
-    accuracy: 0,
-    altitude: 0,
-    altitudeAccuracy: 0,
-    heading: 0,
-    headingAccuracy: 0,
-    speed: 0,
-    speedAccuracy: 0,
-  );
-}
-
 int _homeScreenForRoleCode(String roleCode) {
   return switch (roleCode) {
     'inspection_org' => 14,
@@ -619,7 +604,6 @@ class _ErsiDemoState extends State<ErsiDemo> {
   List<int>? techPassportPhotoBytes;
   Position? techPassportPhotoPosition;
   bool techPassportPhotoUploaded = false;
-  Position? lastKnownInspectionPosition;
   String? documentFileName;
   bool qualityConfirmed = false;
   bool qualityBusy = false;
@@ -886,31 +870,12 @@ class _ErsiDemoState extends State<ErsiDemo> {
 
   Future<Position> _bestInspectionPosition() async {
     final live = await _tryCurrentPosition();
-    if (live != null) {
-      lastKnownInspectionPosition = live;
-      return live;
-    }
-    final saved =
-        lastKnownInspectionPosition ??
-        cylinderPhotoPosition ??
-        vehiclePhotoPosition ??
-        techPassportPhotoPosition ??
-        (packageDocumentPositions.isEmpty
-            ? null
-            : packageDocumentPositions.values.first);
-    if (saved != null) return saved;
-
-    final org = _currentInspectionOrganization;
-    if (org?.lat != null && org?.lng != null) {
-      final fallback = _positionFromLatLng(org!.lat!, org.lng!);
-      lastKnownInspectionPosition = fallback;
-      return fallback;
-    }
+    if (live != null) return live;
 
     throw StateError(
       kIsWeb
-          ? 'Не удалось получить координаты. Нажмите значок слева от адреса сайта и проверьте доступ к местоположению.'
-          : 'Не удалось определить местоположение. Включите геолокацию и разрешите доступ приложению.',
+          ? 'Не удалось определить место инспекции. Включите геолокацию и разрешите сайту доступ к местоположению через значок слева от адреса сайта. Если она включена, выключите и снова включите геолокацию, затем повторите отправку.'
+          : 'Не удалось определить место инспекции. Включите геолокацию и разрешите приложению доступ к местоположению. Если она включена, выключите и снова включите геолокацию, затем повторите отправку.',
     );
   }
 
@@ -1636,9 +1601,8 @@ class _ErsiDemoState extends State<ErsiDemo> {
           techPassportPhotoPosition = position;
           techPassportPhotoUploaded = false;
         }
-        if (position != null) lastKnownInspectionPosition = position;
         apiState = position == null
-            ? 'Фото выбрано. Координаты будут взяты из данных ИО, если браузер их не отдаст.'
+            ? 'Фото выбрано. Геолокация недоступна. Включите её и разрешите доступ к местоположению перед отправкой инспекции.'
             : 'Фото выбрано';
       });
     } catch (error) {
@@ -1780,7 +1744,6 @@ class _ErsiDemoState extends State<ErsiDemo> {
         final nextDocumentPositions = {...packageDocumentPositions};
         if (position != null) nextDocumentPositions[type] = position;
         setState(() {
-          if (position != null) lastKnownInspectionPosition = position;
           packageDocumentNames = {
             ...packageDocumentNames,
             type: selectedFile.name,
@@ -1790,7 +1753,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
           packageDocumentUploaded = {...packageDocumentUploaded, type: false};
           documentFileName = selectedFile.name;
           apiState = position == null
-              ? 'Документ выбран. Координаты будут взяты из данных ИО, если браузер их не отдаст.'
+              ? 'Документ выбран. Геолокация недоступна. Включите её и разрешите доступ к местоположению перед отправкой инспекции.'
               : 'Документ выбран: $label';
         });
       }

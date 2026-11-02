@@ -184,13 +184,14 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
         "Свидетельство с таким номером уже есть в системе",
       );
     }
-    const organization = await this.prisma.organization.findUnique({
-      where: { id: organizationId },
-      select: { address: true },
-    });
     const lat = this.coordinate(input.lat, -90, 90);
     const lng = this.coordinate(input.lng, -180, 180);
-    const address = organization?.address?.trim() || undefined;
+    if (lat === undefined || lng === undefined) {
+      throw new BadRequestException("Не удалось определить место проведения инспекции. Включите геолокацию и повторите отправку");
+    }
+    // The organization and owner addresses are never evidence of the visit location.
+    const resolvedAddress = await this.reverseGeocode(lat, lng);
+    const address = resolvedAddress || `GPS: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
     let pair: ReturnType<typeof cylinderPair>;
     if (input.usesTwoCylinders === true) {
       const vehicle = await this.prisma.vehicle.findUnique({where:{id:vehicleId},include:{cylinders:true}});
@@ -219,7 +220,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
         action: "inspection.create",
         entity: "inspection",
         entityId: inspection.id,
-        metadata: { organizationId, vehicleId, certificateNumber },
+        metadata: { organizationId, vehicleId, certificateNumber, lat, lng, address, locationSource: "device_coordinates", addressSource: resolvedAddress ? "reverse_geocoding" : "gps_coordinates" },
       },
     });
     return inspection;
@@ -771,6 +772,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
     min: number,
     max: number,
   ) {
+    if (value == null || (typeof value === "string" && !value.trim())) return undefined;
     const parsed = Number(value);
     if (!Number.isFinite(parsed) || parsed < min || parsed > max)
       return undefined;
@@ -782,9 +784,9 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async reverseGeocode(lat: number, lng: number) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2500);
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 2500);
       const response = await fetch(
         `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
         {
@@ -795,12 +797,13 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
           },
         },
       );
-      clearTimeout(timeout);
       if (!response.ok) return undefined;
       const data = (await response.json()) as { display_name?: string };
-      return data.display_name?.slice(0, 500);
+      return typeof data.display_name === "string" ? data.display_name.trim().slice(0, 500) || undefined : undefined;
     } catch {
       return undefined;
+    } finally {
+      clearTimeout(timeout);
     }
   }
 }

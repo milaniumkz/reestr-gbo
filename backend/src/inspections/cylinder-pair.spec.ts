@@ -80,6 +80,7 @@ it('uses the shared gas type and does not persist a second ECU, reducer or gas t
 it('creates a new two-cylinder inspection using the shared gas data from the vehicle',async()=>{
  const db={organization:{findUnique:jest.fn(async()=>({address:'TEST'}))},vehicle:{findUnique:jest.fn(async()=>({cylinders:[{serialNumber:'A',fuelType:'СНГ',inspectedAt:new Date('2026-11-02')}]}))},inspection:{findUnique:jest.fn(async()=>null),findFirst:jest.fn(async()=>null),create:jest.fn(async({data}:any)=>({id:'NEW',...data}))},gasCylinder:{findFirst:jest.fn(async()=>null)},certificate:{findUnique:jest.fn(async()=>null)},auditLog:{create:jest.fn(async()=>({}))}};
  const service=new InspectionsService(db as never,{} as never,{} as never);
- const result=await service.create({sub:'admin',phone:'test',roles:['super_admin']},{organizationId:'ORG',vehicleId:'VEHICLE',certificateNumber:'NEW-2',usesTwoCylinders:true,secondCylinderSerial:'B',secondCylinder:{manufacturer:'SECOND',volumeLiters:80,shape:'Цилиндрический',producedAt:'2025-01-01'}});
+ jest.spyOn(service as any,"reverseGeocode").mockResolvedValue("Өскемен, улица Тестовая");
+ const result=await service.create({sub:'admin',phone:'test',roles:['super_admin']},{organizationId:'ORG',vehicleId:'VEHICLE',certificateNumber:'NEW-2',lat:49.95,lng:82.61,usesTwoCylinders:true,secondCylinderSerial:'B',secondCylinder:{manufacturer:'SECOND',volumeLiters:80,shape:'Цилиндрический',producedAt:'2025-01-01'}});
  expect(result).toMatchObject({secondCylinderManufacturer:'SECOND',secondCylinderVolumeLiters:80,secondCylinderShape:'Цилиндрический',secondCylinderValidUntil:new Date('2028-11-02')});
 });
