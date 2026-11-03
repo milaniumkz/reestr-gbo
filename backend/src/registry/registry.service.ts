@@ -80,6 +80,7 @@ export class RegistryService {
               { vin: { contains: normalized, mode: "insensitive" } },
               { plateNumber: { contains: normalized, mode: "insensitive" } },
               { owners: { some: { iin: { contains: normalized } } } },
+              { owners: { some: { bin: { contains: normalized } } } },
               {
                 owners: {
                   some: {

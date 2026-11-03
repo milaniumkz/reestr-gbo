@@ -498,6 +498,8 @@ class InspectionRepository {
     required String ownerPhone,
     required String ownerName,
     required String ownerIin,
+    String ownerKind = 'individual',
+    String ownerBin = '',
     required String ownerAddress,
     String cylinderShape = '',
     required String cylinderSerial,
@@ -528,7 +530,9 @@ class InspectionRepository {
       'owner': {
         'phone': ownerPhone,
         'fullName': ownerName,
-        if (ownerIin.isNotEmpty) 'iin': ownerIin,
+        'kind': ownerKind,
+        if (ownerKind == 'legal_entity') 'bin': ownerBin,
+        if (ownerKind != 'legal_entity' && ownerIin.isNotEmpty) 'iin': ownerIin,
         if (ownerAddress.isNotEmpty) 'address': ownerAddress,
       },
       'cylinder': {

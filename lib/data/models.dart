@@ -101,6 +101,8 @@ class RegistryVehicle {
     this.accreditationValidUntil = '',
     this.ownerName = '',
     this.ownerIin = '',
+    this.ownerBin = '',
+    this.ownerKind = 'individual',
     this.ownerPhone = '',
     this.ownerAddress = '',
     this.vehicleYear = '',
@@ -146,6 +148,8 @@ class RegistryVehicle {
   final String validUntil;
   final String ownerName;
   final String ownerIin;
+  final String ownerBin;
+  final String ownerKind;
   final String ownerPhone;
   final String ownerAddress;
   final String vehicleYear;
@@ -207,6 +211,8 @@ class RegistryVehicle {
       validUntil: certificate['validUntil']?.toString().split('T').first ?? '',
       ownerName: owner['fullName']?.toString() ?? '',
       ownerIin: owner['iin']?.toString() ?? '',
+      ownerBin: owner['bin']?.toString() ?? '',
+      ownerKind: owner['kind']?.toString() ?? 'individual',
       ownerPhone:
           owner['phone']?.toString() ??
           owner['user']?['phone']?.toString() ??
@@ -284,6 +290,8 @@ class RegistryVehicle {
       validUntil: json['validUntil']?.toString().split('T').first ?? '',
       ownerName: owner['fullName']?.toString() ?? '',
       ownerIin: owner['iin']?.toString() ?? '',
+      ownerBin: owner['bin']?.toString() ?? '',
+      ownerKind: owner['kind']?.toString() ?? 'individual',
       ownerPhone:
           owner['phone']?.toString() ??
           owner['user']?['phone']?.toString() ??
@@ -549,6 +557,8 @@ class InspectionSummary {
     this.certificateValidUntil = '',
     this.ownerName = '',
     this.ownerIin = '',
+    this.ownerBin = '',
+    this.ownerKind = 'individual',
     this.ownerPhone = '',
     this.ownerAddress = '',
     this.vehicleId = '',
@@ -607,6 +617,8 @@ class InspectionSummary {
   final String certificateValidUntil;
   final String ownerName;
   final String ownerIin;
+  final String ownerBin;
+  final String ownerKind;
   final String ownerPhone;
   final String ownerAddress;
   final String vehicleYear;
@@ -721,6 +733,8 @@ class InspectionSummary {
           certificate['validUntil']?.toString().split('T').first ?? '',
       ownerName: owner['fullName']?.toString() ?? '',
       ownerIin: owner['iin']?.toString() ?? '',
+      ownerBin: owner['bin']?.toString() ?? '',
+      ownerKind: owner['kind']?.toString() ?? 'individual',
       ownerPhone: owner['phone']?.toString() ?? '',
       ownerAddress: owner['address']?.toString() ?? '',
       vehicleYear: vehicle['year']?.toString() ?? '',

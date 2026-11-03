@@ -8,6 +8,7 @@ import {notifyPhotoReview,notifyPhotoRejection} from './photo-review-notificatio
 import { cylinderProducedAt } from '../common/cylinder-date';
 import { PhotoModerationService } from '../photo-moderation/photo-moderation.service';
 import { ownerPhone as normalizeOwnerPhone } from '../common/owner-phone';
+import { ownerIdentity } from '../common/owner-identity';
 import { QualityReviewData } from './quality-review-data';
 import { inspectionPeriod } from '../common/inspection-period';
 import {
@@ -385,7 +386,8 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       return value.trim();
     };
     const certificateNumber = this.normalizeCertificateNumber(text(input.certificateNumber,"номер свидетельства"));
-    const ownerName = text(input.owner?.fullName,"ФИО владельца");
+    const identity = ownerIdentity(input.owner);
+    const ownerName = text(input.owner?.fullName,"ФИО / наименование владельца");
     const ownerAddress = text(input.owner?.address,"адрес владельца");
     const vin = text(input.vehicle?.vin,"VIN").toUpperCase();
     const plateNumber = text(input.vehicle?.plateNumber,"госномер").toUpperCase();
@@ -415,7 +417,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       const owner = current.vehicle.owners[0];
       if (!owner) throw new BadRequestException("Владелец автомобиля не найден");
       const phone = input.owner.phone === undefined ? owner.phone : normalizeOwnerPhone(input.owner.phone);
-      await tx.vehicleOwner.update({where:{id:owner.id},data:{userId:null,phone,fullName:ownerName,address:ownerAddress,iin:input.owner.iin?.trim() || null}});
+      await tx.vehicleOwner.update({where:{id:owner.id},data:{userId:null,phone,fullName:ownerName,address:ownerAddress,...identity}});
       const cylinder = current.vehicle.cylinders[0];
       const data = {shape:cylinderShape(input.cylinder.shape),serialNumber,manufacturer,volumeLiters:input.cylinder.volumeLiters,reducerName,controlUnitName,producedAt,...period};
       if (cylinder) await tx.gasCylinder.update({where:{id:cylinder.id},data});

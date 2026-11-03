@@ -520,7 +520,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
   String ownerName = '';
   String ownerPhone = '';
   String ownerAddress = '';
-  String ownerKind = 'Физлицо';
+  String ownerKind = 'Физическое лицо';
   String inspectionIssuedAt = _todayIsoDate();
   String vehiclePlate = '';
   String vehicleVin = '';
@@ -1781,7 +1781,10 @@ class _ErsiDemoState extends State<ErsiDemo> {
       throw StateError(cylinderShapeRequiredMessage);
     }
     final missing = <String>[
-      if (ownerName.trim().isEmpty) 'ФИО владельца',
+      if (ownerName.trim().isEmpty) 'ФИО / наименование владельца',
+      if (ownerKind == 'Юридическое лицо' &&
+          !RegExp(r'^\d{12}$').hasMatch(ownerId.trim()))
+        'БИН из 12 цифр',
       if (inspectionCertificateNumber.trim().isEmpty) 'номер свидетельства',
       if (ownerAddress.trim().isEmpty) 'адрес проживания клиента',
       if (vehiclePlate.trim().isEmpty) 'госномер',
@@ -1823,7 +1826,11 @@ class _ErsiDemoState extends State<ErsiDemo> {
               : null,
           'owner': {
             'fullName': ownerName.trim(),
-            'iin': ownerId.trim(),
+            'kind': ownerKind == 'Юридическое лицо'
+                ? 'legal_entity'
+                : 'individual',
+            if (ownerKind == 'Юридическое лицо') 'bin': ownerId.trim(),
+            if (ownerKind != 'Юридическое лицо') 'iin': ownerId.trim(),
             'phone': ownerPhone.trim(),
             'address': ownerAddress.trim(),
           },
@@ -1871,7 +1878,11 @@ class _ErsiDemoState extends State<ErsiDemo> {
           ? ownerPhone.trim()
           : '+7000${vehicleVin.trim().hashCode.abs().toString().padLeft(9, '0').substring(0, 9)}',
       ownerName: ownerName.trim().isEmpty ? 'Владелец ТС' : ownerName.trim(),
-      ownerIin: ownerId.trim(),
+      ownerIin: ownerKind == 'Юридическое лицо' ? '' : ownerId.trim(),
+      ownerKind: ownerKind == 'Юридическое лицо'
+          ? 'legal_entity'
+          : 'individual',
+      ownerBin: ownerKind == 'Юридическое лицо' ? ownerId.trim() : '',
       ownerAddress: ownerAddress.trim(),
       cylinderSerial: cylinderNumber.trim(),
       cylinderShape: cylinderShape,
@@ -2189,7 +2200,10 @@ class _ErsiDemoState extends State<ErsiDemo> {
 
   Future<void> _goOwnerNext() async {
     final missing = <String>[
-      if (ownerName.trim().isEmpty) 'ФИО владельца',
+      if (ownerName.trim().isEmpty) 'ФИО / наименование владельца',
+      if (ownerKind == 'Юридическое лицо' &&
+          !RegExp(r'^\d{12}$').hasMatch(ownerId.trim()))
+        'БИН из 12 цифр',
       if (inspectionCertificateNumber.trim().isEmpty) 'номер свидетельства',
     ];
     if (missing.isNotEmpty) {
@@ -2273,7 +2287,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       ownerName = '';
       ownerPhone = '';
       ownerAddress = '';
-      ownerKind = 'Физлицо';
+      ownerKind = 'Физическое лицо';
       inspectionIssuedAt = _todayIsoDate();
       vehiclePlate = '';
       vehicleVin = '';
@@ -2460,7 +2474,12 @@ class _ErsiDemoState extends State<ErsiDemo> {
         draftInspectionId = detail.id;
         draftVehicleId = detail.vehicleId.isEmpty ? null : detail.vehicleId;
         inspectionCertificateNumber = detail.certificateNumber;
-        ownerId = detail.ownerIin;
+        ownerKind = detail.ownerKind == 'legal_entity'
+            ? 'Юридическое лицо'
+            : 'Физическое лицо';
+        ownerId = detail.ownerKind == 'legal_entity'
+            ? detail.ownerBin
+            : detail.ownerIin;
         ownerName = detail.ownerName;
         ownerPhone = detail.ownerPhone;
         ownerAddress = detail.ownerAddress;
@@ -2801,7 +2820,10 @@ class _ErsiDemoState extends State<ErsiDemo> {
           () =>
               inspectionCertificateNumber = _normalizeCertificateNumber(value),
         ),
-        onOwnerKind: (value) => setState(() => ownerKind = value),
+        onOwnerKind: (value) => setState(() {
+          if (ownerKind != value) ownerId = '';
+          ownerKind = value;
+        }),
         onOwnerName: (value) => setState(() => ownerName = value),
         onOwnerAddress: (value) => setState(() => ownerAddress = value),
         onNext: _goOwnerNext,
@@ -6519,7 +6541,7 @@ class _OwnerStep extends StatelessWidget {
             _ProgressDots(step: 1),
             const SizedBox(height: 12),
             _Pills(
-              values: const ['Физлицо', 'Компания'],
+              values: const ['Физическое лицо', 'Юридическое лицо'],
               selected: ownerKind,
               onSelected: onOwnerKind,
             ),
@@ -6555,13 +6577,25 @@ class _OwnerStep extends StatelessWidget {
                 onChanged: onOwnerPhone,
                 keyboardType: TextInputType.phone,
               ),
+            ],
+            if (editingQuality || ownerKind == 'Юридическое лицо')
               _Input(
-                label: 'ИИН владельца',
+                label: ownerKind == 'Юридическое лицо'
+                    ? 'БИН владельца'
+                    : 'ИИН владельца',
                 value: ownerIin,
+                hint: ownerKind == 'Юридическое лицо'
+                    ? 'Введите БИН из 12 цифр'
+                    : null,
                 onChanged: onOwnerIin,
                 keyboardType: TextInputType.number,
+                inputFormatters: ownerKind == 'Юридическое лицо'
+                    ? [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(12),
+                      ]
+                    : null,
               ),
-            ],
             const SizedBox(height: 120),
             _PrimaryButton(
               text: 'Продолжить',
