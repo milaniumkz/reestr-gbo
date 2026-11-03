@@ -289,11 +289,16 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException("Нельзя вернуть инспекцию в черновик в обход проверки качества");
     }
 
+    // Keep the existing return command compatible with old clients, but route
+    // a manager's return one step back, to quality control rather than inspector.
+    const previousStatus = existing.status;
+    const managerReturn = status === "rejected" && existing.status === "quality_approved";
+    const nextStatus = managerReturn ? "submitted" : status;
     const now = new Date();
     const inspection = await this.prisma.inspection.update({
       where: { id, status: existing.status, ...(["quality_approved","rejected"].includes(status) && existing.status === "submitted" ? {qualityReviewerId:user?.sub} : {}), ...(status === "quality_approved" ? { qualityDocumentUploadedAt: existing.qualityDocumentUploadedAt, ...(existing.usesTwoCylinders?{secondQualityDocumentUploadedAt:existing.secondQualityDocumentUploadedAt}:{}) } : {}) },
       data: {
-        status,
+        status: nextStatus,
         requireApplicantPhotos: status === "submitted" ? true : undefined,
         qualityDocumentUploadedAt: ["submitted", "rejected", "draft"].includes(status) ? null : undefined,
         secondQualityDocumentUploadedAt: ["submitted", "rejected", "draft"].includes(status) ? null : undefined,
@@ -326,8 +331,10 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
         entity: "inspection",
         entityId: inspection.id,
         metadata: {
-          previousStatus: existing.status,
+          previousStatus,
           status: inspection.status,
+          requestedStatus: status,
+          returnTarget: status === "rejected" ? (managerReturn ? "quality_control" : "inspector") : undefined,
           organizationId: inspection.organizationId,
           certificateNumber: inspection.certificateNumber,
         },

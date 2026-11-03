@@ -2145,7 +2145,9 @@ class _ErsiDemoState extends State<ErsiDemo> {
       await _loadMyInspections();
       if (!mounted) return;
       setState(
-        () => apiState = 'Инспекция отправлена инспектору на исправление',
+        () => apiState = inspection.status == 'quality_approved'
+            ? 'Инспекция возвращена в контроль качества на исправление'
+            : 'Инспекция отправлена инспектору на исправление',
       );
       go(14);
     } catch (error) {
@@ -5101,7 +5103,9 @@ class _InspectionDetailScreen extends StatelessWidget {
             if (canReturn && onReturnForCorrection != null) ...[
               const SizedBox(height: 12),
               _PrimaryButton(
-                text: 'Отправить на исправление',
+                text: item.status == 'quality_approved'
+                    ? 'Вернуть в контроль качества'
+                    : 'Вернуть инспектору на исправление',
                 icon: Icons.assignment_return_rounded,
                 onTap: onReturnForCorrection!,
               ),

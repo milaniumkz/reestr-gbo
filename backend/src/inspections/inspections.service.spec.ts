@@ -468,6 +468,28 @@ describe('Inspection quality control workflow', () => {
     await expect(f.service.setStatus(f.user('qc'),'inspection_1','quality_approved',true)).rejects.toThrow('должен загрузить');
     expect(f.prisma.inspection.update).not.toHaveBeenCalled();
   });
+  it('routes a manager return to quality and permits quality-only corrections without involving inspector',async()=>{
+    const f=fixture();Object.assign(f.state,{status:'quality_approved',qualityConfirmedAt:new Date(),qualityDocumentUploadedAt:new Date(),qualityConfirmedById:'qc',qualityReviewerId:'qc',submittedById:'inspector',submittedAt:new Date('2026-11-01')});
+    const originals=f.state.photos.map(p=>p.objectKey);
+    await f.service.setStatus(f.user('leader'),'inspection_1','rejected');
+    expect(f.state).toMatchObject({status:'submitted',qualityReviewerId:null,qualityConfirmedAt:null,qualityConfirmedById:null,qualityDocumentUploadedAt:null,submittedById:'inspector',submittedAt:new Date('2026-11-01')});
+    expect(f.state.photos.map(p=>p.objectKey)).toEqual(originals);
+    await expect(f.service.updateData(f.user('inspector'),'inspection_1',{vehicleId:'vehicle_1',certificateNumber:'TEST-1'})).rejects.toThrow('только в черновике');
+    await f.service.updateQualityData(f.user('qc'),'inspection_1',corrected);
+    await f.service.uploadPhoto('inspection_1','certificate_document',{originalname:'fixed.pdf',buffer:Buffer.from('%PDF-fixed')},f.user('qc'));
+    await f.service.setStatus(f.user('qc'),'inspection_1','quality_approved',true);
+    expect(f.state.status).toBe('quality_approved');
+    await f.service.setStatus(f.user('leader'),'inspection_1','approved');
+    expect(f.certificates.issueForInspection).toHaveBeenCalledTimes(1);
+    expect(f.prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({metadata:expect.objectContaining({previousStatus:'quality_approved',status:'submitted',returnTarget:'quality_control'})})}));
+  });
+  it('does not let an inspector bypass quality or impersonate a manager return',async()=>{
+    const f=fixture();f.state.status='quality_approved';
+    await expect(f.service.setStatus(f.user('inspector'),'inspection_1','rejected')).rejects.toThrow('Только руководитель');
+    expect(f.state.status).toBe('quality_approved');
+    f.state.status='submitted';
+    await expect(f.service.setStatus(f.user('leader'),'inspection_1','rejected')).rejects.toThrow('Только контроль качества');
+  });
   it('requires a fresh review and upload after correction',async()=>{
     const f=fixture(); f.state.status='quality_approved';
     f.state.qualityConfirmedAt=new Date(); f.state.qualityDocumentUploadedAt=new Date();
@@ -475,6 +497,10 @@ describe('Inspection quality control workflow', () => {
     await f.service.setStatus(f.user('leader'),'inspection_1','rejected');
     expect(f.state.qualityConfirmedAt).toBeNull();
     expect(f.state.qualityDocumentUploadedAt).toBeNull();
+    expect(f.state.status).toBe('submitted');
+    await expect(f.service.setStatus(f.user('inspector'),'inspection_1','submitted')).rejects.toThrow('только черновик');
+    await f.service.setStatus(f.user('qc'),'inspection_1','rejected');
+    expect(f.state.status).toBe('rejected');
     await f.service.setStatus(f.user('inspector'),'inspection_1','submitted');
     await expect(f.service.setStatus(f.user('qc'),'inspection_1','quality_approved',true)).rejects.toThrow('должен загрузить');
   });

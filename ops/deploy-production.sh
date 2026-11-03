@@ -107,6 +107,8 @@ s = s.replace('\"mainJsPath\":\"main.dart.js\"', f'\"mainJsPath\":\"main.{bid}.d
 s = s.replace(\"main.dart.js?v=' + buildVersion\", f\"main.{bid}.dart.js?v=' + buildVersion\")
 s = s.replace(\"build.mainJsPath === 'main.dart.js'\", f\"build.mainJsPath === 'main.{bid}.dart.js'\")
 p.write_text(s)
+p = Path('build/web/index.html')
+p.write_text(p.read_text().replace('install.js?v=1', f'install.js?v={bid}'))
 PY
 fi
 
