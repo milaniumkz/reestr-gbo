@@ -32,7 +32,7 @@ jobs:
           ssh "$server" "bash -s -- '$remote'" <<'REMOTE'
           set -euo pipefail
           staged="$1"
-          /opt/reestr/app/ops/backup-reestr.sh
+          APP_DIR=/opt/reestr/app bash /opt/reestr/app/ops/backup-reestr.sh
           root=/opt/reestr/app/build/web
           mkdir -p "$root/downloads"
           for name in registration-application.docx registration-application.pdf; do
