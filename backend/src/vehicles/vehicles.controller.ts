@@ -30,7 +30,7 @@ export class VehiclesController {
     make: string;
     model: string;
     year?: number;
-    owner: { phone: string; fullName: string; iin?: string; address?: string };
+    owner: { phone: string; fullName: string; iin?: string; kind?: string; bin?: string; address?: string };
     cylinder: {
       shape?: string;
       serialNumber: string;

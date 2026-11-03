@@ -177,10 +177,14 @@ model VehicleOwner {
   userId    String?
   phone     String?
   iin       String?
+  kind      String  @default("individual")
+  bin       String?
   fullName  String
   address   String?
   vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
   user      User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([bin])
 }
 
 model GasCylinder {

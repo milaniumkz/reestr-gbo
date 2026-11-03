@@ -1,3 +1,4 @@
+import { ownerIdentity } from '../common/owner-identity';
 import { cylinderShape } from '../inspections/cylinder-pair';
 import { cylinderProducedAt } from '../common/cylinder-date';
 import { ownerPhone as normalizeOwnerPhone } from '../common/owner-phone';
@@ -28,6 +29,7 @@ export class VehiclesService {
                 },
               },
               { owners: { some: { iin: { contains: query } } } },
+              { owners: { some: { bin: { contains: query } } } },
             ],
           }
         : undefined;
@@ -63,7 +65,7 @@ export class VehiclesService {
     make: string;
     model: string;
     year?: number;
-    owner: { phone: string; fullName: string; iin?: string; address?: string };
+    owner: { phone: string; fullName: string; iin?: string; kind?: string; bin?: string; address?: string };
     cylinder: {
       shape?: string;
       serialNumber: string;
@@ -86,6 +88,7 @@ export class VehiclesService {
     const period = inspectionPeriod(input.cylinder.fuelType ?? "", input.cylinder.inspectedAt ?? new Date());
     const shape = cylinderShape(input.cylinder.shape);
     const producedAt = cylinderProducedAt(input.cylinder.producedAt);
+    const identity = ownerIdentity(input.owner);
     const ownerPhone = normalizeOwnerPhone(input.owner.phone);
     return this.prisma.vehicle
       .upsert({
@@ -125,7 +128,7 @@ export class VehiclesService {
               userId: null,
               phone: ownerPhone,
               fullName: input.owner.fullName,
-              iin: input.owner.iin,
+              ...identity,
               address: input.owner.address,
             },
           });
@@ -136,7 +139,7 @@ export class VehiclesService {
               userId: null,
               phone: ownerPhone,
               fullName: input.owner.fullName,
-              iin: input.owner.iin,
+              ...identity,
               address: input.owner.address,
             },
           });

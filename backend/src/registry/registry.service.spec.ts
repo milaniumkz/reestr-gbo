@@ -46,7 +46,7 @@ describe('RegistryService.search', () => {
 
     await service.search(
       { sub: 'owner_1', phone: '+77000000000', roles: ['vehicle_owner'] },
-      'ABC',
+      '001140000001',
       '20',
       '1',
     );
@@ -57,7 +57,8 @@ describe('RegistryService.search', () => {
       { owners: { some: { userId: 'owner_1' } } },
       { owners: { some: { phone: '+77000000000' } } },
     ]);
-    expect(where.OR).toHaveLength(5);
+    expect(where.OR).toHaveLength(6);
+    expect(where.OR).toContainEqual({ owners: { some: { bin: { contains: '001140000001' } } } });
     expect(prisma.vehicle.count).toHaveBeenCalledWith({ where });
   });
 });

@@ -1364,7 +1364,7 @@ export class CertificatesService {
         `${certificate.vehicle.make} ${certificate.vehicle.model}`,
       );
       this.row(doc, "Владелец", owner?.fullName ?? "-");
-      this.row(doc, "ИИН", owner?.iin ?? "-");
+      this.row(doc, owner?.kind === "legal_entity" ? "БИН" : "ИИН", (owner?.kind === "legal_entity" ? owner?.bin : owner?.iin) ?? "-");
       const date=(value:Date|null|undefined)=>value?value.toISOString().slice(0,10).split('-').reverse().join('.'):'Не указана';
       this.row(doc, "Баллон 1", cylinder?.serialNumber ?? "-");
       this.row(doc, "Производитель баллона 1", cylinder?.manufacturer ?? '-');
