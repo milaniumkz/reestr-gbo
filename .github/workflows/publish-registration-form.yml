@@ -1,0 +1,48 @@
+name: Publish blank registration application
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+      - name: Publish only blank registration templates
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          server="${DEPLOY_USER:-root}@${DEPLOY_HOST}"
+          remote="$(ssh "$server" 'mktemp -d /tmp/reestr-registration.XXXXXX')"
+          trap 'ssh "$server" "rm -rf -- \"$remote\""' EXIT
+          scp web/downloads/registration-application.docx web/downloads/registration-application.pdf web/registration-form.html "$server:$remote/"
+          ssh "$server" "bash -s -- '$remote'" <<'REMOTE'
+          set -euo pipefail
+          staged="$1"
+          /opt/reestr/app/ops/backup-reestr.sh
+          root=/opt/reestr/app/build/web
+          mkdir -p "$root/downloads"
+          for name in registration-application.docx registration-application.pdf; do
+            install -m644 "$staged/$name" "$root/downloads/.$name.next"
+            mv -f "$root/downloads/.$name.next" "$root/downloads/$name"
+          done
+          install -m644 "$staged/registration-form.html" "$root/.registration-form.next.html"
+          mv -f "$root/.registration-form.next.html" "$root/registration-form.html"
+          REMOTE
+          for name in registration-application.docx registration-application.pdf; do
+            curl --fail --silent --show-error "https://89-207-255-42.sslip.io/downloads/$name" -o "$RUNNER_TEMP/$name"
+            cmp "web/downloads/$name" "$RUNNER_TEMP/$name"
+          done
