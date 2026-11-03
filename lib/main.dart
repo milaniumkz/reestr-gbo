@@ -1,3 +1,4 @@
+import 'platform/web_updates.dart';
 import 'platform/web_install.dart';
 import 'widgets/bank_invoice_screen.dart';
 import 'widgets/password_access_screen.dart';
@@ -500,6 +501,8 @@ class ErsiDemo extends StatefulWidget {
 
 class _ErsiDemoState extends State<ErsiDemo> {
   late int screen = widget.initialScreen.clamp(0, 40);
+  bool _webInspectionInProgress = false;
+  int? _webPreviousScreen;
   late final AppRepositories repositories =
       widget.repositories ?? AppRepositories.current();
   String sessionNotice = "";
@@ -1929,6 +1932,8 @@ class _ErsiDemoState extends State<ErsiDemo> {
           apiState = 'Исправления сохранены';
         });
         await _loadMyInspections();
+        _webInspectionInProgress = false;
+        markWebChangesSaved();
         go(40);
         return;
       }
@@ -1968,6 +1973,8 @@ class _ErsiDemoState extends State<ErsiDemo> {
       await _loadMyInspections();
       if (!mounted) return;
       setState(() {
+        _webInspectionInProgress = false;
+        markWebChangesSaved();
         apiState = 'Инспекция отправлена';
         draftVehicleId = null;
         draftInspectionId = null;
@@ -2527,12 +2534,28 @@ class _ErsiDemoState extends State<ErsiDemo> {
       _history.clear();
       screen = 0;
       sessionNotice = '';
+      _webInspectionInProgress = false;
+      markWebChangesSaved();
       apiState = 'Вы вышли из аккаунта';
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    if (screen >= 15 && screen <= 23) _webInspectionInProgress = true;
+    if (_webPreviousScreen != null && _webPreviousScreen! <= 3 && screen >= 4) {
+      markWebChangesSaved();
+    }
+    _webPreviousScreen = screen;
+    setWebUpdateBusy(
+      'screen',
+      _webInspectionInProgress ||
+          screen == 2 ||
+          screen == 3 ||
+          screen == 40 ||
+          qualityBusy ||
+          _inspectionSubmitting,
+    );
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {

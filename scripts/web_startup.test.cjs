@@ -86,11 +86,11 @@ test('install worker does not cache API data and gives a clear offline navigatio
   const handlers = {};
   vm.runInNewContext(readFileSync(new URL('../web/ersi-pwa-sw.js', `file://${__filename}`), 'utf8'), {
     self:{location:{origin:'https://example.org'},addEventListener:(name,fn)=>handlers[name]=fn},
-    URL,Response,fetch:async()=>{throw new Error('offline');},
+    URL,Response,Request:class {constructor(request,options){Object.assign(this,request,options);}},fetch:async()=>{throw new Error('offline');},
   });
   let response;
-  handlers.fetch({request:{mode:'cors',url:'https://example.org/api/v1/me'},respondWith:()=>{throw new Error('API must not be intercepted');}});
-  handlers.fetch({request:{mode:'navigate',url:'https://example.org/'},respondWith:r=>{response=r;}});
+  handlers.fetch({request:{method:'GET',mode:'cors',url:'https://example.org/api/v1/me'},respondWith:()=>{throw new Error('API must not be intercepted');}});
+  handlers.fetch({request:{method:'GET',mode:'navigate',url:'https://example.org/'},respondWith:r=>{response=r;}});
   const offline = await response;
   assert.equal(offline.status,503);
   assert.equal(offline.headers.get('Cache-Control'),'no-store');
@@ -104,12 +104,14 @@ test('frontend publisher stamps a versioned bundle and install script', () => {
   try {
     const sha='a'.repeat(40);
     fs.writeFileSync(path.join(dir,'main.dart.js'),'bundle');
-    fs.writeFileSync(path.join(dir,'index.html'),'<script src="install.js?v=1"></script>');
+    fs.writeFileSync(path.join(dir,'index.html'),'<meta name="ersi-release" content="__ERSI_RELEASE__"><script src="install.js?v=1"></script><script src="auto-update.js?v=1"></script>');
     fs.writeFileSync(path.join(dir,'flutter_bootstrap.js'),'const cfg={"mainJsPath":"main.dart.js"};'+
       readFileSync(new URL('../web/flutter_bootstrap.js', `file://${__filename}`),'utf8'));
     execFileSync('python3',['scripts/stamp_web_frontend.py',sha,dir]);
     assert.equal(fs.readFileSync(path.join(dir,`main.${sha}.dart.js`),'utf8'),'bundle');
     assert.match(fs.readFileSync(path.join(dir,'flutter_bootstrap.js'),'utf8'),new RegExp(`main\\.${sha}\\.dart\\.js`));
     assert.match(fs.readFileSync(path.join(dir,'index.html'),'utf8'),new RegExp('install.js\\?v='+sha));
+    assert.equal(JSON.parse(fs.readFileSync(path.join(dir,'release.json'),'utf8')).version,sha);
+    assert.match(fs.readFileSync(path.join(dir,'index.html'),'utf8'),new RegExp('content="'+sha+'"'));
   } finally {fs.rmSync(dir,{recursive:true,force:true});}
 });

@@ -21,9 +21,11 @@ tar -czf "$archive" -C "$web" .
 old_apk="$(sha256sum "$web/downloads/ersi-gbo.apk" | cut -d' ' -f1)"
 # Retain previous versioned bundles so already-open clients can still load them.
 # Publish the entrypoint last; individual files are replaced through temp files.
-rsync -a --chmod=D755,F644 --delay-updates --exclude=/index.html "$staged/" "$web/"
+rsync -a --chmod=D755,F644 --delay-updates --exclude=/index.html --exclude=/release.json "$staged/" "$web/"
 install -m644 "$staged/index.html" "$web/.index.next.html"
 mv -f "$web/.index.next.html" "$web/index.html"
+install -m644 "$staged/release.json" "$web/.release.next.json"
+mv -f "$web/.release.next.json" "$web/release.json"
 test "$old_apk" = "$(sha256sum "$web/downloads/ersi-gbo.apk" | cut -d' ' -f1)"
 printf '%s\n' "$commit" > "$web/frontend-commit.txt"
 REMOTE

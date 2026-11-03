@@ -93,23 +93,7 @@ if [ '$DEPLOY_COMPONENTS' = all ]; then
 test -f build/web/main.dart.js
 test -s build/web/downloads/ersi-gbo.apk
 (cd build/web/downloads && sha256sum -c ersi-gbo.apk.sha256)
-BUILD_ID=\$(date -u +%Y%m%d%H%M%S)
-cp build/web/main.dart.js \"build/web/main.\$BUILD_ID.dart.js\"
-BUILD_ID=\"\$BUILD_ID\" python3 - <<'PY'
-from pathlib import Path
-import os
-import re
-bid = os.environ['BUILD_ID']
-p = Path('build/web/flutter_bootstrap.js')
-s = p.read_text()
-s = re.sub(r'main\\.(?:\\d+|None)\\.dart\\.js', f'main.{bid}.dart.js', s)
-s = s.replace('\"mainJsPath\":\"main.dart.js\"', f'\"mainJsPath\":\"main.{bid}.dart.js\"')
-s = s.replace(\"main.dart.js?v=' + buildVersion\", f\"main.{bid}.dart.js?v=' + buildVersion\")
-s = s.replace(\"build.mainJsPath === 'main.dart.js'\", f\"build.mainJsPath === 'main.{bid}.dart.js'\")
-p.write_text(s)
-p = Path('build/web/index.html')
-p.write_text(p.read_text().replace('install.js?v=1', f'install.js?v={bid}'))
-PY
+python3 scripts/stamp_web_frontend.py '$COMMIT_SHA'
 fi
 
 ln -sfn '$REMOTE_RELEASE' /opt/reestr/current
@@ -123,7 +107,11 @@ if [ -d '$REMOTE_RELEASE/tech/.next' ]; then
 fi
 rsync -a --delete '$REMOTE_RELEASE/ops/' '${APP_DIR}/ops/'
 if [ '$DEPLOY_COMPONENTS' = all ]; then
-  rsync -a --delete '$REMOTE_RELEASE/build/web/' '${APP_DIR}/build/web/'
+  rsync -a --delay-updates --exclude=/index.html --exclude=/release.json '$REMOTE_RELEASE/build/web/' '${APP_DIR}/build/web/'
+  install -m644 '$REMOTE_RELEASE/build/web/index.html' '${APP_DIR}/build/web/.index.next.html'
+  mv -f '${APP_DIR}/build/web/.index.next.html' '${APP_DIR}/build/web/index.html'
+  install -m644 '$REMOTE_RELEASE/build/web/release.json' '${APP_DIR}/build/web/.release.next.json'
+  mv -f '${APP_DIR}/build/web/.release.next.json' '${APP_DIR}/build/web/release.json'
 fi
 printf '%s\n' '$COMMIT_SHA' > '${APP_DIR}/VERSION'
 if ! id reestr-backend >/dev/null 2>&1; then

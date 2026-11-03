@@ -1,3 +1,4 @@
+import '../widgets/web_update_observer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -27,6 +28,7 @@ class LocalizedApp extends StatefulWidget {
 }
 
 class _LocalizedAppState extends State<LocalizedApp> {
+  final _webUpdateObserver = WebUpdateObserver();
   Locale _locale = const Locale('ru');
   int _revision = 0;
   @override
@@ -66,6 +68,7 @@ class _LocalizedAppState extends State<LocalizedApp> {
       locale: _locale,
       supportedLocales: const [Locale('ru'), Locale('kk')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      navigatorObservers: [_webUpdateObserver],
       home: widget.home,
     ),
   );

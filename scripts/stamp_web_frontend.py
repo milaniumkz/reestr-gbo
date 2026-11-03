@@ -3,6 +3,7 @@ import pathlib
 import re
 import shutil
 import sys
+import json
 
 commit = sys.argv[1]
 if not re.fullmatch(r'[a-f0-9]{40}', commit):
@@ -17,4 +18,5 @@ s = s.replace("mainJsPath === 'main.dart.js'", f"mainJsPath === '{name}'")
 s = s.replace("main.dart.js?v=' + buildVersion", f"{name}?v=' + buildVersion")
 p.write_text(s)
 p = root / 'index.html'
-p.write_text(p.read_text().replace('install.js?v=1', f'install.js?v={commit}'))
+p.write_text(p.read_text().replace('install.js?v=1', f'install.js?v={commit}').replace('auto-update.js?v=1', f'auto-update.js?v={commit}').replace('__ERSI_RELEASE__', commit))
+(root / 'release.json').write_text(json.dumps({'version': commit, 'bundle': name}) + '\n')
