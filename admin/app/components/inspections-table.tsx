@@ -145,7 +145,7 @@ export function InspectionsTable({
                     <button
                       className="smallButton"
                       type="button"
-                      onClick={() => onOpenCertificate(row.certificate!.number)}
+                      onClick={() => onOpenCertificate(row.certificate!.id)}
                     >
                       {row.certificate.number}
                     </button>

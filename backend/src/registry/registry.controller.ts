@@ -38,6 +38,7 @@ export class RegistryController {
     @Query('found') found?: string,
     @Query('plate') plate?: string,
     @Query('certificateNumber') certificateNumber?: string,
+    @Query('certificateId') certificateId?: string,
     @Query('dateFrom') dateFrom?: string,
     @Query('dateTo') dateTo?: string,
     @Query('limit') limit?: string,
@@ -46,6 +47,7 @@ export class RegistryController {
     return this.registry.publicCertificateChecks(q, found, limit, {
       plate,
       certificateNumber,
+      certificateId,
       dateFrom,
       dateTo,
     }, page);

@@ -139,8 +139,8 @@ export class InspectionsController {
 
   @Get("certificate-number/:number/availability")
   @Roles("inspection_org", "operator", "super_admin")
-  certificateNumberAvailability(@CurrentUser() user: RequestUser, @Param("number") number: string, @Query("inspectionId") inspectionId?: string) {
-    return this.inspections.certificateNumberAvailability(number, inspectionId, user);
+  certificateNumberAvailability(@CurrentUser() user: RequestUser, @Param("number") number: string, @Query("inspectionId") inspectionId?: string, @Query("organizationId") organizationId?: string) {
+    return this.inspections.certificateNumberAvailability(number, inspectionId, user, organizationId);
   }
 
   @Get(":id")

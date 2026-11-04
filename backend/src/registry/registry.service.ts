@@ -148,6 +148,7 @@ export class RegistryService {
     filters: {
       plate?: string;
       certificateNumber?: string;
+      certificateId?: string;
       dateFrom?: string;
       dateTo?: string;
     } = {},
@@ -159,6 +160,7 @@ export class RegistryService {
     const foundFilter =
       found === "true" ? true : found === "false" ? false : undefined;
     const where: Prisma.PublicCertificateCheckWhereInput = {
+      ...(filters.certificateId ? { certificateId: filters.certificateId } : {}),
         ...(foundFilter === undefined ? {} : { found: foundFilter }),
         ...(plate ? { normalizedPlate: { contains: plate, mode: "insensitive" as const } } : {}),
         ...(filters.certificateNumber

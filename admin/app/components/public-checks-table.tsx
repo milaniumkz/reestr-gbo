@@ -80,7 +80,7 @@ export function PublicChecksTable({
                   <td><span className="pill">{row.found ? 'найдено' : 'не найдено'}</span></td>
                   <td>
                     {row.certificateNumber ? (
-                      <button className="smallButton" type="button" onClick={() => onOpenCertificate(row.certificateNumber!)}>
+                      <button className="smallButton" type="button" onClick={() => onOpenCertificate(row.certificateId ?? row.certificateNumber!)}>
                         {row.certificateNumber}
                       </button>
                     ) : '-'}

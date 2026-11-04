@@ -99,6 +99,7 @@ class RegistryVehicle {
     required this.validUntil,
     this.accreditationValidFrom = '',
     this.accreditationValidUntil = '',
+    this.certificateId = '',
     this.ownerName = '',
     this.ownerIin = '',
     this.ownerBin = '',
@@ -145,6 +146,7 @@ class RegistryVehicle {
   final String make;
   final String model;
   final String certificateNumber;
+  final String certificateId;
   final String validUntil;
   final String ownerName;
   final String ownerIin;
@@ -207,6 +209,7 @@ class RegistryVehicle {
       plateNumber: json['plateNumber']?.toString() ?? '',
       make: json['make']?.toString() ?? '',
       model: json['model']?.toString() ?? '',
+      certificateId: certificate['id']?.toString() ?? '',
       certificateNumber: certificate['number']?.toString() ?? '',
       validUntil: certificate['validUntil']?.toString().split('T').first ?? '',
       ownerName: owner['fullName']?.toString() ?? '',
@@ -286,6 +289,7 @@ class RegistryVehicle {
       plateNumber: vehicle['plateNumber']?.toString() ?? '',
       make: vehicle['make']?.toString() ?? '',
       model: vehicle['model']?.toString() ?? '',
+      certificateId: json['id']?.toString() ?? '',
       certificateNumber: json['number']?.toString() ?? '',
       validUntil: json['validUntil']?.toString().split('T').first ?? '',
       ownerName: owner['fullName']?.toString() ?? '',

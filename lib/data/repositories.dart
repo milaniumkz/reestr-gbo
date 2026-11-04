@@ -383,6 +383,7 @@ class CertificateRepository {
     required String filename,
     required List<int> bytes,
     bool asInspectionDraft = false,
+    String organizationBin = '',
   }) async {
     if (AppEnvironment.isDemo) {
       return const CertificateImportResult(
@@ -401,7 +402,10 @@ class CertificateRepository {
       bytes: bytes,
       contentType:
           'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      fields: {if (asInspectionDraft) 'mode': 'inspectionDraft'},
+      fields: {
+        if (asInspectionDraft) 'mode': 'inspectionDraft',
+        if (organizationBin.isNotEmpty) 'organizationBin': organizationBin,
+      },
     );
     return CertificateImportResult.fromJson(response);
   }
@@ -595,10 +599,11 @@ class InspectionRepository {
   Future<bool> isCertificateNumberAvailable(
     String number, {
     String? inspectionId,
+    required String organizationId,
   }) async {
     if (AppEnvironment.isDemo) return true;
     final response = await _api.getJson(
-      '/inspections/certificate-number/${Uri.encodeComponent(number)}/availability${inspectionId == null ? '' : '?inspectionId=${Uri.encodeQueryComponent(inspectionId)}'}',
+      '/inspections/certificate-number/${Uri.encodeComponent(number)}/availability?organizationId=${Uri.encodeQueryComponent(organizationId)}${inspectionId == null ? '' : '&inspectionId=${Uri.encodeQueryComponent(inspectionId)}'}',
     );
     return response['available'] == true;
   }

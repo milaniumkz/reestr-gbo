@@ -1121,7 +1121,11 @@ class _ErsiDemoState extends State<ErsiDemo> {
   }
 
   Future<void> _openControlCertificate(RegistryVehicle vehicle) async {
-    final number = vehicle.certificateNumber.trim();
+    final number =
+        (vehicle.certificateId.isNotEmpty
+                ? vehicle.certificateId
+                : vehicle.certificateNumber)
+            .trim();
     if (number.isEmpty) {
       setState(() => apiState = 'Номер свидетельства не указан');
       return;
@@ -1394,6 +1398,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         filename: file.name,
         bytes: bytes,
         asInspectionDraft: true,
+        organizationBin: authBin.trim(),
       );
       if (!importResult.ok && importResult.status == 'needs_input') {
         _applyPartialXlsxImport(importResult);
@@ -2259,11 +2264,13 @@ class _ErsiDemoState extends State<ErsiDemo> {
           .isCertificateNumberAvailable(
             number,
             inspectionId: draftInspectionId,
+            organizationId: await _inspectionOrganizationId(),
           );
       if (!available) {
         if (mounted) {
           setState(
-            () => apiState = 'Свидетельство с таким номером уже есть в системе',
+            () => apiState =
+                'Свидетельство с таким номером уже есть в этом инспекционном органе',
           );
         }
         return;

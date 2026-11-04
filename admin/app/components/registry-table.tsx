@@ -89,7 +89,7 @@ export function RegistryTable({
                   <td>{certificate?.inspection?.organization?.name ?? '-'}<div className="muted">{accreditationPeriod(certificate?.inspection?.organization)}</div></td>
                   <td className="actions">
                     {certificate ? (
-                      <button className="smallButton" type="button" onClick={() => onOpenCertificate(certificate.number)}>
+                      <button className="smallButton" type="button" onClick={() => onOpenCertificate(certificate.id)}>
                         {certificate.number}
                       </button>
                     ) : '-'}

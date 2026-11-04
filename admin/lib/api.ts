@@ -227,7 +227,7 @@ export type Inspection = SecondCylinderFields & {
     }>;
   };
   photos?: Array<{ id: string; type: string; objectKey: string; viewUrl?: string; moderationStatus?: string; moderationReason?: string }>;
-  certificate?: { number: string; status: string; validUntil: string };
+  certificate?: { id: string; number: string; status: string; validUntil: string };
   createdBy?: { id: string; phone: string; fullName: string; lastLoginAt?: string };
   submittedBy?: { id: string; phone: string; fullName: string; lastLoginAt?: string };
   qualityConfirmedBy?: { id: string; phone: string; fullName: string; lastLoginAt?: string };
@@ -324,6 +324,7 @@ export type RegistryVehicle = {
   make: string;
   model: string;
   certificates?: Array<{
+    id: string;
     number: string;
     status: string;
     validUntil: string;
