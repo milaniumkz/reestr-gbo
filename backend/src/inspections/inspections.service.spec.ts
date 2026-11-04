@@ -8,12 +8,13 @@ describe('InspectionsService.list', () => {
     const prisma = {
       inspection: {
         findMany: jest.fn(async () => []),
-        count: jest.fn(async () => 0),
+        groupBy: jest.fn(async () => [{ status: "submitted", _count: { _all: 150 } }]),
+        count: jest.fn(async (args: { where: { certificate?: unknown } }) => args.where.certificate ? 120 : 150),
       },
     };
     const service = new InspectionsService(prisma as never, {} as never, {} as never);
 
-    await service.list(
+    const result = await service.list(
       { sub: 'admin', phone: '+77000000000', roles: ['operator'] },
       '1',
       '50',
@@ -37,6 +38,9 @@ describe('InspectionsService.list', () => {
     });
     expect(where.OR).toHaveLength(5);
     expect(prisma.inspection.count).toHaveBeenCalledWith({ where });
+    expect(prisma.inspection.groupBy).toHaveBeenCalledWith({ by: ["status"], where: where, _count: { _all: true } });
+    expect(result.items).toHaveLength(0);
+    expect(result.summary).toMatchObject({ total: 150, byStatus: { submitted: 150 }, issuedCertificates: 120 });
   });
 
   it('does not let an inspection_org list inspections outside its organization scope', async () => {
@@ -46,6 +50,7 @@ describe('InspectionsService.list', () => {
       },
       inspection: {
         findMany: jest.fn(async () => []),
+        groupBy: jest.fn(async () => []),
         count: jest.fn(async () => 0),
       },
     };
@@ -63,6 +68,8 @@ describe('InspectionsService.list', () => {
     expect(where).toMatchObject({
       organizationId: { in: [] },
     });
+    expect(prisma.inspection.groupBy).toHaveBeenCalledWith({ by: ["status"], where, _count: { _all: true } });
+    expect(prisma.inspection.count).toHaveBeenCalledWith({ where: { ...where, certificate: { isNot: null } } });
     expect(prisma.inspection.count).toHaveBeenCalledWith({ where });
   });
 });

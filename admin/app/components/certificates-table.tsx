@@ -1,9 +1,12 @@
+import { ListSummary } from '@/lib/api';
+import { ListStatistics } from './list-statistics';
 import { accreditationPeriod } from '../lib/accreditation';
 import { CertificateRow, Organization } from '@/lib/api';
 import { statusLabel } from '../lib/labels';
 import { EmptyTableRow } from './ui-primitives';
 
 type CertificatesTableProps = {
+  summary?: ListSummary;
   rows: CertificateRow[];
   organizations: Organization[];
   canManage: boolean;
@@ -28,6 +31,7 @@ type CertificatesTableProps = {
 export function CertificatesTable({
   rows,
   organizations,
+  summary,
   canManage,
   plate,
   vinLast3,
@@ -74,6 +78,7 @@ export function CertificatesTable({
         <button type="submit">Фильтр</button>
         <button type="button" className="ghostButton" onClick={onResetFilters}>Сбросить</button>
       </form>
+      <ListStatistics kind="certificates" summary={summary} />
       <table>
         <thead>
           <tr>

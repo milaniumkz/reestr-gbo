@@ -116,7 +116,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
         : {}),
     };
     const meta = paginationMeta(page, limit);
-    const [items, total] = await Promise.all([
+    const [items, total, statusCounts, issuedCertificates] = await Promise.all([
       this.prisma.inspection.findMany({
         where,
         include: {
@@ -135,8 +135,12 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
         take: meta.limit,
       }),
       this.prisma.inspection.count({ where }),
+      this.prisma.inspection.groupBy({ by: ["status"], where, _count: { _all: true } }),
+      this.prisma.inspection.count({ where: { ...where, certificate: { isNot: null } } }),
     ]);
-    return listResponse(items.map(item => ({...item, photos: activeCylinderPhotos(item, item.photos)})), total, page, limit);
+    return { ...listResponse(items.map(item => ({...item, photos: activeCylinderPhotos(item, item.photos)})), total, page, limit),
+      summary: { total, issuedCertificates, byStatus: Object.fromEntries(statusCounts.map(row => [row.status, row._count._all])) },
+    };
   }
 
   private dateRange(dateFrom?: string, dateTo?: string) {

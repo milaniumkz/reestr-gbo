@@ -7,12 +7,13 @@ describe('CertificatesService.list', () => {
     const prisma = {
       certificate: {
         findMany: jest.fn(async () => []),
-        count: jest.fn(async () => 0),
+        groupBy: jest.fn(async () => [{ status: "active", _count: { _all: 150 } }]),
+        count: jest.fn(async () => 150),
       },
     };
     const service = new CertificatesService(prisma as never, storageMock());
 
-    await service.list('2', '25', 'BayGazi', {
+    const result = await service.list('2', '25', 'BayGazi', {
       plateNumber: ' 777 aaa 01 ',
       vinLast3: 'x9z',
       status: 'active',
@@ -40,12 +41,16 @@ describe('CertificatesService.list', () => {
     });
     expect(findArg.where.OR).toHaveLength(4);
     expect(prisma.certificate.count).toHaveBeenCalledWith({ where: findArg.where });
+    expect(prisma.certificate.groupBy).toHaveBeenCalledWith({ by: ["status"], where: findArg.where, _count: { _all: true } });
+    expect(result.items).toHaveLength(0);
+    expect(result.summary).toMatchObject({ total: 150, byStatus: { active: 150 } });
   });
 
   it('treats organizationId=all as no organization filter', async () => {
     const prisma = {
       certificate: {
         findMany: jest.fn(async () => []),
+        groupBy: jest.fn(async () => []),
         count: jest.fn(async () => 0),
       },
     };

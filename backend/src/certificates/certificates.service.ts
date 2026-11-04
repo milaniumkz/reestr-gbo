@@ -103,7 +103,7 @@ export class CertificatesService {
           }
         : {}),
     };
-    const [certificates, totalBeforePostFilter] = await Promise.all([
+    const [certificates, totalBeforePostFilter, statusCounts] = await Promise.all([
       this.prisma.certificate.findMany({
         where,
         include: {
@@ -118,6 +118,7 @@ export class CertificatesService {
         take: meta.limit,
       }),
       this.prisma.certificate.count({ where }),
+      this.prisma.certificate.groupBy({ by: ["status"], where, _count: { _all: true } }),
     ]);
     const items = certificates.map((certificate) => ({
       ...certificate,
@@ -129,7 +130,10 @@ export class CertificatesService {
         })),
       },
     }));
-    return listResponse(items, totalBeforePostFilter, page, limit);
+    return { ...listResponse(items, totalBeforePostFilter, page, limit), summary: {
+      total: totalBeforePostFilter,
+      byStatus: Object.fromEntries(statusCounts.map(row => [row.status, row._count._all])),
+    } };
   }
 
   private normalizeLookup(value?: string | null) {

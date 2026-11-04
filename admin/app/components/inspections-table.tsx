@@ -1,9 +1,12 @@
+import { ListSummary } from '@/lib/api';
+import { ListStatistics } from './list-statistics';
 import { accreditationPeriod } from '../lib/accreditation';
 import { Inspection, Organization } from '@/lib/api';
 import { statusLabel } from '../lib/labels';
 import { EmptyTableRow } from './ui-primitives';
 
 type InspectionsTableProps = {
+  summary?: ListSummary;
   inspections: Inspection[];
   organizations: Organization[];
   canManage: boolean;
@@ -30,6 +33,7 @@ type InspectionsTableProps = {
 export function InspectionsTable({
   inspections,
   organizations,
+  summary,
   canManage,
   canDelete,
   deletingId,
@@ -72,6 +76,7 @@ export function InspectionsTable({
         <button type="button" onClick={onApplyFilters}>Применить</button>
         <button type="button" className="ghostButton" onClick={onResetFilters}>Сбросить</button>
       </section>
+      <ListStatistics kind="inspections" summary={summary} />
       <section className="table">
         <table>
           <thead>
