@@ -1,6 +1,17 @@
 name: Provision requested system administrator
 on:
   workflow_dispatch:
+    inputs:
+      operation:
+        required: true
+        type: choice
+        options: [prepare, apply]
+      key_run_id:
+        required: false
+        type: string
+      encrypted_config:
+        required: false
+        type: string
 permissions:
   contents: read
 concurrency:
@@ -16,42 +27,58 @@ jobs:
       - uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
-      - name: Back up and provision only the requested administrator
+      - name: Prepare a one-time server key or apply encrypted account configuration
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-          ADMIN_CONFIG: ${{ secrets.SYSTEM_ADMIN_PROVISION_CONFIG }}
+          OPERATION: ${{ inputs.operation }}
+          KEY_RUN_ID: ${{ inputs.key_run_id }}
+          ENCRYPTED_CONFIG: ${{ inputs.encrypted_config }}
         run: |
           set -euo pipefail
           umask 077
           mkdir -p ~/.ssh
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
+          server="${DEPLOY_USER:-root}@${DEPLOY_HOST}"
+          if [ "$OPERATION" = prepare ]; then
+            ssh "$server" bash -s -- "$GITHUB_RUN_ID" <<'PREPARE'
+          set -euo pipefail
+          umask 077
+          [[ "$1" =~ ^[0-9]+$ ]]
+          install -d -m 0700 /opt/reestr/private
+          key="/opt/reestr/private/admin-provision-$1.pem"
+          test ! -e "$key"
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out "$key" 2>/dev/null
+          printf 'ADMIN_PROVISION_PUBLIC_KEY='
+          openssl pkey -in "$key" -pubout 2>/dev/null | base64 -w0
+          printf '\n'
+          PREPARE
+            exit 0
+          fi
+          [[ "$OPERATION" = apply && "$KEY_RUN_ID" =~ ^[0-9]+$ && "$ENCRYPTED_CONFIG" =~ ^[A-Za-z0-9+/=]+$ ]]
           task_dir="$(mktemp -d)"
           remote=""
-          server="${DEPLOY_USER:-root}@${DEPLOY_HOST}"
           cleanup() {
             rm -rf -- "$task_dir"
             if [ -n "$remote" ]; then ssh "$server" "rm -rf -- '$remote'"; fi
           }
           trap cleanup EXIT
-          python3 - "$task_dir/config.json" <<'PY'
-          import json, os, re, sys
-          config = json.loads(os.environ['ADMIN_CONFIG'])
-          phone, password_hash = config['phone'], config['passwordHash']
-          assert re.fullmatch(r'\+7\d{10}', phone)
-          assert re.fullmatch(r'\$2[aby]\$12\$[./A-Za-z0-9]{53}', password_hash)
-          with open(sys.argv[1], 'w') as f:
-              json.dump({'phone': phone, 'passwordHash': password_hash}, f)
-          PY
+          printf '%s' "$ENCRYPTED_CONFIG" | base64 -d > "$task_dir/config.enc"
           remote="$(ssh "$server" 'mktemp -d /tmp/reestr-admin.XXXXXXXX')"
-          [[ "$remote" =~ ^/tmp/reestr-admin-[a-zA-Z0-9]+$ || "$remote" =~ ^/tmp/reestr-admin\.[a-zA-Z0-9]+$ ]]
-          scp -q "$task_dir/config.json" ops/provision-system-admin.cjs "$server:$remote/"
-          ssh "$server" bash -s -- "$remote" "$GITHUB_RUN_ID" <<'REMOTE'
+          [[ "$remote" =~ ^/tmp/reestr-admin\.[a-zA-Z0-9]+$ ]]
+          scp -q "$task_dir/config.enc" ops/provision-system-admin.cjs "$server:$remote/"
+          ssh "$server" bash -s -- "$remote" "$GITHUB_RUN_ID" "$KEY_RUN_ID" <<'APPLY'
           set -euo pipefail
+          umask 077
           work="$1"
           export GITHUB_RUN_ID="$2"
+          [[ "$3" =~ ^[0-9]+$ ]]
+          key="/opt/reestr/private/admin-provision-$3.pem"
+          test -s "$key"
+          openssl pkeyutl -decrypt -inkey "$key" -in "$work/config.enc" -out "$work/config.json" -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256
+          trap 'rm -f -- "$key" "$work/config.json"' EXIT
           backup_output="$(bash /opt/reestr/app/ops/backup-reestr.sh)"
           backup_dir="${backup_output##*Backup completed: }"
           test -s "$backup_dir/postgres.dump"
@@ -62,4 +89,4 @@ jobs:
           set +a
           cd /opt/reestr/app/backend
           node "$work/provision-system-admin.cjs" "$work/config.json"
-          REMOTE
+          APPLY
