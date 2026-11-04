@@ -47,6 +47,18 @@ export class InspectionsController {
     });
   }
 
+  @Post("location/resolve")
+  @Roles("inspection_org", "operator", "super_admin")
+  resolveLocation(@Body() body: { lat?: number | string; lng?: number | string }) {
+    return this.inspections.resolveLocation(body);
+  }
+
+  @Post(":id/location/resolve")
+  @Roles("inspection_org", "operator", "super_admin")
+  resolveSavedLocation(@CurrentUser() user: RequestUser, @Param("id") id: string) {
+    return this.inspections.resolveSavedLocation(id, user);
+  }
+
   @Post()
   @Roles("inspection_org", "operator", "super_admin")
   create(

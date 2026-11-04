@@ -207,6 +207,8 @@ describe('InspectionsService.setStatus', () => {
 describe('Inspection quality control workflow', () => {
   function fixture() {
     const state = {
+      address: "Астана, улица Тестовая, д. 12" as string | null,
+      lat: 51.1, lng: 71.4,
       id: 'inspection_1', organizationId: 'org_1', status: 'draft', certificateNumber: 'TEST-1',
       qualityDocumentUploadedAt: null as Date | null,
       secondQualityDocumentUploadedAt: null as Date | null,
@@ -451,6 +453,13 @@ describe('Inspection quality control workflow', () => {
     expect(f.state.photos.filter(p=>p.type.endsWith('record')||p.type.endsWith('report')).map(p=>p.objectKey)).toEqual(originals);
     await expect(f.service.uploadPhoto('inspection_1','tech_passport',{originalname:'passport.jpg',buffer:Buffer.from('photo')},f.user('qc2'))).rejects.toThrow('уже проверяет');
   });
+  it('blocks submission of an old GPS-only inspection when address lookup fails', async () => {
+    const f = fixture(); f.state.address = 'GPS: 51.100000, 71.400000';
+    jest.spyOn(f.service as any, 'reverseGeocode').mockResolvedValue(undefined);
+    await expect(f.service.setStatus(f.user('inspector'), 'inspection_1', 'submitted')).rejects.toThrow('Адрес инспекции не определился');
+    expect(f.prisma.inspection.update).not.toHaveBeenCalled();
+  });
+
   it('requires inspector -> uploaded certificate + confirmation -> leader -> registry',async()=>{
     const f=fixture();
     expect((await f.service.readiness('inspection_1',f.user('inspector'))).ready).toBe(true);
