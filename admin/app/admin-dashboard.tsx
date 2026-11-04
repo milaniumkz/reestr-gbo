@@ -361,8 +361,13 @@ export default function AdminDashboard() {
     return governmentNav;
   }, [canManage, user]);
   const dashboardOptions = useMemo(
-    () => ({ includeManagement: canManage || !user?.roles.includes('government') }),
-    [canManage, user],
+    () => ({
+      includeManagement: canManage || !user?.roles.includes('government'),
+      inspectionFilters: { status: inspectionStatusFilter, organizationId: inspectionOrganizationFilter, dateFrom: inspectionDateFrom, dateTo: inspectionDateTo },
+      certificateFilters: { status: certificateStatusFilter, organizationId: certificateOrganizationFilter, dateFrom: certificateDateFrom, dateTo: certificateDateTo, plateNumber: certificatePlateFilter, vinLast3: certificateVinLast3Filter },
+    }),
+    [canManage, user, inspectionStatusFilter, inspectionOrganizationFilter, inspectionDateFrom, inspectionDateTo,
+      certificateStatusFilter, certificateOrganizationFilter, certificateDateFrom, certificateDateTo, certificatePlateFilter, certificateVinLast3Filter],
   );
   const currentActive = availableNav.includes(active) ? active : availableNav[0];
 
@@ -398,12 +403,15 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (!token || !isAdmin) return;
+    let cancelled = false;
     const timeout = window.setTimeout(() => {
       getDashboardData(token, query, pages, dashboardOptions)
         .then((data) => {
+          if (cancelled) return;
           applyDashboardData(data);
         })
         .catch(async (err) => {
+          if (cancelled) return;
           if (isUnauthorizedError(err)) {
             await refreshSession();
             return;
@@ -411,12 +419,20 @@ export default function AdminDashboard() {
           setError(err instanceof Error ? err.message : 'Ошибка загрузки данных');
         });
     }, 300);
-    return () => window.clearTimeout(timeout);
+    return () => { cancelled = true; window.clearTimeout(timeout); };
   }, [token, isAdmin, query, pages, dashboardOptions]);
 
   useEffect(() => {
     setPages({});
   }, [query]);
+
+  useEffect(() => {
+    setPages(current => ({ ...current, inspections: 1, certificates: 1 }));
+    setListMeta(current => ({ ...current,
+      inspections: { ...current.inspections, summary: undefined },
+      certificates: { ...current.certificates, summary: undefined },
+    }));
+  }, [dashboardOptions]);
 
   useEffect(() => {
     if (!availableNav.includes(active)) {
@@ -2036,6 +2052,7 @@ export default function AdminDashboard() {
         {!detailOpen && currentActive === 'Инспекции' && (
           <InspectionsTable
             inspections={filtered.inspections}
+            summary={listMeta.inspections?.summary}
             organizations={organizations}
             canManage={canManage}
             canDelete={Boolean(user?.roles.includes('super_admin'))}
@@ -2061,6 +2078,7 @@ export default function AdminDashboard() {
         {!detailOpen && currentActive === 'Свидетельства' && (
           <CertificatesTable
             rows={filtered.certificates}
+            summary={listMeta.certificates?.summary}
             organizations={organizations}
             canManage={canManage}
             plate={certificatePlateFilter}

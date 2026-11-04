@@ -1,0 +1,65 @@
+name: Provision requested system administrator
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - run: node --test ops/provision-system-admin.test.cjs
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+      - name: Back up and provision only the requested administrator
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          ADMIN_CONFIG: ${{ secrets.SYSTEM_ADMIN_PROVISION_CONFIG }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          task_dir="$(mktemp -d)"
+          remote=""
+          server="${DEPLOY_USER:-root}@${DEPLOY_HOST}"
+          cleanup() {
+            rm -rf -- "$task_dir"
+            if [ -n "$remote" ]; then ssh "$server" "rm -rf -- '$remote'"; fi
+          }
+          trap cleanup EXIT
+          python3 - "$task_dir/config.json" <<'PY'
+          import json, os, re, sys
+          config = json.loads(os.environ['ADMIN_CONFIG'])
+          phone, password_hash = config['phone'], config['passwordHash']
+          assert re.fullmatch(r'\+7\d{10}', phone)
+          assert re.fullmatch(r'\$2[aby]\$12\$[./A-Za-z0-9]{53}', password_hash)
+          with open(sys.argv[1], 'w') as f:
+              json.dump({'phone': phone, 'passwordHash': password_hash}, f)
+          PY
+          remote="$(ssh "$server" 'mktemp -d /tmp/reestr-admin.XXXXXXXX')"
+          [[ "$remote" =~ ^/tmp/reestr-admin-[a-zA-Z0-9]+$ || "$remote" =~ ^/tmp/reestr-admin\.[a-zA-Z0-9]+$ ]]
+          scp -q "$task_dir/config.json" ops/provision-system-admin.cjs "$server:$remote/"
+          ssh "$server" bash -s -- "$remote" "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          work="$1"
+          export GITHUB_RUN_ID="$2"
+          backup_output="$(bash /opt/reestr/app/ops/backup-reestr.sh)"
+          backup_dir="${backup_output##*Backup completed: }"
+          test -s "$backup_dir/postgres.dump"
+          pg_restore --list "$backup_dir/postgres.dump" >/dev/null
+          echo 'Backup verified'
+          set -a
+          source /opt/reestr/app/backend/.env
+          set +a
+          cd /opt/reestr/app/backend
+          node "$work/provision-system-admin.cjs" "$work/config.json"
+          REMOTE

@@ -5,7 +5,10 @@ import {diagnosticHeaders} from './location-telemetry';
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? '/api/v1';
 export const API_BASE_URL = API_URL;
 
+export type ListSummary = { total: number; byStatus: Record<string, number>; issuedCertificates?: number };
+
 export type ListResponse<T> = {
+  summary?: ListSummary;
   items: T[];
   total?: number;
   page?: number;
@@ -13,6 +16,7 @@ export type ListResponse<T> = {
 };
 
 export type ListMeta = {
+  summary?: ListSummary;
   total: number;
   page: number;
   limit: number;
@@ -25,6 +29,8 @@ export type DashboardPages = Partial<Record<
 
 export type DashboardOptions = {
   includeManagement?: boolean;
+  inspectionFilters?: Record<string, string>;
+  certificateFilters?: Record<string, string>;
 };
 
 function asItems<T>(value: T[] | ListResponse<T>): T[] {
@@ -37,6 +43,7 @@ function asList<T>(value: T[] | ListResponse<T>, page = 1, limit = 50): ListResp
   }
   return {
     items: value.items,
+    summary: value.summary,
     total: value.total ?? value.items.length,
     page: value.page ?? page,
     limit: value.limit ?? limit,
@@ -433,9 +440,9 @@ export async function getDashboardData(
   const [organizations, inspections, certificates, importJobs, users, audit, registry, publicChecks, notifications] = await Promise.all([
     api<Organization[] | ListResponse<Organization>>(`/organizations?${pageQuery('organizations')}${querySuffix}`, token),
     includeManagement
-      ? api<Inspection[] | ListResponse<Inspection>>(`/inspections?${pageQuery('inspections')}${querySuffix}`, token)
+      ? api<Inspection[] | ListResponse<Inspection>>(`/inspections?${pageQuery('inspections')}${querySuffix}&${new URLSearchParams(cleanParams(options.inspectionFilters ?? {}))}`, token)
       : Promise.resolve([] as Inspection[]),
-    api<CertificateRow[] | ListResponse<CertificateRow>>(`/certificates?${pageQuery('certificates')}${querySuffix}`, token),
+    api<CertificateRow[] | ListResponse<CertificateRow>>(`/certificates?${pageQuery('certificates')}${querySuffix}&${new URLSearchParams(cleanParams(options.certificateFilters ?? {}))}`, token),
     includeManagement
       ? api<CertificateImportJob[] | ListResponse<CertificateImportJob>>(`/certificates/import-jobs?${pageQuery('importJobs')}${querySuffix}`, token)
       : Promise.resolve([] as CertificateImportJob[]),
@@ -471,8 +478,8 @@ export async function getDashboardData(
     notifications: notificationList.items,
     meta: {
       organizations: { total: orgList.total, page: orgList.page, limit: orgList.limit },
-      inspections: { total: inspectionList.total, page: inspectionList.page, limit: inspectionList.limit },
-      certificates: { total: certificateList.total, page: certificateList.page, limit: certificateList.limit },
+      inspections: { summary: inspectionList.summary, total: inspectionList.total, page: inspectionList.page, limit: inspectionList.limit },
+      certificates: { summary: certificateList.summary, total: certificateList.total, page: certificateList.page, limit: certificateList.limit },
       importJobs: { total: importJobList.total, page: importJobList.page, limit: importJobList.limit },
       users: { total: userList.total, page: userList.page, limit: userList.limit },
       audit: { total: auditList.total, page: auditList.page, limit: auditList.limit },
