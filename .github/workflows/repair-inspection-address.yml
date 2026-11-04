@@ -2,6 +2,11 @@ name: Repair one inspection address from saved GPS
 on:
   workflow_dispatch:
     inputs:
+      operation:
+        required: false
+        default: repair
+        type: choice
+        options: [diagnose, repair]
       certificate_number:
         required: true
         type: string
@@ -27,6 +32,7 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          OPERATION: ${{ inputs.operation }}
           NUMBER: ${{ inputs.certificate_number }}
           EXPECTED: ${{ inputs.expected_address_sha256 }}
         run: |
@@ -39,4 +45,8 @@ jobs:
           remote="$(ssh "$server" 'mktemp -d /tmp/reestr-address-repair.XXXXXX')"
           trap 'ssh "$server" "rm -rf -- \"$remote\""' EXIT
           scp ops/repair-inspection-address.cjs "$server:$remote/repair.cjs"
-          ssh "$server" "set -a; source /opt/reestr/app/backend/.env; set +a; GITHUB_RUN_ID='$GITHUB_RUN_ID' node '$remote/repair.cjs' '$NUMBER' '$EXPECTED'"
+          [[ "$OPERATION" = diagnose || "$OPERATION" = repair ]]
+          if [ "$OPERATION" = repair ]; then
+            ssh "$server" 'bash /opt/reestr/app/ops/backup-reestr.sh'
+          fi
+          ssh "$server" "set -a; source /opt/reestr/app/backend/.env; set +a; GITHUB_RUN_ID='$GITHUB_RUN_ID' node '$remote/repair.cjs' '$NUMBER' '$EXPECTED' '$OPERATION'"
