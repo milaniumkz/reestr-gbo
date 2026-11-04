@@ -16,17 +16,19 @@ describe('Actual inspection location',()=>{
   expect(f.db.organization.findUnique).not.toHaveBeenCalled();
   expect(f.db.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({metadata:expect.objectContaining({addressSource:'reverse_geocoding'})})}));
  });
- it('keeps actual coordinates when reverse geocoding is unavailable, never the office address',async()=>{
+ it('blocks creation without an address and never saves GPS as the address',async()=>{
   const f=fixture();jest.spyOn(f.service as any,'reverseGeocode').mockResolvedValue(undefined);
-  expect(await f.service.create(user,input)).toMatchObject({address:'GPS: 49.943117, 82.656191'});
+  await expect(f.service.create(user,input)).rejects.toThrow('Адрес инспекции не определился');
+  expect(f.db.inspection.create).not.toHaveBeenCalled();
  });
  it.each([{lat:undefined},{lng:undefined},{lat:91},{lng:181},{lat:''},{lat:NaN}])('rejects absent or invalid GPS: %p',async bad=>{
   const f=fixture();await expect(f.service.create(user,{...input,...bad})).rejects.toThrow('место проведения инспекции');
   expect(f.db.inspection.create).not.toHaveBeenCalled();
  });
- it('clears geocoding timeout and treats network failure as unavailable',async()=>{
-  const f=fixture();const original=global.fetch;
-  global.fetch=jest.fn(async()=>{throw new Error('offline')}) as never;
-  try{expect(await (f.service as any).reverseGeocode(input.lat,input.lng)).toBeUndefined();}finally{global.fetch=original;}
+ it('keeps location resolution blocked until a retry succeeds',async()=>{
+  const f=fixture();const lookup=jest.spyOn(f.service as any,'reverseGeocode').mockResolvedValueOnce(undefined).mockResolvedValueOnce('Астана, улица Тестовая, д. 12');
+  await expect(f.service.resolveLocation(input)).rejects.toThrow('Адрес инспекции не определился');
+  expect(await f.service.resolveLocation(input)).toMatchObject({address:'Астана, улица Тестовая, д. 12',lat:input.lat,lng:input.lng});
+  expect(lookup).toHaveBeenCalledTimes(2);
  });
 });

@@ -1,3 +1,4 @@
+import 'widgets/inspection_address_gate.dart';
 import 'platform/web_updates.dart';
 import 'platform/web_install.dart';
 import 'widgets/bank_invoice_screen.dart';
@@ -520,6 +521,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
   String ownerName = '';
   String ownerPhone = '';
   String ownerAddress = '';
+  bool _ownerNextBusy = false;
   String ownerKind = 'Физическое лицо';
   String inspectionIssuedAt = _todayIsoDate();
   String vehiclePlate = '';
@@ -880,6 +882,33 @@ class _ErsiDemoState extends State<ErsiDemo> {
       kIsWeb
           ? 'Не удалось определить место инспекции. Включите геолокацию и разрешите сайту доступ к местоположению через значок слева от адреса сайта. Если она включена, выключите и снова включите геолокацию, затем повторите отправку.'
           : 'Не удалось определить место инспекции. Включите геолокацию и разрешите приложению доступ к местоположению. Если она включена, выключите и снова включите геолокацию, затем повторите отправку.',
+    );
+  }
+
+  Future<Position?> _confirmCurrentInspectionAddress() async {
+    Position? resolvedPosition;
+    final confirmed = await confirmInspectionAddress(
+      context,
+      resolve: () async {
+        final position = await _bestInspectionPosition();
+        final address = await repositories.inspections.resolveInspectionAddress(
+          position.latitude,
+          position.longitude,
+        );
+        resolvedPosition = position;
+        return address;
+      },
+    );
+    return confirmed ? resolvedPosition : null;
+  }
+
+  Future<bool> _confirmSavedInspectionAddress() async {
+    if (AppEnvironment.isDemo) return true;
+    final id = draftInspectionId;
+    if (id == null) return true;
+    return confirmInspectionAddress(
+      context,
+      resolve: () => repositories.inspections.resolveSavedInspectionAddress(id),
     );
   }
 
@@ -1811,6 +1840,9 @@ class _ErsiDemoState extends State<ErsiDemo> {
       throw StateError('Заполните: ${missing.join(', ')}');
     }
     if (_editingQualityInspection) {
+      if (!await _confirmSavedInspectionAddress()) {
+        throw StateError('Адрес инспекции не определился. Продолжить нельзя.');
+      }
       final parts = vehicleMakeModel.trim().split(RegExp(r'\s+'));
       final detail = await repositories.inspections.updateQualityData(
         draftInspectionId!,
@@ -1857,7 +1889,15 @@ class _ErsiDemoState extends State<ErsiDemo> {
       return detail.id;
     }
     final organizationId = await _inspectionOrganizationId();
-    final position = await _bestInspectionPosition();
+    final position = draftInspectionId == null && !AppEnvironment.isDemo
+        ? await _confirmCurrentInspectionAddress()
+        : await _bestInspectionPosition();
+    if (position == null) {
+      throw StateError('Адрес инспекции не определился. Продолжить нельзя.');
+    }
+    if (draftInspectionId != null && !await _confirmSavedInspectionAddress()) {
+      throw StateError('Адрес инспекции не определился. Продолжить нельзя.');
+    }
     final certificateNumber = _normalizeCertificateNumber(
       inspectionCertificateNumber,
     );
@@ -2199,6 +2239,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
   }
 
   Future<void> _goOwnerNext() async {
+    if (_ownerNextBusy) return;
     final missing = <String>[
       if (ownerName.trim().isEmpty) 'ФИО / наименование владельца',
       if (ownerKind == 'Юридическое лицо' &&
@@ -2211,6 +2252,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       return;
     }
     final number = _normalizeCertificateNumber(inspectionCertificateNumber);
+    _ownerNextBusy = true;
     setState(() => apiState = 'Проверка номера свидетельства');
     try {
       final available = await repositories.inspections
@@ -2227,10 +2269,20 @@ class _ErsiDemoState extends State<ErsiDemo> {
         return;
       }
       if (!mounted) return;
+      if (!AppEnvironment.isDemo) {
+        if (draftInspectionId != null) {
+          if (!await _confirmSavedInspectionAddress()) return;
+        } else if (await _confirmCurrentInspectionAddress() == null) {
+          return;
+        }
+      }
+      if (!mounted) return;
       setState(() => apiState = '');
       go(16);
     } catch (_) {
       if (mounted) setState(() => apiState = 'Ошибка проверки номера');
+    } finally {
+      _ownerNextBusy = false;
     }
   }
 

@@ -1,3 +1,4 @@
+import { reverseGeocodeInspection, inspectionAddressUnavailable } from './inspection-address';
 import { Prisma } from '@prisma/client';
 import { TechPassportService } from '../tech-passport/tech-passport.service';
 import { passportProofMatches } from '../tech-passport/passport-content';
@@ -197,7 +198,8 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
     }
     // The organization and owner addresses are never evidence of the visit location.
     const resolvedAddress = await this.reverseGeocode(lat, lng);
-    const address = resolvedAddress || `GPS: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    if (!resolvedAddress) throw new BadRequestException(inspectionAddressUnavailable);
+    const address = resolvedAddress;
     let pair: ReturnType<typeof cylinderPair>;
     if (input.usesTwoCylinders === true) {
       const vehicle = await this.prisma.vehicle.findUnique({where:{id:vehicleId},include:{cylinders:true}});
@@ -226,7 +228,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
         action: "inspection.create",
         entity: "inspection",
         entityId: inspection.id,
-        metadata: { organizationId, vehicleId, certificateNumber, lat, lng, address, locationSource: "device_coordinates", addressSource: resolvedAddress ? "reverse_geocoding" : "gps_coordinates" },
+        metadata: { organizationId, vehicleId, certificateNumber, lat, lng, address, locationSource: "device_coordinates", addressSource: "reverse_geocoding" },
       },
     });
     return inspection;
@@ -292,6 +294,10 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
     }
     if (status === "draft" && !["draft", "rejected"].includes(existing.status)) {
       throw new BadRequestException("Нельзя вернуть инспекцию в черновик в обход проверки качества");
+    }
+
+    if (["submitted", "quality_approved", "approved"].includes(status)) {
+      await this.requireStoredAddress(existing);
     }
 
     // Keep the existing return command compatible with old clients, but route
@@ -798,27 +804,36 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
     return value?.replace(/\s+/g, "").trim().toUpperCase();
   }
 
+  async resolveSavedLocation(id: string, user?: RequestUser) {
+    const inspection = await this.assertInspectionAccess(id, user);
+    const address = await this.requireStoredAddress(inspection);
+    return { lat: inspection.lat, lng: inspection.lng, address };
+  }
+
+  private async requireStoredAddress(inspection: { id: string; address: string | null; lat: number | null; lng: number | null }) {
+    if (inspection.address?.trim() && !/^GPS\b/i.test(inspection.address.trim())) return inspection.address;
+    const resolved = await this.resolveLocation({ lat: inspection.lat ?? undefined, lng: inspection.lng ?? undefined });
+    await this.prisma.$transaction(async tx => {
+      const result = await tx.inspection.updateMany({
+        where: { id: inspection.id, address: inspection.address, lat: inspection.lat, lng: inspection.lng },
+        data: { address: resolved.address },
+      });
+      if (result.count !== 1) throw new ConflictException('Адрес инспекции изменился. Обновите карточку и повторите проверку.');
+      await tx.auditLog.create({ data: { action: 'inspection.location.address_repaired', entity: 'inspection', entityId: inspection.id,
+        metadata: { previousAddress: inspection.address, address: resolved.address, lat: inspection.lat, lng: inspection.lng, source: 'reverse_geocoding' } } });
+    });
+    return resolved.address;
+  }
+
+  async resolveLocation(input: { lat?: number | string; lng?: number | string }) {
+    const lat = this.coordinate(input.lat, -90, 90), lng = this.coordinate(input.lng, -180, 180);
+    if (lat === undefined || lng === undefined) throw new BadRequestException('Не удалось определить координаты места инспекции. Включите геолокацию и попробуйте снова.');
+    const address = await this.reverseGeocode(lat, lng);
+    if (!address) throw new BadRequestException(inspectionAddressUnavailable);
+    return { lat, lng, address };
+  }
+
   private async reverseGeocode(lat: number, lng: number) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2500);
-    try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
-        {
-          signal: controller.signal,
-          headers: {
-            "User-Agent": "ERSI-GBO/1.0 inspection location",
-            "Accept-Language": "ru,kk,en",
-          },
-        },
-      );
-      if (!response.ok) return undefined;
-      const data = (await response.json()) as { display_name?: string };
-      return typeof data.display_name === "string" ? data.display_name.trim().slice(0, 500) || undefined : undefined;
-    } catch {
-      return undefined;
-    } finally {
-      clearTimeout(timeout);
-    }
+    return reverseGeocodeInspection(lat, lng);
   }
 }

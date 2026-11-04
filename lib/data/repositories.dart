@@ -489,6 +489,22 @@ class InspectionRepository {
   InspectionRepository(this._api);
   final ApiClient _api;
 
+  Future<String> resolveInspectionAddress(double lat, double lng) async {
+    final response = await _api.postJson('/inspections/location/resolve', {
+      'lat': lat,
+      'lng': lng,
+    });
+    return response['address']?.toString() ?? '';
+  }
+
+  Future<String> resolveSavedInspectionAddress(String id) async {
+    final response = await _api.postJson(
+      '/inspections/$id/location/resolve',
+      {},
+    );
+    return response['address']?.toString() ?? '';
+  }
+
   Future<String> createVehicle({
     required String vin,
     required String plateNumber,
