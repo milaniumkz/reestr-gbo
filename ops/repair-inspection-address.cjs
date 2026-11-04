@@ -10,6 +10,15 @@ const db=new PrismaClient({log:[]});
  if(!row||row.lat===null||row.lng===null)throw Error('Inspection with saved GPS required');
  if(createHash('sha256').update(row.address||'').digest('hex')!==expected)throw Error('Address changed: refusing repair');
  if(process.argv[4]==='diagnose') {
+  const {promises:dns}=require('node:dns');
+  const {execFileSync}=require('node:child_process');
+  for(const family of [4,6]) {
+    try { console.log(JSON.stringify({dnsFamily:family,records:await (family===4?dns.resolve4('nominatim.openstreetmap.org'):dns.resolve6('nominatim.openstreetmap.org'))})); }
+    catch(error) { console.log(JSON.stringify({dnsFamily:family,error:error.code})); }
+    try { console.log(JSON.stringify({curlFamily:family,result:execFileSync('curl',['-'+family,'--silent','--show-error','--connect-timeout','5','--max-time','8','--output','/dev/null','--write-out','%{http_code} %{remote_ip} %{time_total}', '-H','User-Agent: ERSI-GBO/1.0 inspection location',`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${row.lat}&lon=${row.lng}&zoom=18&addressdetails=1`],{encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim()})); }
+    catch(error) { console.log(JSON.stringify({curlFamily:family,exitCode:error.status,error:error.stderr?.toString().trim()})); }
+  }
+
   for(const [provider,url] of [
    ['nominatim',`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${row.lat}&lon=${row.lng}&zoom=18&addressdetails=1`],
    ['photon',`https://photon.komoot.io/reverse?lat=${row.lat}&lon=${row.lng}&radius=0.1&limit=1`],
