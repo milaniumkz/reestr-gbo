@@ -6,7 +6,10 @@ const number=process.argv[2],expected=process.argv[3];
 if(!/^\d{1,30}$/.test(number||'')||!/^[a-f0-9]{64}$/.test(expected||''))process.exit(2);
 const db=new PrismaClient({log:[]});
 (async()=>{
- const row=await db.inspection.findUnique({where:{certificateNumber:number}});
+ const organizationId=process.argv[5]||undefined;
+ const matches=await db.inspection.findMany({where:{certificateNumber:number,...(organizationId?{organizationId}:{})},take:2});
+ if(matches.length!==1)throw Error('Select the inspection organization for this certificate number');
+ const row=matches[0];
  if(!row||row.lat===null||row.lng===null)throw Error('Inspection with saved GPS required');
  if(createHash('sha256').update(row.address||'').digest('hex')!==expected)throw Error('Address changed: refusing repair');
  if(process.argv[4]==='diagnose') {

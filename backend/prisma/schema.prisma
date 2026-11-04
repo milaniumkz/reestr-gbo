@@ -97,6 +97,7 @@ model Organization {
   bankInvoices BankInvoice[]
   members     OrganizationMember[]
   inspections Inspection[]
+  certificates Certificate[]
   cameras     Camera[]
   balances    Balance[]
   importJobs  CertificateImportJob[]
@@ -211,7 +212,7 @@ model Inspection {
   submittedById     String?
   approvedById      String?
   status            String            @default("draft")
-  certificateNumber String?           @unique
+  certificateNumber String?
   inspectorName     String?
   notes             String?
   lat               Float?
@@ -246,6 +247,9 @@ model Inspection {
   approvedBy        User?             @relation("InspectionApprovedBy", fields: [approvedById], references: [id])
   photos            InspectionPhoto[]
   certificate       Certificate?
+
+  @@unique([organizationId, certificateNumber])
+  @@unique([id, organizationId])
 }
 
 model InspectionPhoto {
@@ -268,7 +272,8 @@ model InspectionPhoto {
 
 model Certificate {
   id           String                 @id @default(uuid())
-  number       String                 @unique
+  number       String
+  organizationId String
   vehicleId    String
   inspectionId String                 @unique
   status       String                 @default("active")
@@ -277,9 +282,14 @@ model Certificate {
   validUntil   DateTime
   issuedAt     DateTime               @default(now())
   vehicle      Vehicle                @relation(fields: [vehicleId], references: [id])
-  inspection   Inspection             @relation(fields: [inspectionId], references: [id])
+  inspection   Inspection             @relation(fields: [inspectionId, organizationId], references: [id, organizationId])
+  organization Organization @relation(fields: [organizationId], references: [id])
   views        CertificateView[]
   imports      CertificateImportJob[]
+
+  @@unique([organizationId, number])
+  @@unique([inspectionId, organizationId])
+  @@index([number])
 }
 
 model CertificateView {
@@ -357,7 +367,7 @@ model CertificateImportJob {
   organization   Organization?            @relation(fields: [organizationId], references: [id])
   errors         CertificateImportError[]
 
-  @@unique([fileHash, filename])
+  @@unique([organizationId, fileHash, filename])
   @@index([status, createdAt])
 }
 

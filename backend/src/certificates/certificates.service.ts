@@ -1,12 +1,14 @@
+import { certificateNumberConflict } from '../common/certificate-number-conflict';
 import { activeCylinderPhotos } from '../inspections/cylinder-pair';
 import { ownerPhone as normalizeOwnerPhone } from '../common/owner-phone';
 import { inspectionPeriod } from '../common/inspection-period';
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "fs";
 import { Prisma } from "@prisma/client";
 import { XMLParser } from "fast-xml-parser";
@@ -299,30 +301,66 @@ export class CertificatesService {
     if (inspection.usesTwoCylinders && inspection.secondCylinderValidUntil && inspection.secondCylinderValidUntil < validUntil) validUntil = inspection.secondCylinderValidUntil;
 
     const number =
-      inspection.certificateNumber?.trim() || (await this.nextNumber());
+      inspection.certificateNumber?.trim() || (await this.nextNumber(inspection.organizationId));
     const existingByNumber = await this.prisma.certificate.findUnique({
-      where: { number },
+      where: { organizationId_number: { organizationId: inspection.organizationId, number } },
     });
     if (existingByNumber) {
       throw new BadRequestException(
-        "Свидетельство с таким номером уже есть в системе",
+        "Свидетельство с таким номером уже есть в этом инспекционном органе",
       );
     }
+    const id = randomUUID();
     return this.prisma.certificate.create({
       data: {
+        id,
+        organizationId: inspection.organizationId,
         number,
         vehicleId: inspection.vehicleId,
         inspectionId,
         issuedAt: cylinder?.inspectedAt ?? inspection.createdAt,
         validUntil,
-        qrPayload: `${number}:${inspection.vehicle.vin}`,
+        qrPayload: `${id}:${inspection.vehicle.vin}`,
       },
+    }).catch(async error => {
+      if (error?.code === 'P2002') {
+        const issued = await this.prisma.certificate.findUnique({ where: { inspectionId } });
+        if (issued) return issued;
+      }
+      return certificateNumberConflict(error);
     });
   }
 
-  async findByNumber(number: string, user?: RequestUser) {
+  private async certificateId(reference: string, user?: RequestUser, organizationId?: string) {
+    const [value, vin] = reference.split(':');
+    const byId = await this.prisma.certificate.findUnique({ where: { id: value, ...(vin ? { vehicle: { vin } } : {}) }, select: { id: true, organizationId: true } });
+    if (byId) {
+      if (organizationId && byId.organizationId !== organizationId) throw new NotFoundException('Certificate not found');
+      return byId.id;
+    }
+    const allowed = user && !hasGlobalAccess(user) ? await userOrganizationIds(this.prisma, user) : undefined;
+    if (vin) {
+      const exact = await this.prisma.certificate.findMany({
+        where: { qrPayload: reference, ...(organizationId ? { organizationId } : {}), ...(allowed ? { inspection: { organizationId: { in: allowed } } } : {}) },
+        select: { id: true }, take: 2,
+      });
+      if (exact.length === 1) return exact[0].id;
+      if (exact.length > 1) throw new ConflictException('Выберите инспекционный орган для этого QR');
+    }
+    const matches = await this.prisma.certificate.findMany({
+      where: { number: value, ...(organizationId ? { organizationId } : {}),
+        ...(allowed ? { inspection: { organizationId: { in: allowed } } } : {}), ...(vin ? { vehicle: { vin } } : {}) },
+      select: { id: true }, take: 2,
+    });
+    if (matches.length > 1) throw new ConflictException('Номер свидетельства есть у нескольких ИО. Выберите инспекционный орган или откройте свидетельство из списка.');
+    return matches[0]?.id;
+  }
+
+  async findByNumber(number: string, user?: RequestUser, organizationId?: string) {
+    const id = await this.certificateId(number, user, organizationId);
+    if (!id) throw new NotFoundException('Certificate not found');
     const certificate = await this.prisma.certificate.findUnique({
-      where: { number },
+      where: { id },
       include: {
         vehicle: {
           include: { owners: { include: { user: true } }, cylinders: true },
@@ -353,6 +391,7 @@ export class CertificatesService {
     status: string,
     user?: RequestUser,
     reason?: string,
+    organizationId?: string,
   ) {
     if (!["active", "suspended", "revoked"].includes(status)) {
       throw new BadRequestException("Некорректный статус свидетельства");
@@ -361,12 +400,9 @@ export class CertificatesService {
     if (status !== "active" && !trimmedReason) {
       throw new BadRequestException("Укажите причину ограничения свидетельства");
     }
-    const previous = await this.prisma.certificate.findUnique({
-      where: { number },
-      select: { id: true, status: true },
-    });
+    const previous = await this.findByNumber(number, user, organizationId);
     const certificate = await this.prisma.certificate.update({
-      where: { number },
+      where: { id: previous.id },
       data: { status },
       include: {
         vehicle: true,
@@ -379,7 +415,7 @@ export class CertificatesService {
         actorId: user?.sub,
         action: "certificate.status.update",
         entity: "certificate",
-        entityId: certificate.number,
+        entityId: certificate.id,
         metadata: {
           previousStatus: previous?.status ?? null,
           status: certificate.status,
@@ -391,9 +427,13 @@ export class CertificatesService {
     return certificate;
   }
 
-  async verify(number: string) {
+  async verify(number: string, organizationId?: string) {
+    let id: string | undefined;
+    try { id = await this.certificateId(number, undefined, organizationId); }
+    catch (error) { if (error instanceof ConflictException) return { valid: false, status: 'organization_required' }; throw error; }
+    if (!id) return { valid: false, status: 'not_found' };
     const certificate = await this.prisma.certificate.findUnique({
-      where: { number },
+      where: { id },
       include: { inspection: { select: { organization: { select: {
         name: true, bin: true, accreditationValidFrom: true, accreditationValidUntil: true,
       } } } } },
@@ -414,14 +454,14 @@ export class CertificatesService {
     };
   }
 
-  async pdf(number: string) {
+  async pdf(number: string, organizationId?: string) {
     const certificate = await this.findByNumber(number, {
       sub: "public",
       phone: "",
       roles: ["super_admin"],
-    });
+    }, organizationId);
     const buffer = await this.renderPdf(certificate);
-    const objectKey = `certificates/${certificate.number}.pdf`;
+    const objectKey = `certificates/${certificate.id}.pdf`;
     await this.storage.putObject({
       key: objectKey,
       body: buffer,
@@ -450,8 +490,11 @@ export class CertificatesService {
       throw new BadRequestException("Only .xlsx files are supported");
     }
     const fileHash = createHash("sha256").update(file.buffer).digest("hex");
-    const existingJob = await this.prisma.certificateImportJob.findUnique({
-      where: { fileHash_filename: { fileHash, filename: originalName } },
+    const jobs = await this.prisma.certificateImportJob.findMany({
+      where: { fileHash, filename: originalName,
+        ...(options?.organizationBin ? { organization: { bin: options.organizationBin } } : {}),
+        ...(user && !hasGlobalAccess(user) ? { organizationId: { in: await userOrganizationIds(this.prisma, user) } } : {}),
+      }, take: 2,
       include: {
         organization: true,
         certificate: {
@@ -465,6 +508,8 @@ export class CertificatesService {
         errors: true,
       },
     });
+    if (jobs.length > 1) throw new BadRequestException('Укажите БИН инспекционного органа для импорта этого файла');
+    const existingJob = jobs[0];
     const inspectionDraftMode = options?.mode === "inspectionDraft" || Boolean(user && !hasGlobalAccess(user));
     if (existingJob?.status === "completed" && !inspectionDraftMode) {
       return {
@@ -478,7 +523,7 @@ export class CertificatesService {
       file.buffer,
       options,
     );
-    const objectKey = `imports/certificates/${parsedPreview?.certificateNumber ?? fileHash}/${this.safeObjectName(originalName)}`;
+    const objectKey = `imports/certificates/${fileHash}/${this.safeObjectName(originalName)}`;
     await this.storage.putObject({
       key: objectKey,
       body: file.buffer,
@@ -509,7 +554,7 @@ export class CertificatesService {
       );
 
       if (inspectionDraftMode) {
-        const currentInspection = await this.prisma.inspection.findUnique({ where: { certificateNumber: parsed.certificateNumber } });
+        const currentInspection = await this.prisma.inspection.findUnique({ where: { organizationId_certificateNumber: { organizationId: organization.id, certificateNumber: parsed.certificateNumber } } });
         if (currentInspection && !["draft", "rejected"].includes(currentInspection.status)) {
           throw new BadRequestException("Инспекция уже отправлена на проверку. Верните ее на исправление перед повторным импортом.");
         }
@@ -592,27 +637,13 @@ export class CertificatesService {
 
       if (inspectionDraftMode) {
         const existingCertificate = await this.prisma.certificate.findUnique({
-          where: { number: parsed.certificateNumber },
+          where: { organizationId_number: { organizationId: organization.id, number: parsed.certificateNumber } },
           include: {
             inspection: { include: this.importedInspectionInclude() },
           },
         });
         if (existingCertificate) {
           let inspection = existingCertificate.inspection;
-          if (
-            inspection &&
-            inspection.organizationId !== organization.id &&
-            (await this.canReassignImportedOrganization(
-              inspection.organizationId,
-              organization.name,
-            ))
-          ) {
-            inspection = await this.prisma.inspection.update({
-              where: { id: inspection.id },
-              data: { organizationId: organization.id },
-              include: this.importedInspectionInclude(),
-            });
-          }
           const completedJob = await this.prisma.certificateImportJob.update({
             where: { id: job.id },
             data: {
@@ -652,7 +683,7 @@ export class CertificatesService {
           };
         }
         const existingDraft = await this.prisma.inspection.findUnique({
-          where: { certificateNumber: parsed.certificateNumber },
+          where: { organizationId_certificateNumber: { organizationId: organization.id, certificateNumber: parsed.certificateNumber } },
         });
         const inspection = existingDraft
           ? await this.prisma.inspection.update({
@@ -732,15 +763,17 @@ export class CertificatesService {
       }
 
       const existingCertificate = await this.prisma.certificate.findUnique({
-        where: { number: parsed.certificateNumber },
+        where: { organizationId_number: { organizationId: organization.id, number: parsed.certificateNumber } },
         include: { inspection: true },
       });
 
-      const inspection = existingCertificate
+      const existingInspection = existingCertificate?.inspection ?? await this.prisma.inspection.findUnique({ where: { organizationId_certificateNumber: { organizationId: organization.id, certificateNumber: parsed.certificateNumber } } });
+      const inspection = existingInspection
         ? await this.prisma.inspection.update({
-            where: { id: existingCertificate.inspectionId },
+            where: { id: existingInspection.id },
             data: {
               organizationId: organization.id,
+              certificateNumber: parsed.certificateNumber,
               vehicleId: vehicle.id,
               status: "approved",
               inspectorName: parsed.inspectorName,
@@ -752,6 +785,7 @@ export class CertificatesService {
         : await this.prisma.inspection.create({
             data: {
               organizationId: organization.id,
+              certificateNumber: parsed.certificateNumber,
               vehicleId: vehicle.id,
               status: "approved",
               inspectorName: parsed.inspectorName,
@@ -761,24 +795,27 @@ export class CertificatesService {
             },
           });
 
+      const certificateId = existingCertificate?.id ?? randomUUID();
       const certificate = await this.prisma.certificate.upsert({
-        where: { number: parsed.certificateNumber },
+        where: { organizationId_number: { organizationId: organization.id, number: parsed.certificateNumber } },
         update: {
           vehicleId: vehicle.id,
           inspectionId: inspection.id,
           status: "active",
           validUntil: parsed.validUntil,
           issuedAt: parsed.issuedAt,
-          qrPayload: `${parsed.certificateNumber}:${parsed.vin}`,
+          qrPayload: `${certificateId}:${parsed.vin}`,
         },
         create: {
+          id: certificateId,
+          organizationId: organization.id,
           number: parsed.certificateNumber,
           vehicleId: vehicle.id,
           inspectionId: inspection.id,
           status: "active",
           validUntil: parsed.validUntil,
           issuedAt: parsed.issuedAt,
-          qrPayload: `${parsed.certificateNumber}:${parsed.vin}`,
+          qrPayload: `${certificateId}:${parsed.vin}`,
         },
         include: {
           vehicle: {
@@ -932,10 +969,11 @@ export class CertificatesService {
     return cells[field] ?? "empty";
   }
 
-  private async nextNumber() {
+  private async nextNumber(organizationId: string) {
     const year = new Date().getFullYear();
     const count = await this.prisma.certificate.count({
       where: {
+        organizationId,
         issuedAt: {
           gte: new Date(`${year}-01-01T00:00:00.000Z`),
           lt: new Date(`${year + 1}-01-01T00:00:00.000Z`),

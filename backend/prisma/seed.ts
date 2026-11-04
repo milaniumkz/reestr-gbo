@@ -111,7 +111,7 @@ async function main() {
   });
 
   const existingCertificate = await prisma.certificate.findUnique({
-    where: { number: 'ERSI-2026-000001' },
+    where: { organizationId_number: { organizationId: org.id, number: 'ERSI-2026-000001' } },
     include: { inspection: true },
   });
 
@@ -127,10 +127,11 @@ async function main() {
   });
 
   await prisma.certificate.upsert({
-    where: { number: 'ERSI-2026-000001' },
+    where: { organizationId_number: { organizationId: org.id, number: 'ERSI-2026-000001' } },
     update: {},
     create: {
       number: 'ERSI-2026-000001',
+      organizationId: org.id,
       vehicleId: vehicle.id,
       inspectionId: inspection.id,
       validUntil: new Date('2027-08-15'),

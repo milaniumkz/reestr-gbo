@@ -205,7 +205,7 @@ describe('CertificatesService.importXlsx', () => {
     };
     const prisma = {
       certificateImportJob: {
-        findUnique: jest.fn(async () => completedJob),
+        findMany: jest.fn(async () => [completedJob]),
       },
     };
     const service = new CertificatesService(prisma as never, storageMock());
@@ -226,13 +226,8 @@ describe('CertificatesService.importXlsx', () => {
       },
       certificate: { id: 'cert_1' },
     });
-    expect(prisma.certificateImportJob.findUnique).toHaveBeenCalledWith({
-      where: {
-        fileHash_filename: {
-          fileHash: expect.any(String),
-          filename: 'cached.xlsx',
-        },
-      },
+    expect(prisma.certificateImportJob.findMany).toHaveBeenCalledWith({
+      where: { fileHash: expect.any(String), filename: 'cached.xlsx' }, take: 2,
       include: expect.objectContaining({
         organization: true,
       }),
@@ -242,7 +237,7 @@ describe('CertificatesService.importXlsx', () => {
   it('stores a failed import job with an error when XLSX parsing fails', async () => {
     const prisma = {
       certificateImportJob: {
-        findUnique: jest.fn(async () => null),
+        findMany: jest.fn(async () => []),
         create: jest.fn(async () => ({ id: 'job_1' })),
         update: jest.fn(async () => ({ id: 'job_1', status: 'failed' })),
       },
@@ -318,7 +313,7 @@ describe('Public certificate accreditation', () => {
     const result = await new CertificatesService(prisma as never, storageMock()).verify('ERSI-1');
     expect(result).toMatchObject({ valid: true, organization });
     expect(prisma.certificate.findUnique).toHaveBeenCalledWith({
-      where: { number: 'ERSI-1' },
+      where: { id: 'certificate_1' },
       include: { inspection: { select: { organization: { select: {
         name: true, bin: true, accreditationValidFrom: true, accreditationValidUntil: true,
       } } } } },
@@ -358,7 +353,8 @@ describe('XLSX issuing organization card', () => {
 describe('Inspector XLSX imports preserve review workflow',()=>{
   it('cannot overwrite a submitted inspection through reimport',async()=>{
     const prisma={
-      certificateImportJob:{findUnique:jest.fn(async()=>null),create:jest.fn(async()=>({id:'job_1'})),update:jest.fn(async()=>({}))},
+      organizationMember:{findMany:jest.fn(async()=>[{organizationId:'org_1'}])},
+      certificateImportJob:{findMany:jest.fn(async()=>[]),create:jest.fn(async()=>({id:'job_1'})),update:jest.fn(async()=>({}))},
       inspection:{findUnique:jest.fn(async()=>({id:'inspection_1',status:'submitted'}))},
       user:{upsert:jest.fn()},
     };

@@ -781,7 +781,7 @@ export default function AdminDashboard() {
 
   async function openCertificate(row: CertificateRow) {
     if (!token) return;
-    await openCertificateNumber(row.number);
+    await openCertificateNumber(row.id);
   }
 
   async function openCertificateNumber(number: string) {
@@ -791,11 +791,11 @@ export default function AdminDashboard() {
       const [auditByNumber, auditById, checks] = await Promise.all([
         getAuditRowsPage(token, { entity: 'certificate', entityId: detail.number, page: '1', limit: '50' }),
         getAuditRowsPage(token, { entity: 'certificate', entityId: detail.id, page: '1', limit: '50' }),
-        getPublicCertificateChecksPage(token, { certificateNumber: detail.number, page: '1', limit: '20' }),
+        getPublicCertificateChecksPage(token, { certificateId: detail.id, page: '1', limit: '20' }),
       ]);
       closeDetails();
       setSelectedCertificate(detail);
-      setSelectedCertificateAudit(uniqueAuditRows([...auditByNumber.items, ...auditById.items]));
+      setSelectedCertificateAudit(uniqueAuditRows([...auditByNumber.items.filter(row => row.metadata?.certificateId === detail.id), ...auditById.items]));
       setSelectedCertificateChecks(checks.items);
       await trackView(token, 'certificate', detail.id, detail.number).catch(() => undefined);
     });
@@ -1549,7 +1549,7 @@ export default function AdminDashboard() {
     const reason = requestBlockReason(status !== 'active');
     if (reason === null) return;
     await runAction('Статус свидетельства обновлен', async () => {
-      await setCertificateStatus(token, row.number, status, reason);
+      await setCertificateStatus(token, row.id, status, reason);
       setBlockReason('');
       await refresh();
     });

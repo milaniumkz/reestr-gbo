@@ -10,6 +10,9 @@ on:
       certificate_number:
         required: true
         type: string
+      organization_id:
+        required: false
+        type: string
       expected_address_sha256:
         required: true
         type: string
@@ -35,9 +38,11 @@ jobs:
           OPERATION: ${{ inputs.operation }}
           NUMBER: ${{ inputs.certificate_number }}
           EXPECTED: ${{ inputs.expected_address_sha256 }}
+          ORGANIZATION_ID: ${{ inputs.organization_id }}
         run: |
           set -euo pipefail
           [[ "$NUMBER" =~ ^[0-9]{1,30}$ && "$EXPECTED" =~ ^[a-f0-9]{64}$ ]]
+          [[ -z "$ORGANIZATION_ID" || "$ORGANIZATION_ID" =~ ^[a-fA-F0-9-]{36}$ ]]
           mkdir -p ~/.ssh
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
@@ -49,4 +54,4 @@ jobs:
           if [ "$OPERATION" = repair ]; then
             ssh "$server" 'bash /opt/reestr/app/ops/backup-reestr.sh'
           fi
-          ssh "$server" "set -a; source /opt/reestr/app/backend/.env; set +a; GITHUB_RUN_ID='$GITHUB_RUN_ID' node '$remote/repair.cjs' '$NUMBER' '$EXPECTED' '$OPERATION'"
+          ssh "$server" "set -a; source /opt/reestr/app/backend/.env; set +a; GITHUB_RUN_ID='$GITHUB_RUN_ID' node '$remote/repair.cjs' '$NUMBER' '$EXPECTED' '$OPERATION' '$ORGANIZATION_ID'"

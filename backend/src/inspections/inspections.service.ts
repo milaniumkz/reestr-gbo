@@ -1,3 +1,4 @@
+import { certificateNumberConflict } from '../common/certificate-number-conflict';
 import { reverseGeocodeInspection, inspectionAddressUnavailable } from './inspection-address';
 import { Prisma } from '@prisma/client';
 import { TechPassportService } from '../tech-passport/tech-passport.service';
@@ -181,14 +182,14 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
     }
     await assertOrganizationAccess(this.prisma, organizationId, user);
     const existingCertificate = await this.prisma.certificate.findUnique({
-      where: { number: certificateNumber },
+      where: { organizationId_number: { organizationId, number: certificateNumber } },
     });
     const existingDraft = await this.prisma.inspection.findUnique({
-      where: { certificateNumber },
+      where: { organizationId_certificateNumber: { organizationId, certificateNumber } },
     });
     if (existingCertificate || existingDraft) {
       throw new BadRequestException(
-        "Свидетельство с таким номером уже есть в системе",
+        "Свидетельство с таким номером уже есть в этом инспекционном органе",
       );
     }
     const lat = this.coordinate(input.lat, -90, 90);
@@ -221,7 +222,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
         requireApplicantPhotos: true,
         ...pair,
       },
-    });
+    }).catch(certificateNumberConflict);
     await this.prisma.auditLog.create({
       data: {
         actorId: user?.sub,
@@ -396,6 +397,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       return value.trim();
     };
     const certificateNumber = this.normalizeCertificateNumber(text(input.certificateNumber,"номер свидетельства"));
+    if (!certificateNumber) throw new BadRequestException("Введите номер свидетельства");
     const identity = ownerIdentity(input.owner);
     const ownerName = text(input.owner?.fullName,"ФИО / наименование владельца");
     const ownerAddress = text(input.owner?.address,"адрес владельца");
@@ -416,9 +418,9 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
     await this.prisma.$transaction(async tx => {
       const current = await tx.inspection.findUnique({where:{id},include:{vehicle:{include:{owners:{include:{user:true}},cylinders:true}}}});
       if (!current || current.status !== "submitted") throw new BadRequestException("Этап инспекции изменился. Обновите карточку");
-      const used = await tx.inspection.findUnique({where:{certificateNumber}});
-      const certificate = await tx.certificate.findUnique({where:{number:certificateNumber}});
-      if ((used && used.id !== id) || certificate) throw new BadRequestException("Этот номер свидетельства уже используется");
+      const used = await tx.inspection.findUnique({where:{organizationId_certificateNumber:{organizationId:inspection.organizationId,certificateNumber}}});
+      const certificate = await tx.certificate.findUnique({where:{organizationId_number:{organizationId:inspection.organizationId,number:certificateNumber}}});
+      if ((used && used.id !== id) || certificate) throw new BadRequestException("Этот номер свидетельства уже используется в этом инспекционном органе");
       const manufacturer = input.cylinder.manufacturer?.trim() || "Не указан";
       const duplicate = await tx.gasCylinder.findFirst({where:{serialNumber,manufacturer,vehicleId:{not:current.vehicleId}}});
       if (duplicate) throw new BadRequestException("Этот баллон уже привязан к другому автомобилю");
@@ -433,7 +435,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       if (cylinder) await tx.gasCylinder.update({where:{id:cylinder.id},data});
       else await tx.gasCylinder.create({data:{...data,vehicleId:current.vehicleId}});
       await tx.auditLog.create({data:{actorId:user!.sub,action:"inspection.quality.data.update",entity:"inspection",entityId:id,metadata:{certificateNumber,previousCertificateNumber:current.certificateNumber,fields:["owner","vehicle","cylinder","certificateNumber","inspectionDate"]}}});
-    });
+    }).catch(certificateNumberConflict);
     return this.detail(id,user);
   }
 
@@ -461,16 +463,16 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
     }
     const [certificate, inspectionWithNumber] = await Promise.all([
       this.prisma.certificate.findUnique({
-        where: { number: certificateNumber },
+        where: { organizationId_number: { organizationId: existing.organizationId, number: certificateNumber } },
       }),
-      this.prisma.inspection.findUnique({ where: { certificateNumber } }),
+      this.prisma.inspection.findUnique({ where: { organizationId_certificateNumber: { organizationId: existing.organizationId, certificateNumber } } }),
     ]);
     if (
       (certificate?.inspectionId && certificate.inspectionId !== id) ||
       (inspectionWithNumber && inspectionWithNumber.id !== id)
     ) {
       throw new BadRequestException(
-        "Свидетельство с таким номером уже есть в системе",
+        "Свидетельство с таким номером уже есть в этом инспекционном органе",
       );
     }
     const pair = cylinderPair(input, vehicle.cylinders?.[0]?.serialNumber ?? "", existing, vehicle.cylinders?.[0]?.inspectedAt ?? existing.createdAt, false, vehicle.cylinders?.[0]?.fuelType ?? undefined);
@@ -478,7 +480,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
     const inspection = await this.prisma.inspection.update({
       where: { id },
       data: { vehicleId, certificateNumber, ...pair },
-    });
+    }).catch(certificateNumberConflict);
     await this.prisma.auditLog.create({
       data: {
         actorId: user?.sub,
@@ -542,17 +544,24 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  async certificateNumberAvailability(number: string, inspectionId?: string, user?: RequestUser) {
-    if (inspectionId) await this.assertInspectionAccess(inspectionId,user);
-    const certificateNumber = this.normalizeCertificateNumber(number);
-    if (!certificateNumber) {
-      throw new BadRequestException("Введите номер свидетельства");
+  async certificateNumberAvailability(number: string, inspectionId?: string, user?: RequestUser, requestedOrganizationId?: string) {
+    let organizationId = requestedOrganizationId?.trim();
+    if (inspectionId) {
+      const current = await this.assertInspectionAccess(inspectionId, user);
+      if (organizationId && organizationId !== current.organizationId) throw new BadRequestException('Выбран другой инспекционный орган');
+      organizationId = current.organizationId;
     }
+    if (!organizationId && !hasGlobalAccess(user)) {
+      const ids = [...new Set(await userOrganizationIds(this.prisma, user))];
+      if (ids.length === 1) organizationId = ids[0];
+    }
+    if (!organizationId) throw new BadRequestException('Выберите инспекционный орган');
+    await assertOrganizationAccess(this.prisma, organizationId, user);
+    const certificateNumber = this.normalizeCertificateNumber(number);
+    if (!certificateNumber) throw new BadRequestException('Введите номер свидетельства');
     const [certificate, inspection] = await Promise.all([
-      this.prisma.certificate.findUnique({
-        where: { number: certificateNumber },
-      }),
-      this.prisma.inspection.findUnique({ where: { certificateNumber } }),
+      this.prisma.certificate.findUnique({ where: { organizationId_number: { organizationId, number: certificateNumber } } }),
+      this.prisma.inspection.findUnique({ where: { organizationId_certificateNumber: { organizationId, certificateNumber } } }),
     ]);
     return { available: !certificate && (!inspection || inspection.id === inspectionId) };
   }

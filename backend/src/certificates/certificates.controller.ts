@@ -83,8 +83,9 @@ export class CertificatesController {
   findByNumber(
     @CurrentUser() user: RequestUser,
     @Param("number") number: string,
+    @Query("organizationId") organizationId?: string,
   ) {
-    return this.certificates.findByNumber(number, user);
+    return this.certificates.findByNumber(number, user, organizationId);
   }
 
   @Patch(":number/status")
@@ -94,8 +95,9 @@ export class CertificatesController {
     @Param("number") number: string,
     @Body("status") status: string,
     @Body("reason") reason?: string,
+    @Query("organizationId") organizationId?: string,
   ) {
-    return this.certificates.setStatus(number, status, user, reason);
+    return this.certificates.setStatus(number, status, user, reason, organizationId);
   }
 
   @Post("import-xlsx")
@@ -121,14 +123,14 @@ export class CertificatesController {
 
   @Public()
   @Get(":number/verify")
-  verify(@Param("number") number: string) {
-    return this.certificates.verify(number);
+  verify(@Param("number") number: string, @Query("organizationId") organizationId?: string) {
+    return this.certificates.verify(number, organizationId);
   }
 
   @Public()
   @Get(":number/pdf")
-  async pdf(@Param("number") number: string, @Res() response: Response) {
-    const pdf = await this.certificates.pdf(number);
+  async pdf(@Param("number") number: string, @Res() response: Response, @Query("organizationId") organizationId?: string) {
+    const pdf = await this.certificates.pdf(number, organizationId);
     response.setHeader("Content-Type", "application/pdf");
     response.setHeader(
       "Content-Disposition",
