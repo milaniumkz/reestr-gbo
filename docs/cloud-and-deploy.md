@@ -78,7 +78,7 @@ record until the server's IPv6 address is verified. Both public origins and the
 configured technical-panel origin are allowed by backend CORS.
 
 After backend checks/deployment, run `Configure public domain`. It publishes the
-printable observer instruction, waits up to 30 minutes for DNS, takes a backup,
+printable observer instruction, installs a persistent activation service, takes a backup once DNS resolves,
 and installs an additional Nginx host without touching the old host. A separate
 Let's Encrypt webroot certificate is issued for `ersigbo.kz`, HTTP redirects to
 HTTPS on the same host with its path/query retained, and `certbot.timer` renews
@@ -90,5 +90,9 @@ The instruction is at `/observer-instruction.html` and
 `/downloads/observer-instruction-ersigbo-a4.pdf` on either host after activation.
 Regenerate it with `python3 scripts/generate_observer_instruction.py`
 (ReportLab and PyMuPDF; the four screenshots use fictional training data).
-If DNS is still unavailable at timeout, rerun the workflow after delegation
-propagates; the existing website is unaffected.
+If DNS is still unavailable, `reestr-public-domain.timer` retries activation every
+five minutes. Its service checks DNS before making any Nginx changes or taking
+a backup. After both hosts are verified, the initial activation timer disables
+itself; `certbot.timer` remains enabled for certificate renewal. Inspect status
+with `systemctl status reestr-public-domain.service` and its journal. The existing
+website is unaffected while DNS is pending.

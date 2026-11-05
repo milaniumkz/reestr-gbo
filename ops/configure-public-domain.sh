@@ -64,4 +64,7 @@ for origin in https://ersigbo.kz https://89-207-255-42.sslip.io; do
  echo "Verified: $origin (web, API, admin)"
 done
 openssl x509 -in /etc/letsencrypt/live/ersigbo.kz/fullchain.pem -noout -dates -ext subjectAltName
+if systemctl cat reestr-public-domain.timer >/dev/null 2>&1; then
+ systemctl disable --now reestr-public-domain.timer
+fi
 trap - EXIT
