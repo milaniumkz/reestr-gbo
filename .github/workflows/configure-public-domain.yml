@@ -1,0 +1,79 @@
+name: Configure public domain
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate domain configuration
+        run: |
+          bash -n ops/configure-public-domain.sh
+          python3 scripts/render_public_domain_nginx.py ops/nginx-reestr.conf > "$RUNNER_TEMP/ersigbo.conf"
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+      - name: Publish printable observer instruction on the existing website
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          server="${DEPLOY_USER:-root}@${DEPLOY_HOST}"
+          remote="$(ssh "$server" 'mktemp -d /tmp/reestr-observer.XXXXXX')"
+          trap 'ssh "$server" "rm -rf -- \"$remote\""' EXIT
+          scp web/downloads/observer-instruction-ersigbo-a4.pdf web/downloads/observer-instruction-ersigbo-a4.png web/observer-instruction.html "$server:$remote/"
+          ssh "$server" "bash -s -- '$remote'" <<'REMOTE'
+          set -euo pipefail
+          staged="$1"
+          APP_DIR=/opt/reestr/app bash /opt/reestr/app/ops/backup-reestr.sh
+          root=/opt/reestr/app/build/web
+          mkdir -p "$root/downloads"
+          for name in observer-instruction-ersigbo-a4.pdf observer-instruction-ersigbo-a4.png; do
+            install -m644 "$staged/$name" "$root/downloads/.$name.next"
+            mv -f "$root/downloads/.$name.next" "$root/downloads/$name"
+          done
+          install -m644 "$staged/observer-instruction.html" "$root/.observer-instruction.next.html"
+          mv -f "$root/.observer-instruction.next.html" "$root/observer-instruction.html"
+          REMOTE
+          for name in observer-instruction-ersigbo-a4.pdf observer-instruction-ersigbo-a4.png; do
+            curl --fail --silent --show-error "https://89-207-255-42.sslip.io/downloads/$name" -o "$RUNNER_TEMP/$name"
+            cmp "web/downloads/$name" "$RUNNER_TEMP/$name"
+          done
+      - name: Wait for DNS and add HTTPS without changing legacy host
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          server="${DEPLOY_USER:-root}@${DEPLOY_HOST}"
+          remote="$(ssh "$server" 'mktemp -d /tmp/reestr-domain.XXXXXX')"
+          trap 'ssh "$server" "rm -rf -- \"$remote\""' EXIT
+          ssh "$server" "mkdir -p '$remote/ops' '$remote/scripts'"
+          scp ops/configure-public-domain.sh ops/nginx-reestr.conf "$server:$remote/ops/"
+          scp scripts/render_public_domain_nginx.py "$server:$remote/scripts/"
+          for attempt in $(seq 1 60); do
+            if ssh "$server" "python3 -c 'import socket; assert {r[4][0] for r in socket.getaddrinfo(\"ersigbo.kz\",80,socket.AF_INET)} == {\"89.207.255.42\"}'"; then
+              break
+            fi
+            if [ "$attempt" = 60 ]; then echo 'DNS not propagated; rerun this workflow when ready.' >&2; exit 1; fi
+            echo "DNS pending ($attempt/60); existing address stays available"
+            sleep 30
+          done
+          ssh "$server" "bash '$remote/ops/configure-public-domain.sh' '$remote'"
+          echo 'New website: https://ersigbo.kz; legacy links retained.' >> "$GITHUB_STEP_SUMMARY"

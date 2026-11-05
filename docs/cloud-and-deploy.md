@@ -68,3 +68,27 @@ Inspection text fields (screens 15–23, including quality correction of the sam
 The operating-system keyboard owns the language selection: Android API 24+ can honor the language hint if Russian is available, but a keyboard may ignore it; browsers and iOS do not guarantee this language switch. Uppercase normalization does not depend on the selected keyboard layout. Android users need the newly built APK; the web version uses the updated client after refresh. Existing APK debug-signing limitations described above still apply.
 
 Validation: Flutter analyze without issues; full pre-existing suite plus keyboard tests passed (16 passed, one visual golden test skipped), followed by five focused keyboard tests including numeric mode and unchanged mixed-case password. No backend schema changes.
+
+## Additional public domain ersigbo.kz
+
+Keep `89-207-255-42.sslip.io` and its certificate in place: existing QR codes,
+APK API addresses, certificate/document links and saved URLs continue to work.
+`ersigbo.kz` needs an A record pointing to `89.207.255.42`; do not add an AAAA
+record until the server's IPv6 address is verified. Both public origins and the
+configured technical-panel origin are allowed by backend CORS.
+
+After backend checks/deployment, run `Configure public domain`. It publishes the
+printable observer instruction, waits up to 30 minutes for DNS, takes a backup,
+and installs an additional Nginx host without touching the old host. A separate
+Let's Encrypt webroot certificate is issued for `ersigbo.kz`, HTTP redirects to
+HTTPS on the same host with its path/query retained, and `certbot.timer` renews
+the certificate with an Nginx reload hook. Configuration failures restore the
+previous additional host. The renderer derives the TLS routes from
+`ops/nginx-reestr.conf`, retaining technical API/storage restrictions.
+
+The instruction is at `/observer-instruction.html` and
+`/downloads/observer-instruction-ersigbo-a4.pdf` on either host after activation.
+Regenerate it with `python3 scripts/generate_observer_instruction.py`
+(ReportLab and PyMuPDF; the four screenshots use fictional training data).
+If DNS is still unavailable at timeout, rerun the workflow after delegation
+propagates; the existing website is unaffected.
