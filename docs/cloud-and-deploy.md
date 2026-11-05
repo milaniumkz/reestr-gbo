@@ -92,7 +92,9 @@ Regenerate it with `python3 scripts/generate_observer_instruction.py`
 (ReportLab and PyMuPDF; the four screenshots use fictional training data).
 If DNS is still unavailable, `reestr-public-domain.timer` retries activation every
 five minutes. Its service checks DNS before making any Nginx changes or taking
-a backup. After both hosts are verified, the initial activation timer disables
+a backup. A completed data backup is reused for subsequent initial-activation
+attempts, and new ACME issuance attempts are spaced at least fifteen minutes
+apart to avoid validation rate limits. After both hosts are verified, the initial activation timer disables
 itself; `certbot.timer` remains enabled for certificate renewal. Inspect status
 with `systemctl status reestr-public-domain.service` and its journal. The existing
 website is unaffected while DNS is pending.

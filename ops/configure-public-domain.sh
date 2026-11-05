@@ -16,7 +16,21 @@ print('DNS verified:',name,expected)
 PY
 command -v certbot >/dev/null
 nginx -t
-APP_DIR=/opt/reestr/app bash /opt/reestr/app/ops/backup-reestr.sh
+state=/var/lib/reestr-public-domain
+install -d -m700 "$state"
+# DNS may be ready before all ACME validators refresh their caches. Avoid
+# repeated validation failures exhausting Let's Encrypt's hourly limit.
+if [ ! -s /etc/letsencrypt/live/ersigbo.kz/fullchain.pem ] && [ -f "$state/last-acme-attempt" ]; then
+ last_attempt="$(cat "$state/last-acme-attempt")"
+ if (( $(date +%s) - last_attempt < 900 )); then
+  echo 'ACME retry backoff: waiting fifteen minutes between issuance attempts'
+  exit 75
+ fi
+fi
+if [ ! -f "$state/backup-completed" ]; then
+ APP_DIR=/opt/reestr/app bash /opt/reestr/app/ops/backup-reestr.sh
+ touch "$state/backup-completed"
+fi
 backup="/opt/reestr/backups/domain-$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$backup" /var/www/letsencrypt
 cp -a /etc/nginx "$backup/"
@@ -48,6 +62,7 @@ if [ ! -s /etc/letsencrypt/live/ersigbo.kz/fullchain.pem ]; then
  nginx -t
  systemctl reload nginx
 fi
+date +%s > "$state/last-acme-attempt"
 certbot certonly --webroot -w /var/www/letsencrypt --cert-name ersigbo.kz \
  -d ersigbo.kz --non-interactive --agree-tos --register-unsafely-without-email \
  --keep-until-expiring --deploy-hook 'nginx -t && systemctl reload nginx'
