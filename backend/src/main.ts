@@ -11,7 +11,7 @@ async function bootstrap() {
   const express=app.getHttpAdapter().getInstance();
   express.set('trust proxy',process.env.TRUSTED_PROXY_CIDRS?.split(',').map(s=>s.trim())??['loopback']);
   app.use(traceMiddleware(app.get(EventLedger)));
-  app.enableCors({credentials:true,origin:[process.env.TECH_PANEL_ORIGIN??'https://89-207-255-42.sslip.io',...(process.env.NODE_ENV==='production'?[]:['http://127.0.0.1:3002','http://localhost:3001','http://localhost:3002'])],exposedHeaders:['X-Request-ID']});
+  app.enableCors({credentials:true,origin:['https://ersigbo.kz','https://89-207-255-42.sslip.io',...(process.env.TECH_PANEL_ORIGIN?[process.env.TECH_PANEL_ORIGIN]:[]),...(process.env.NODE_ENV==='production'?[]:['http://127.0.0.1:3002','http://localhost:3001','http://localhost:3002'])],exposedHeaders:['X-Request-ID']});
   app.useGlobalInterceptors(new SensitiveFieldsInterceptor());
   app.setGlobalPrefix('api/v1');
   app.useGlobalPipes(
