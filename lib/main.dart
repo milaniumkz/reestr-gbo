@@ -1,4 +1,5 @@
 import 'widgets/inspection_address_gate.dart';
+import 'widgets/quality_certificate_uploads.dart';
 import 'platform/web_updates.dart';
 import 'platform/web_install.dart';
 import 'widgets/bank_invoice_screen.dart';
@@ -5126,22 +5127,26 @@ class _InspectionDetailScreen extends StatelessWidget {
                 text:
                     '${item.qualityReviewerName.isEmpty ? 'Сотрудник контроля качества' : item.qualityReviewerName} · ${_shortDateTime(item.qualityReviewStartedAt)}',
               ),
-            if (canQualityReview) ...[
+            if (isQualityControl && item.status == 'submitted') ...[
               const SizedBox(height: 12),
               const Text('Контроль качества', style: _section),
-              _PrimaryButton(
-                text: item.usesTwoCylinders
-                    ? 'Загрузить свидетельство первого баллона'
-                    : 'Загрузить свидетельство',
-                icon: Icons.upload_file_rounded,
-                onTap: qualityBusy ? null : onUploadQuality,
+              QualityCertificateUploads(
+                usesTwoCylinders: item.usesTwoCylinders,
+                firstSerial: item.cylinderSerial,
+                secondSerial: item.secondCylinderSerial,
+                firstUploaded:
+                    item.qualityDocumentUploaded &&
+                    files.any((file) => file.type == 'certificate_document'),
+                secondUploaded:
+                    item.secondQualityDocumentUploaded &&
+                    files.any((file) => file.type == 'certificate_document_2'),
+                busy: qualityBusy,
+                canUpload: canQualityReview,
+                onUploadFirst: onUploadQuality,
+                onUploadSecond: onUploadSecondQuality,
               ),
-              if (item.usesTwoCylinders)
-                _PrimaryButton(
-                  text: 'Загрузить свидетельство второго баллона',
-                  icon: Icons.upload_file_rounded,
-                  onTap: qualityBusy ? null : onUploadSecondQuality,
-                ),
+            ],
+            if (canQualityReview) ...[
               CheckboxListTile(
                 title: const Text('Подтверждаю'),
                 subtitle: const Text(
