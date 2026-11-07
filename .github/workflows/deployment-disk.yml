@@ -26,13 +26,23 @@ jobs:
           df -h /
           mapfile -t releases < <(find /opt/reestr/releases -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | sort -r)
           printf 'Release directories: %s\n' "${#releases[@]}"
-          # Preserve the three newest releases, all source files, uploads and backups.
+          current="$(readlink -f /opt/reestr/current)"
+          # Preserve the three newest releases, the current release, all source files, uploads and backups.
           for release in "${releases[@]:3}"; do
             [[ "$release" =~ ^[0-9]{8}T[0-9]{6}Z-[0-9a-f]+$ ]] || continue
+            release_path="/opt/reestr/releases/$release"
+            [[ "$release_path" != "$current" ]] || continue
             for component in backend admin tech; do
               cache="/opt/reestr/releases/$release/$component/node_modules"
               if [[ -d "$cache" && ! -L "$cache" ]]; then
                 rm -rf -- "$cache"
+              fi
+            done
+            # Old website bundles and Next.js output are rebuildable too.
+            # Keep source trees and private configuration in every release.
+            for artifact in "$release_path/build/web" "$release_path/admin/.next" "$release_path/tech/.next"; do
+              if [[ -d "$artifact" && ! -L "$artifact" ]]; then
+                rm -rf -- "$artifact"
               fi
             done
           done
