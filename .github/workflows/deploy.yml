@@ -28,6 +28,7 @@ on:
           - diagnose-members
           - diagnose-passwords
           - photo-moderation-status
+          - resume-checked-release
           - status
           - logs
           - restart
@@ -190,6 +191,7 @@ jobs:
         run: |
           set -o pipefail
           case "${{ github.event.inputs.operation }}" in
+            resume-checked-release) bash ops/resume-checked-release.sh "$CHECKED_RELEASE_SHA" ;;
             provision-test-manager) bash ops/provision-test-manager.sh ;;
             configure-bank-invoices) bash ops/configure-bank-invoices.sh ;;
             change-employee-phones) bash ops/change-employee-phones.sh "${{ github.event.inputs.phone_change_mode }}" ;;
@@ -207,6 +209,7 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           APP_DIR: /opt/reestr/app
+          CHECKED_RELEASE_SHA: ${{ github.event.inputs.ref }}
 
       - name: Record data operation result
         if: success() && contains(github.event.inputs.operation, 'inspection-data')
