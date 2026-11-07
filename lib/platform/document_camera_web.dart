@@ -2,12 +2,11 @@
 import '../l10n/kk_catalog.dart';
 import '../camera/document_bounds.dart';
 import 'dart:typed_data';
-import 'dart:js_interop';
-import 'dart:js_interop_unsafe';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:html' as html;
 import 'local_file.dart';
+import 'browser_camera_session.dart';
 import 'dart:math' as math;
 
 Future<PickedLocalFile?> captureDocumentPhoto({
@@ -19,50 +18,6 @@ Future<PickedLocalFile?> captureDocumentPhoto({
   if (devices == null) {
     throw StateError('Камера недоступна. Откройте веб-версию по HTTPS.');
   }
-  final html.MediaStream stream;
-  try {
-    stream = await devices.getUserMedia({
-      'audio': false,
-      'video': {
-        'facingMode': {'ideal': 'environment'},
-        'width': {'ideal': 1800},
-      },
-    });
-  } catch (error) {
-    final name = error is html.DomException ? error.name : error.toString();
-    if (name.contains('NotAllowed') || name.contains('PermissionDenied')) {
-      throw StateError(
-        'Разрешите камеру в браузере: нажмите значок слева от адреса сайта, включите доступ к камере и повторите съёмку',
-      );
-    }
-    if (name.contains('NotFound') || name.contains('DevicesNotFound')) {
-      throw StateError(
-        'Камера не найдена. Подключите камеру или загрузите готовую фотографию',
-      );
-    }
-    throw StateError(
-      'Не удалось открыть камеру. Закройте другие приложения с камерой, проверьте разрешение браузера и повторите съёмку',
-    );
-  }
-  try {
-    final tracks = (stream as JSObject)
-        .callMethod<JSArray<JSObject>>('getVideoTracks'.toJS)
-        .toDart;
-    for (final track in tracks) {
-      // Optional constraint: browsers without focus controls keep their default.
-      await track
-          .callMethod<JSPromise<JSAny?>>(
-            'applyConstraints'.toJS,
-            {
-              'advanced': [
-                {'focusMode': 'continuous'},
-              ],
-            }.jsify(),
-          )
-          .toDart
-          .timeout(const Duration(milliseconds: 400));
-    }
-  } catch (_) {}
   final result = Completer<PickedLocalFile?>();
   final overlay = html.DivElement()
     ..setAttribute('role', 'dialog')
@@ -88,6 +43,42 @@ Future<PickedLocalFile?> captureDocumentPhoto({
     ..text = translateKazakh('ОТМЕНА', languageCode).toUpperCase()
     ..style.cssText =
         'padding:14px;border:0;border-radius:12px;background:white;color:#123;font-size:16px;flex:1';
+  final cameraSelect = html.SelectElement()
+    ..id = 'ersi-camera-device'
+    ..setAttribute('aria-label', translateKazakh('Камера', languageCode))
+    ..style.cssText =
+        'flex:1;min-width:120px;min-height:44px;padding:10px;border-radius:10px;background:white;color:#123;font-size:16px';
+  final refresh = html.ButtonElement()
+    ..text = translateKazakh('Обновить камеры', languageCode)
+    ..style.cssText =
+        'min-height:44px;padding:10px;border:0;border-radius:10px;background:#e8f5ee;color:#003c2b;font-size:14px';
+  final cameraLabel = html.LabelElement()
+    ..htmlFor = cameraSelect.id
+    ..text = translateKazakh('Камера', languageCode)
+    ..style.cssText =
+        'display:block;color:white;font-size:14px;margin-bottom:6px';
+  final cameraRow = html.DivElement()
+    ..style.cssText = 'display:flex;gap:8px;flex-wrap:wrap';
+  cameraRow.children.addAll([cameraSelect, refresh]);
+  final help = html.DetailsElement()
+    ..style.cssText =
+        'color:white;font-size:14px;margin:10px 0;max-height:24vh;overflow:auto';
+  help.children.addAll([
+    html.Element.tag('summary')
+      ..text = translateKazakh('Подключить USB-эндоскоп', languageCode),
+    html.ParagraphElement()
+      ..text = translateKazakh(
+        'Подключите эндоскоп через USB/OTG, закройте другие приложения камеры и нажмите «Обновить камеры». В списке доступны только камеры, которые Android и браузер распознают. Если эндоскопа нет в списке, съёмка через сайт с этой моделью недоступна.',
+        languageCode,
+      ),
+  ]);
+  final status = html.DivElement()
+    ..setAttribute('role', 'status')
+    ..setAttribute('aria-live', 'polite')
+    ..style.cssText =
+        'color:#ffd59b;font-size:14px;padding:4px 0;flex-shrink:0';
+  final cameraControls = html.DivElement();
+  cameraControls.children.addAll([cameraLabel, cameraRow, help, status]);
   final controls = html.DivElement()
     ..style.cssText = 'display:flex;gap:12px;padding-top:16px';
   controls.children.addAll([cancel, capture]);
@@ -105,7 +96,7 @@ Future<PickedLocalFile?> captureDocumentPhoto({
     ..style.cssText =
         'position:absolute;bottom:12px;left:12px;right:12px;text-align:center;color:white;font-size:16px';
   preview.children.addAll([video, frame, hint]);
-  overlay.children.addAll([preview, controls]);
+  overlay.children.addAll([cameraControls, preview, controls]);
   final cancelSub = cancel.onClick.listen((_) {
     if (!result.isCompleted) result.complete(null);
   });
@@ -146,9 +137,10 @@ Future<PickedLocalFile?> captureDocumentPhoto({
     });
   }
 
+  late BrowserCameraSession session;
   void refreshGate() {
-    final ready = gate.ready(DateTime.now());
-    capture.disabled = false;
+    final ready = session.ready && gate.ready(DateTime.now());
+    capture.disabled = !session.ready || session.opening;
     capture.style.backgroundColor = '#007a4d';
     capture.style.color = '#ffffff';
     frame.style.borderColor = gate.visualAligned(DateTime.now())
@@ -181,7 +173,7 @@ Future<PickedLocalFile?> captureDocumentPhoto({
 
   final captureSub = capture.onClick.listen((_) {
     try {
-      if (result.isCompleted) return;
+      if (result.isCompleted || !session.ready || session.opening) return;
       final automatic = automaticCapture;
       if (automatic && requireDocumentBounds && !gate.ready(DateTime.now())) {
         refreshGate();
@@ -245,43 +237,93 @@ Future<PickedLocalFile?> captureDocumentPhoto({
       if (!result.isCompleted) result.completeError(error, trace);
     }
   });
+  void alignFrame() {
+    final bounds = video.getBoundingClientRect();
+    final scale = math.min(
+      bounds.width / video.videoWidth,
+      bounds.height / video.videoHeight,
+    );
+    final width = math.min(
+      video.videoWidth * scale * .9,
+      video.videoHeight * scale * .82 * frameAspectRatio,
+    );
+    frame.style.width = '${width}px';
+    frame.style.height = '${width / frameAspectRatio}px';
+    frame.style.boxSizing = 'border-box';
+  }
+
+  session = BrowserCameraSession(devices, video, () {
+    if (result.isCompleted) return;
+    cameraSelect.children.clear();
+    if (session.cameras.isEmpty) {
+      cameraSelect.append(
+        html.OptionElement(
+          data: translateKazakh('Нет доступных камер', languageCode),
+          value: '',
+        ),
+      );
+    } else {
+      if (!session.cameras.any((camera) => camera.id == session.selectedId)) {
+        cameraSelect.append(
+          html.OptionElement(
+            data: translateKazakh('Выберите камеру', languageCode),
+            value: '',
+          ),
+        );
+      }
+      for (var i = 0; i < session.cameras.length; i++) {
+        final camera = session.cameras[i];
+        cameraSelect.append(
+          html.OptionElement(
+            data: camera.label.isEmpty
+                ? '${translateKazakh('Камера', languageCode)} ${i + 1}'
+                : camera.label,
+            value: camera.id,
+          ),
+        );
+      }
+    }
+    cameraSelect.value = session.selectedId ?? '';
+    cameraSelect.disabled = session.opening || session.cameras.isEmpty;
+    refresh.disabled = session.opening;
+    status.text = session.opening
+        ? translateKazakh('Подключаем камеру…', languageCode)
+        : session.error == null
+        ? ''
+        : translateKazakh(session.error!, languageCode);
+    frame.hidden = !session.ready;
+    hint.hidden = !session.ready;
+    if (!session.ready) {
+      gate.reset();
+      autoCapture?.cancel();
+      autoCapture = null;
+    } else {
+      alignFrame();
+    }
+    capture.disabled = !session.ready || session.opening;
+    if (requireDocumentBounds && session.ready) refreshGate();
+  });
+  final selectSub = cameraSelect.onChange.listen((_) {
+    final id = cameraSelect.value;
+    if (id != null && id.isNotEmpty) unawaited(session.open(deviceId: id));
+  });
+  final refreshSub = refresh.onClick.listen((_) {
+    unawaited(session.refresh(openIfIdle: true));
+  });
+  final helpSub = help.on['toggle'].listen((_) {
+    if (session.ready) alignFrame();
+  });
   try {
     html.document.body?.append(overlay);
-    final ready = video.onLoadedMetadata.first;
-    video.srcObject = stream;
-    final canStart = await Future.any<bool>([
-      ready.timeout(const Duration(seconds: 15)).then((_) => true),
-      result.future.then((_) => false),
-    ]);
-    if (!canStart || result.isCompleted) {
-      return await result.future;
-    }
-    await video.play();
-    void alignFrame() {
-      final bounds = video.getBoundingClientRect();
-      final scale = math.min(
-        bounds.width / video.videoWidth,
-        bounds.height / video.videoHeight,
-      );
-      final width = math.min(
-        video.videoWidth * scale * .9,
-        video.videoHeight * scale * .82 * frameAspectRatio,
-      );
-      frame.style.width = '${width}px';
-      frame.style.height = '${width / frameAspectRatio}px';
-      frame.style.boxSizing = 'border-box';
-    }
-
-    alignFrame();
+    unawaited(session.open());
     resizeSub = html.window.onResize.listen((_) {
-      alignFrame();
+      if (session.ready) alignFrame();
       gate.reset();
       if (requireDocumentBounds) refreshGate();
     });
     if (requireDocumentBounds) {
-      refreshGate();
       analysisTimer = Timer.periodic(const Duration(milliseconds: 300), (_) {
-        if (result.isCompleted) return;
+        if (result.isCompleted || !session.ready || session.opening) return;
         try {
           gate.update(checkFrame(), DateTime.now());
         } catch (_) {
@@ -289,8 +331,6 @@ Future<PickedLocalFile?> captureDocumentPhoto({
         }
         refreshGate();
       });
-    } else {
-      capture.disabled = false;
     }
     return await result.future.timeout(
       const Duration(minutes: 5),
@@ -299,13 +339,10 @@ Future<PickedLocalFile?> captureDocumentPhoto({
   } finally {
     analysisTimer?.cancel();
     autoCapture?.cancel();
-    video.pause();
-    final tracks = (stream as JSObject).callMethod<JSArray<JSObject>>(
-      'getTracks'.toJS,
-    );
-    for (final track in tracks.toDart) {
-      track.callMethod<JSAny?>('stop'.toJS);
-    }
+    await session.dispose();
+    await selectSub.cancel();
+    await refreshSub.cancel();
+    await helpSub.cancel();
     await cancelSub.cancel();
     await keySub.cancel();
     await captureSub.cancel();
