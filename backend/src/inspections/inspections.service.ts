@@ -1,10 +1,12 @@
+import { assertCylinderAvailable } from './cylinder-uniqueness';
+import { requiredCylinderShape } from './cylinder-pair';
 import { certificateNumberConflict } from '../common/certificate-number-conflict';
 import { reverseGeocodeInspection, inspectionAddressUnavailable } from './inspection-address';
 import { Prisma } from '@prisma/client';
 import { TechPassportService } from '../tech-passport/tech-passport.service';
 import { passportProofMatches } from '../tech-passport/passport-content';
 import { assertSecondCylinderUnique } from './second-cylinder-uniqueness';
-import { CylinderPairInput, cylinderPair, secondCylinderDocuments, activeCylinderPhotos, cylinderShape, allSecondCylinderDocuments } from './cylinder-pair';
+import { CylinderPairInput, cylinderPair, secondCylinderDocuments, activeCylinderPhotos, allSecondCylinderDocuments } from './cylinder-pair';
 import sharp from 'sharp';
 import {notifyPhotoReview,notifyPhotoRejection} from './photo-review-notifications';
 import { cylinderProducedAt } from '../common/cylinder-date';
@@ -422,8 +424,8 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       const certificate = await tx.certificate.findUnique({where:{organizationId_number:{organizationId:inspection.organizationId,number:certificateNumber}}});
       if ((used && used.id !== id) || certificate) throw new BadRequestException("Этот номер свидетельства уже используется в этом инспекционном органе");
       const manufacturer = input.cylinder.manufacturer?.trim() || "Не указан";
-      const duplicate = await tx.gasCylinder.findFirst({where:{serialNumber,manufacturer,vehicleId:{not:current.vehicleId}}});
-      if (duplicate) throw new BadRequestException("Этот баллон уже привязан к другому автомобилю");
+      const shape = requiredCylinderShape(input.cylinder.shape);
+      await assertCylinderAvailable(tx,{serialNumber,manufacturer,shape},current.vehicleId);
       await tx.inspection.update({where:{id,status:"submitted",qualityReviewerId:user!.sub},data:{certificateNumber,...pair,qualityConfirmedAt:null,qualityConfirmedById:null,qualityDocumentUploadedAt:null,secondQualityDocumentUploadedAt:null}});
       await tx.vehicle.update({where:{id:current.vehicleId},data:{vin,plateNumber,normalizedPlate:plateNumber.replace(/[^0-9a-zA-Zа-яА-Я]/g,"").toUpperCase(),vinLast3:vin.slice(-3),make:input.vehicle.make?.trim() || "Не указано",model:input.vehicle.model?.trim() || "Не указано",year:year ?? null}});
       const owner = current.vehicle.owners[0];
@@ -431,7 +433,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       const phone = input.owner.phone === undefined ? owner.phone : normalizeOwnerPhone(input.owner.phone);
       await tx.vehicleOwner.update({where:{id:owner.id},data:{userId:null,phone,fullName:ownerName,address:ownerAddress,...identity}});
       const cylinder = current.vehicle.cylinders[0];
-      const data = {shape:cylinderShape(input.cylinder.shape),serialNumber,manufacturer,volumeLiters:input.cylinder.volumeLiters,reducerName,controlUnitName,producedAt,...period};
+      const data = {shape,serialNumber,manufacturer,volumeLiters:input.cylinder.volumeLiters,reducerName,controlUnitName,producedAt,...period};
       if (cylinder) await tx.gasCylinder.update({where:{id:cylinder.id},data});
       else await tx.gasCylinder.create({data:{...data,vehicleId:current.vehicleId}});
       await tx.auditLog.create({data:{actorId:user!.sub,action:"inspection.quality.data.update",entity:"inspection",entityId:id,metadata:{certificateNumber,previousCertificateNumber:current.certificateNumber,fields:["owner","vehicle","cylinder","certificateNumber","inspectionDate"]}}});
@@ -529,6 +531,8 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       ...(["draft", "rejected"].includes(inspection.status) ? [] : ["certificate_document",...(inspection.usesTwoCylinders ? ["certificate_document_2"] : [])]),
     ];
     const missing = [
+      ...(!["Тороидальный", "Цилиндрический"].includes(inspection.vehicle.cylinders[0]?.shape ?? "") ? ["cylinder_shape"] : []),
+      ...(inspection.usesTwoCylinders && !["Тороидальный", "Цилиндрический"].includes(inspection.secondCylinderShape ?? "") ? ["second_cylinder_shape"] : []),
       ...required.filter((type) => !photoTypes.has(type)),
       ...(passportChanged?['tech_passport_vehicle_mismatch']:[]),
       ...(inspection.usesTwoCylinders && !inspection.secondCylinderSerial?.trim() ? ["second_cylinder_serial"] : []),

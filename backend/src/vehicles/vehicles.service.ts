@@ -1,10 +1,11 @@
+import { assertCylinderAvailable } from '../inspections/cylinder-uniqueness';
 import { ownerIdentity } from '../common/owner-identity';
-import { cylinderShape } from '../inspections/cylinder-pair';
+import { requiredCylinderShape } from '../inspections/cylinder-pair';
 import { cylinderProducedAt } from '../common/cylinder-date';
 import { ownerPhone as normalizeOwnerPhone } from '../common/owner-phone';
 import { hasGlobalAccess } from '../common/access-scope';
 import { inspectionPeriod } from '../common/inspection-period';
-import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
+import { ForbiddenException, Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { RequestUser } from "../common/current-user";
 import { listResponse, paginationMeta } from "../common/pagination";
@@ -86,7 +87,7 @@ export class VehiclesService {
       }
     }
     const period = inspectionPeriod(input.cylinder.fuelType ?? "", input.cylinder.inspectedAt ?? new Date());
-    const shape = cylinderShape(input.cylinder.shape);
+    const shape = requiredCylinderShape(input.cylinder.shape);
     const producedAt = cylinderProducedAt(input.cylinder.producedAt);
     const identity = ownerIdentity(input.owner);
     const ownerPhone = normalizeOwnerPhone(input.owner.phone);
@@ -116,6 +117,7 @@ export class VehiclesService {
           input.cylinder.serialNumber,
           input.cylinder.manufacturer,
           vehicle.id,
+          shape,
         );
 
         const existingOwner = await this.prisma.vehicleOwner.findFirst({
@@ -149,6 +151,8 @@ export class VehiclesService {
           where: {
             vehicleId: vehicle.id,
             serialNumber: input.cylinder.serialNumber,
+            manufacturer: input.cylinder.manufacturer,
+            shape,
           },
         });
         if (!existingCylinder) {
@@ -202,24 +206,9 @@ export class VehiclesService {
     serialNumber: string,
     manufacturer: string,
     vehicleId: string,
+    shape: string,
   ) {
-    const serial = serialNumber.trim();
-    const maker = manufacturer.trim();
-    if (!serial || !maker) return;
-    const duplicate = await this.prisma.gasCylinder.findFirst({
-      where: {
-        serialNumber: { equals: serial, mode: "insensitive" },
-        manufacturer: { equals: maker, mode: "insensitive" },
-        vehicleId: { not: vehicleId },
-      },
-      select: { id: true },
-    });
-    const second = await this.prisma.inspection.findFirst({where:{usesTwoCylinders:true,secondCylinderSerial:{equals:serial,mode:'insensitive'},secondCylinderManufacturer:{equals:maker,mode:'insensitive'},vehicleId:{not:vehicleId}},select:{id:true}});
-    if (duplicate || second) {
-      throw new BadRequestException(
-        "Баллон с таким номером и производителем уже есть в системе. Обратитесь к администратору",
-      );
-    }
+    await assertCylinderAvailable(this.prisma, {serialNumber, manufacturer, shape}, vehicleId);
   }
 
   private normalizedPlate(value: string) {

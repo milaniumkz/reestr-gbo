@@ -1,0 +1,33 @@
+name: Correct confirmed shape of Baygazi cylinder 358
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+      - name: Back up and correct only the confirmed shape
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          server="${DEPLOY_USER:-root}@${DEPLOY_HOST}"
+          remote="$(ssh "$server" 'mktemp -d /tmp/reestr-shape-repair.XXXXXX')"
+          trap 'ssh "$server" "rm -rf -- \"$remote\""' EXIT
+          scp ops/repair-baygazi-cylinder-358.cjs "$server:$remote/repair.cjs"
+          ssh "$server" 'bash /opt/reestr/app/ops/backup-reestr.sh'
+          ssh "$server" "set -a; source /opt/reestr/app/backend/.env; set +a; GITHUB_RUN_ID='$GITHUB_RUN_ID' node '$remote/repair.cjs'"

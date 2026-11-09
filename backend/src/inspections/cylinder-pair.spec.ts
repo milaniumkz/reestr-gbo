@@ -15,7 +15,7 @@ describe('Two cylinders', () => {
   });
   it('blocks a pair without its own documents and rejects stale documents after changing the serial', async () => {
     const photos: Array<{type:string;cylinderSerial?:string}> = ['cylinder_label','vehicle_photo','tech_passport','applicant_application','applicant_questionnaire','gas_work_record','cylinder_work_record','gas_inspection_report','cylinder_inspection_report'].map(type=>({type}));
-    const state={organizationId:'org',status:'draft',usesTwoCylinders:false,secondCylinderSerial:'B',photos,vehicle:{owners:[{}],cylinders:[{fuelType:'СНГ',producedAt:new Date('2025-01-01')}]}};
+    const state={organizationId:'org',status:'draft',usesTwoCylinders:false,secondCylinderShape:'Цилиндрический',secondCylinderSerial:'B',photos,vehicle:{owners:[{}],cylinders:[{shape:'Тороидальный',fuelType:'СНГ',producedAt:new Date('2025-01-01')}]}};
     const prisma={inspection:{findUnique:jest.fn(async()=>state)}};
     const svc=new InspectionsService(prisma as never,{} as never,{} as never);
     const user={sub:'admin',phone:'+70000000000',roles:['super_admin']};
