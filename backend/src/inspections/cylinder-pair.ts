@@ -10,6 +10,11 @@ export type CylinderPairStored = Omit<CylinderPairInput,'secondCylinder'> & {
  secondCylinderManufacturer?:string|null;secondCylinderVolumeLiters?:number|null;secondCylinderShape?:string|null;secondCylinderProducedAt?:Date|null;secondCylinderInspectedAt?:Date|null;secondCylinderValidUntil?:Date|null;
 };
 const emptySecond = {secondQualityDocumentUploadedAt:null,secondCylinderManufacturer:null,secondCylinderVolumeLiters:null,secondCylinderShape:null,secondCylinderProducedAt:null,secondCylinderInspectedAt:null,secondCylinderValidUntil:null};
+export function requiredCylinderShape(value:unknown) {
+ const shape = cylinderShape(value);
+ if (!shape) throw new BadRequestException('Выберите тип баллона: тороидальный либо цилиндрический');
+ return shape;
+}
 export function cylinderShape(value:unknown) {
  if(value === undefined || value === null) return undefined; // Preserve legacy clients.
  if(!['Тороидальный','Цилиндрический'].includes(String(value))) throw new BadRequestException('Выберите тип баллона: тороидальный либо цилиндрический');

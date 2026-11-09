@@ -220,10 +220,11 @@ describe('Inspection quality control workflow', () => {
       vehicleId:'vehicle_1',
       photos: ['applicant_application','applicant_questionnaire','cylinder_label','vehicle_photo','tech_passport','gas_work_record','cylinder_work_record','gas_inspection_report','cylinder_inspection_report'].map(type => ({ id:type, type, objectKey:type, checksum: undefined as string | undefined })) as Array<{id:string;type:string;objectKey:string;checksum?:string;cylinderSerial?:string|null;documentVerification?:unknown}>,
       requireApplicantPhotos: false,
-      vehicle: {vin:'TESTVIN0000000001',plateNumber:'777AAA02', cylinders:[{id:'cylinder_1',fuelType:'СНГ',producedAt:new Date('2024-07-15') as Date|null}], owners:[{id:'owner_1',userId:'owner_user',user:{phone:'+77001234567'}}] },
+      vehicle: {vin:'TESTVIN0000000001',plateNumber:'777AAA02', cylinders:[{id:'cylinder_1',shape:'Тороидальный',fuelType:'СНГ',producedAt:new Date('2024-07-15') as Date|null}], owners:[{id:'owner_1',userId:'owner_user',user:{phone:'+77001234567'}}] },
     };
     const prisma = {
       inspection: {
+        findFirst: jest.fn(async()=>null),
         updateMany: jest.fn(async ({where,data}: {where:{id:string;status:string;qualityReviewerId:string|null};data:Record<string,unknown>}) => {
           if (where.id !== state.id || where.status !== state.status || where.qualityReviewerId !== state.qualityReviewerId) return {count:0};
           Object.assign(state,data);
@@ -333,9 +334,18 @@ describe('Inspection quality control workflow', () => {
     expect(first).toEqual(second);
     expect(f.prisma.inspectionPhoto.create).toHaveBeenCalledTimes(1);
   });
+  it('blocks submission when the primary or second cylinder shape is absent',async()=>{
+    const f=fixture();
+    f.state.vehicle.cylinders[0].shape='';
+    expect((await f.service.readiness('inspection_1',f.user('inspector'))).missing).toContain('cylinder_shape');
+    await expect(f.service.setStatus(f.user('inspector'),'inspection_1','submitted')).rejects.toThrow('Не хватает данных инспекции');
+    f.state.vehicle.cylinders[0].shape='Тороидальный';
+    Object.assign(f.state,{usesTwoCylinders:true,secondCylinderSerial:'B',secondCylinderShape:null});
+    expect((await f.service.readiness('inspection_1',f.user('inspector'))).missing).toContain('second_cylinder_shape');
+  });
   it('requires a quality-uploaded second certificate for two cylinders and keeps it tied to that cylinder',async()=>{
     const f=fixture();
-    Object.assign(f.state,{usesTwoCylinders:true,secondCylinderSerial:'B'});
+    Object.assign(f.state,{usesTwoCylinders:true,secondCylinderSerial:'B',secondCylinderShape:'Цилиндрический'});
     for(const type of ['cylinder_label_2','cylinder_work_record_2','cylinder_inspection_report_2']) f.state.photos.push({id:type,type,objectKey:type,cylinderSerial:'B'});
     expect((await f.service.readiness('inspection_1',f.user('inspector'))).ready).toBe(true);
     await f.service.setStatus(f.user('inspector'),'inspection_1','submitted');
@@ -375,7 +385,7 @@ describe('Inspection quality control workflow', () => {
     certificateNumber:'TEST-1',inspectionDate:'2026-10-13',
     owner:{fullName:'Исправленный владелец',address:'Астана',phone:'+77001234567',iin:'123456789012'},
     vehicle:{vin:'VIN000000123',plateNumber:'123 ABC 01',make:'Toyota',model:'Camry',year:2020},
-    cylinder:{serialNumber:'CYL-1',manufacturer:'Atiker',volumeLiters:54,producedAt:'2024-07-15',fuelType:'СНГ',reducerName:'Alaska',controlUnitName:'Atiker'},
+    cylinder:{shape:'Тороидальный',serialNumber:'CYL-1',manufacturer:'Atiker',volumeLiters:54,producedAt:'2024-07-15',fuelType:'СНГ',reducerName:'Alaska',controlUnitName:'Atiker'},
   };
   it('allows assigned quality control to correct business data while keeping original reports',async()=>{
     const f=fixture();f.state.status='submitted';
