@@ -23,7 +23,7 @@ const db=new PrismaClient({log:[]});
    const started=Date.now(),data=await geocoderJson(url);
    console.log(JSON.stringify({productionTransport:provider,elapsedMs:Date.now()-started,hasData:Boolean(data?.address||data?.features?.length)}));
   }
-  const {promises:dns}=require('node:dns');
+  const dns=new (require('node:dns').promises.Resolver)({timeout:2000,tries:1});
   const {execFileSync}=require('node:child_process');
   for(const family of [4,6]) {
     try { console.log(JSON.stringify({dnsFamily:family,records:await (family===4?dns.resolve4('nominatim.openstreetmap.org'):dns.resolve6('nominatim.openstreetmap.org'))})); }
