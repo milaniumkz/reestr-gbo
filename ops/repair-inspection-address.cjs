@@ -13,7 +13,24 @@ const db=new PrismaClient({log:[]});
  if(!row||row.lat===null||row.lng===null)throw Error('Inspection with saved GPS required');
  if(createHash('sha256').update(row.address||'').digest('hex')!==expected)throw Error('Address changed: refusing repair');
  if(process.argv[4]==='diagnose') {
-  const {promises:dns}=require('node:dns');
+  const fs=require('node:fs');
+  console.log(JSON.stringify({resolverFile:fs.realpathSync('/etc/resolv.conf'),nameservers:fs.readFileSync('/etc/resolv.conf','utf8').split('\n').filter(line=>/^nameserver\s/.test(line))}));
+  for(const server of ['1.1.1.1','8.8.8.8']) {
+   const resolver=new (require('node:dns').promises.Resolver)({timeout:2000,tries:1});resolver.setServers([server]);
+   try {console.log(JSON.stringify({publicDns:server,answers:await resolver.resolve4('nominatim.openstreetmap.org')}));}
+   catch(error){console.log(JSON.stringify({publicDns:server,error:error.code}));}
+  }
+  const events=await db.technicalEvent.findMany({where:{createdAt:{gte:new Date(Date.now()-6*60*60_000)},action:{contains:'location'}},orderBy:{createdAt:'desc'},take:30,select:{createdAt:true,action:true,details:true}});
+  for(const event of events) console.log(JSON.stringify({locationRequest:{at:event.createdAt,route:event.action,status:event.details?.statusCode,durationMs:event.details?.durationMs}}));
+  const {geocoderJson}=require('/opt/reestr/app/backend/dist/src/inspections/geocoder-http');
+  for(const [provider,url] of [
+   ['nominatim',`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${row.lat}&lon=${row.lng}&zoom=18&addressdetails=1`],
+   ['photon',`https://photon.komoot.io/reverse?lat=${row.lat}&lon=${row.lng}&radius=0.1&limit=1`],
+  ]) {
+   const started=Date.now(),data=await geocoderJson(url);
+   console.log(JSON.stringify({productionTransport:provider,elapsedMs:Date.now()-started,hasData:Boolean(data?.address||data?.features?.length)}));
+  }
+  const dns=new (require('node:dns').promises.Resolver)({timeout:2000,tries:1});
   const {execFileSync}=require('node:child_process');
   for(const family of [4,6]) {
     try { console.log(JSON.stringify({dnsFamily:family,records:await (family===4?dns.resolve4('nominatim.openstreetmap.org'):dns.resolve6('nominatim.openstreetmap.org'))})); }

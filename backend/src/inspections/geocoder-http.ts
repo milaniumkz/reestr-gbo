@@ -1,4 +1,5 @@
 import https from 'node:https';
+import { geocoderLookup } from './geocoder-dns';
 
 // Production has working IPv4 but no usable IPv6 route to the primary geocoder.
 // Apply this only to geocoder requests, preserving normal TLS hostname verification.
@@ -14,6 +15,7 @@ export function geocoderJson(url: string): Promise<any> {
     };
     const request = https.get(url, {
       family: 4,
+      lookup: geocoderLookup,
       headers: { 'User-Agent': 'ERSI-GBO/1.0 inspection location', 'Accept-Language': 'ru,kk,en' },
     }, response => {
       if (response.statusCode !== 200) { response.resume(); finish(); return; }
