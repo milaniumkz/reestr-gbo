@@ -29,6 +29,7 @@ on:
           - diagnose-passwords
           - repair-server-dns
           - identity-inventory
+          - identity-engine-diagnostics
           - deploy-identity-engine
           - identity-status
           - identity-pilot
@@ -209,6 +210,7 @@ jobs:
             restore-confirmed-inspector) bash ops/restore-confirmed-inspector.sh ;;
             diagnose-members) bash ops/diagnose-members.sh ;;
             diagnose-passwords) bash ops/diagnose-passwords.sh ;;
+            identity-engine-diagnostics) bash ops/diagnose-identity-runtime.sh ;;
             identity-inventory) bash ops/inspector-identity-operation.sh inventory ;;
             deploy-identity-engine) bash ops/deploy-identity-engine.sh ;;
             identity-pilot) IDENTITY_PILOT_USER_ID="${{ github.event.inputs.identity_pilot_user_id }}" bash ops/inspector-identity-operation.sh pilot ;;

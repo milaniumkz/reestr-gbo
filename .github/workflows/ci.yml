@@ -125,3 +125,18 @@ jobs:
         run: DOCKER_BUILDKIT=0 docker build -f services/identity/Dockerfile.production -t reestr-identity:test services/identity
       - name: Verify video engine without outbound network
         run: docker run --rm --network none --read-only --tmpfs /tmp:rw,nosuid,noexec,size=256m --memory 768m --cpus 1.5 --pids-limit 128 --cap-drop ALL --security-opt no-new-privileges --entrypoint python reestr-identity:test -m unittest test_engine
+      - name: Verify isolated HTTP worker is reachable from host
+        run: |
+          set -euo pipefail
+          docker network create --internal identity-ci-private
+          docker run -d --name identity-ci --network identity-ci-private --read-only --tmpfs /tmp:rw,nosuid,noexec,size=256m --memory 768m --cpus 1.5 --pids-limit 128 --cap-drop ALL --security-opt no-new-privileges reestr-identity:test
+          trap 'docker logs --tail 20 identity-ci; docker rm -f identity-ci; docker network rm identity-ci-private' EXIT
+          worker_ip=$(docker inspect identity-ci --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
+          for n in $(seq 1 30); do
+            if curl -fsS --max-time 3 "http://$worker_ip:8080/health" -o /tmp/identity-health.json; then
+              python3 -c 'import json; v=json.load(open("/tmp/identity-health.json")); assert v["ready"] and v["liveness"]'
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
