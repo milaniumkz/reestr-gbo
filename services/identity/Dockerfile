@@ -12,6 +12,6 @@ COPY vendor/generate_patches.py ./vendor/generate_patches.py
 RUN chmod -R a+rX /app
 RUN useradd --uid 10001 --no-create-home identity
 USER identity
-ENV OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MPLCONFIGDIR=/tmp/matplotlib
+ENV OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MPLCONFIGDIR=/tmp/matplotlib XDG_CACHE_HOME=/tmp/cache
 EXPOSE 8080
 CMD ["python","engine.py"]
