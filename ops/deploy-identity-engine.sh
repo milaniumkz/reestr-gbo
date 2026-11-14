@@ -13,7 +13,7 @@ bash /opt/reestr/app/ops/backup-reestr.sh
 mkdir -p /opt/reestr/storage/private/identity
 chown -R reestr-backend:reestr-backend /opt/reestr/storage/private
 chmod 700 /opt/reestr/storage/private /opt/reestr/storage/private/identity
-docker build -t 'reestr-identity:$sha' '$remote'
+docker build -f '$remote/Dockerfile.production' -t 'reestr-identity:$sha' '$remote'
 if ! docker network inspect reestr-identity-private >/dev/null 2>&1; then docker network create --internal reestr-identity-private; fi
 test \"\$(docker network inspect -f '{{.Internal}}' reestr-identity-private)\" = true
 docker rm reestr-identity-previous 2>/dev/null || true
