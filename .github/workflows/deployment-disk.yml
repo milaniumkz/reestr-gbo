@@ -1,6 +1,11 @@
 name: Deployment disk maintenance
 on:
   workflow_dispatch:
+    inputs:
+      restore_apk_backup:
+        description: Exact previous APK backup directory to restore
+        required: false
+        type: string
 permissions:
   contents: read
 jobs:
@@ -12,7 +17,16 @@ jobs:
       - uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+      - name: Restore the previous APK for the requested web-only rollout
+        if: inputs.restore_apk_backup != ''
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          APK_BACKUP: ${{ inputs.restore_apk_backup }}
+        run: bash ops/restore-apk-download.sh
       - name: Reclaim rebuildable release dependencies
+        if: inputs.restore_apk_backup == ''
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
