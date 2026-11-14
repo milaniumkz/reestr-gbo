@@ -106,7 +106,8 @@ class _InspectorIdentityPageState extends State<InspectorIdentityPage>
 
   Future<void> _prepare() async {
     if (!_consent || _busy) return;
-    _voice.play('prepare');
+    var autoStart = false;
+    _voice.play('ready');
     setState(() {
       _busy = true;
       _cancelled = false;
@@ -157,17 +158,23 @@ class _InspectorIdentityPageState extends State<InspectorIdentityPage>
           if (mounted) setState(() => _sample = sample);
         }),
       );
+      autoStart = true;
     } catch (error) {
+      await _closeCamera().catchError((_) {});
       _error(error);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+    if (autoStart && mounted && !_cancelled) {
+      await WidgetsBinding.instance.endOfFrame;
+      if (mounted && !_cancelled) await _record(playReady: false);
+    }
   }
 
-  Future<void> _record() async {
+  Future<void> _record({bool playReady = true}) async {
     final camera = _camera;
     if (camera == null || _busy || _recording) return;
-    _voice.play('ready');
+    if (playReady) _voice.play('ready');
     setState(() {
       _busy = true;
       _cancelled = false;
@@ -313,100 +320,112 @@ class _InspectorIdentityPageState extends State<InspectorIdentityPage>
   }
 
   @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: false,
-    child: Scaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: const Text('Видеопроверка инспектора'),
-      ),
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    _enrolled
-                        ? 'Подтвердите, что в аккаунт входите именно вы'
-                        : 'Подтверждение личности инспектора',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Снимите себя на фронтальную камеру и выполните голосовые подсказки. В кадре должно быть одно лицо. Готовые видео и фотографии не принимаются.',
-                  ),
-                  if (_camera?.value.isInitialized == true) ...[
-                    const SizedBox(height: 16),
-                    IdentityCameraFrame(
-                      camera: _camera!,
-                      sample: _sample,
-                      recording: _recording,
-                      instruction: _instruction,
-                    ),
-                    if (_recording) ...[
+  Widget build(BuildContext context) {
+    final cameraReady = _camera?.value.isInitialized == true;
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          title: const Text('Видеопроверка инспектора'),
+        ),
+        body: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (!cameraReady) ...[
+                      Text(
+                        _enrolled
+                            ? 'Подтвердите, что в аккаунт входите именно вы'
+                            : 'Подтверждение личности инспектора',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
                       const SizedBox(height: 8),
-                      LinearProgressIndicator(
-                        value: (_seconds / _duration).clamp(0, 1),
+                      const Text(
+                        'Расположите лицо в овале и следуйте голосовым подсказкам.',
                       ),
-                      Text('${_seconds.floor()} / $_duration сек.'),
                     ],
-                  ],
-                  if (!_recording && !_busy)
-                    CheckboxListTile(
-                      contentPadding: EdgeInsets.zero,
-                      value: _consent,
-                      onChanged: (v) => setState(() => _consent = v ?? false),
-                      title: const Text(
-                        'Согласен на обработку видеозаписи и биометрических данных для проверки владельца аккаунта инспектора.',
+                    if (cameraReady) ...[
+                      IdentityCameraFrame(
+                        camera: _camera!,
+                        sample: _sample,
+                        height: (MediaQuery.sizeOf(context).height * .43).clamp(
+                          220.0,
+                          320.0,
+                        ),
+                        recording: _recording,
+                        instruction: _instruction,
                       ),
-                      subtitle: const Text(
-                        'Первичная запись и зашифрованный эталон хранятся до удаления аккаунта или сброса администратором. Записи неуспешных попыток — до 7 дней. Новые успешные записи входа не сохраняются.',
+                      const SizedBox(height: 8),
+                      if (_recording) ...[
+                        LinearProgressIndicator(
+                          value: (_seconds / _duration).clamp(0, 1),
+                        ),
+                        Text('${_seconds.floor()} / $_duration сек.'),
+                      ],
+                    ],
+                    if (!cameraReady && !_busy)
+                      CheckboxListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: _consent,
+                        onChanged: (value) =>
+                            setState(() => _consent = value ?? false),
+                        title: const Text(
+                          'Согласен на обработку видеозаписи и биометрических данных для проверки владельца аккаунта инспектора.',
+                        ),
                       ),
-                    ),
-                  if (_voice.failed)
-                    const Text(
-                      'Звуковые подсказки недоступны. Следуйте тексту на экране.',
-                    ),
-                  if (_voice.failed)
-                    const Text(
-                      'Звуковые подсказки недоступны. Следуйте тексту на экране.',
-                    ),
-                  if (_message.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: Text(_message, semanticsLabel: _message),
-                    ),
-                  if (_busy) ...[
-                    const LinearProgressIndicator(),
-                    const SizedBox(height: 12),
-                  ],
-                  if (!_recording)
-                    FilledButton(
-                      onPressed: _busy || !_consent
+                    if (!_recording) ...[
+                      const SizedBox(height: 8),
+                      FilledButton(
+                        onPressed: _busy || !_consent
+                            ? null
+                            : (cameraReady ? _record : _prepare),
+                        child: Text(
+                          cameraReady ? 'Начать запись' : 'Открыть камеру',
+                        ),
+                      ),
+                    ],
+                    if (_busy && !_recording && _countdown == 0) ...[
+                      const SizedBox(height: 8),
+                      const LinearProgressIndicator(),
+                    ],
+                    if (_message.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Text(_message, semanticsLabel: _message),
+                      ),
+                    if (_voice.failed)
+                      const Text(
+                        'Звуковые подсказки недоступны. Следуйте тексту на экране.',
+                      ),
+                    TextButton(
+                      onPressed: _busy || _recording
                           ? null
-                          : (_camera == null ? _prepare : _record),
-                      child: Text(
-                        _camera == null ? 'Открыть камеру' : 'Начать запись',
-                      ),
+                          : () => Navigator.of(context).pop(false),
+                      child: const Text('Выйти из аккаунта'),
                     ),
-                  TextButton(
-                    onPressed: _busy || _recording
-                        ? null
-                        : () {
-                            Navigator.of(context).pop(false);
-                          },
-                    child: const Text('Выйти из аккаунта'),
-                  ),
-                ],
+                    if (!cameraReady && !_busy)
+                      const ExpansionTile(
+                        tilePadding: EdgeInsets.zero,
+                        title: Text('Об обработке данных'),
+                        children: [
+                          Text(
+                            'Первичная запись и зашифрованный эталон хранятся до удаления аккаунта или сброса администратором. Записи неуспешных попыток — до 7 дней. Новые успешные записи входа не сохраняются.',
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }

@@ -4,10 +4,11 @@ const assert=require('node:assert/strict');
  const browser=await chromium.launch({executablePath:'/usr/bin/chromium',args:['--no-sandbox','--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream']});
  try {
   for(const fixture of [{role:'inspector',enrolled:false},{role:'inspector',enrolled:true},{role:'quality_control'},{role:'admin'}]){
-   const context=await browser.newContext({viewport:{width:430,height:920},permissions:['camera']});
+   const context=await browser.newContext({viewport:fixture.role==='inspector'&&!fixture.enrolled?{width:360,height:640}:{width:430,height:920},permissions:['camera']});
    await context.addInitScript(()=>{for(const [key,value] of Object.entries({accessToken:'identity-test',refreshToken:'identity-test',lastRoleCode:'inspection_org',lastOrganizationBin:'123456789012',diagnosticLocationAsked:true}))localStorage.setItem('flutter.'+key,JSON.stringify(value));localStorage.setItem('ersi-install-dismissed-at',String(Date.now()));});
    await context.addInitScript(()=>{
-    window.__identityStreams=[];window.__identityAudio=[];
+    window.__identityStreams=[];window.__identityAudio=[];window.__identityRecorderStarts=[];
+    const startRecording=MediaRecorder.prototype.start;MediaRecorder.prototype.start=function(...args){window.__identityRecorderStarts.push(Date.now());return startRecording.apply(this,args);};
     const media=navigator.mediaDevices;
     if(media){const capture=media.getUserMedia.bind(media);media.getUserMedia=async constraints=>{const stream=await capture(constraints);window.__identityStreams.push(stream);return stream;};}
     const play=HTMLMediaElement.prototype.play;
@@ -34,17 +35,19 @@ const assert=require('node:assert/strict');
     if(fixture.role==='inspector'){
      const consent=page.getByRole('checkbox');await consent.waitFor();
      await consent.check();
-     await page.getByRole('button',{name:'ОТКРЫТЬ КАМЕРУ',exact:true}).click();
+     const open=page.getByRole('button',{name:'ОТКРЫТЬ КАМЕРУ',exact:true});
+     const openBox=await open.boundingBox();assert(openBox&&openBox.y+openBox.height<=page.viewportSize().height,'camera button must be visible without scrolling');
+     await open.click();
      const record=page.getByRole('button',{name:'НАЧАТЬ ЗАПИСЬ',exact:true});await record.waitFor({timeout:30000});
-     await record.click();
-     await page.waitForFunction(()=>document.querySelectorAll('video').length>0);
-     const start=Date.now();
+     const recordBox=await record.boundingBox();assert(recordBox&&recordBox.y+recordBox.height<=page.viewportSize().height,'record controls must be next to camera in viewport');
+     await page.waitForFunction(()=>window.__identityRecorderStarts.length===1,{},{timeout:15000});
+     const start=await page.evaluate(()=>window.__identityRecorderStarts[0]);
      await page.waitForFunction(()=>!document.body.innerText.includes('ВИДЕОПРОВЕРКА ИНСПЕКТОРА'),{},{timeout:60000});
-     assert.equal(uploads,1);assert(Date.now()-start>=(fixture.enrolled?19000:13000));
+     assert.equal(uploads,1);assert.equal(await page.evaluate(()=>window.__identityRecorderStarts.length),1);assert(Date.now()-start>=(fixture.enrolled?19000:13000));
      const live=await page.evaluate(()=>window.__identityStreams.some(stream=>stream.getTracks().some(t=>t.readyState==='live')));
      assert.equal(live,false,'camera must be released after completion');
      const audio=await page.evaluate(()=>window.__identityAudio);assert(audio.some(v=>v.src.startsWith('data:audio/wav;base64,')),'prerecorded prompts must play from prefetched memory');
-     console.log('PASS real browser capture + mocked verification:',fixture.enrolled?'new login 20s':'enrollment 14s');
+     console.log('PASS automatic browser capture + visible controls + mocked verification:',fixture.enrolled?'new login 20s':'enrollment 14s');
     }else{
      await page.getByText('МОИ ИНСПЕКЦИИ',{exact:true}).first().waitFor();
      assert.equal(await page.getByRole('checkbox').count(),0);assert.equal(uploads,0);
