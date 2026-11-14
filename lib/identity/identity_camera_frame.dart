@@ -9,16 +9,18 @@ class IdentityCameraFrame extends StatelessWidget {
     super.key,
     required this.camera,
     this.sample = IdentityFaceSample.unavailable,
+    this.height = 320,
     required this.recording,
     required this.instruction,
   });
   final CameraController camera;
+  final double height;
   final IdentityFaceSample sample;
   final bool recording;
   final String instruction;
   @override
   Widget build(BuildContext context) => SizedBox(
-    height: 320,
+    height: height,
     child: ClipRRect(
       borderRadius: BorderRadius.circular(24),
       child: Stack(
