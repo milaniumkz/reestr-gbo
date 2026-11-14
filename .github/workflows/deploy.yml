@@ -36,6 +36,7 @@ on:
           - activate-inspector-identity
           - deactivate-inspector-identity
           - photo-moderation-status
+          - publish-backend-patch
           - resume-checked-release
           - status
           - logs
@@ -199,6 +200,12 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
+      - uses: actions/setup-node@v4
+        if: github.event.inputs.operation == 'publish-backend-patch'
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
       - name: Run operation
         run: |
           set -o pipefail
@@ -219,6 +226,7 @@ jobs:
             deactivate-inspector-identity) bash ops/inspector-identity-operation.sh deactivate ;;
             repair-server-dns) bash ops/repair-server-dns.sh ;;
             photo-moderation-status) bash ops/photo-moderation-status.sh ;;
+            publish-backend-patch) bash ops/publish-backend-patch.sh ;;
             deploy-admin) DEPLOY_COMPONENTS=admin bash ops/deploy-production.sh "$(git rev-parse HEAD)" ;;
             deploy-services) DEPLOY_COMPONENTS=services bash ops/deploy-production.sh "$(git rev-parse HEAD)" ;;
             inventory-inspection-data) bash ops/purge-inspection-data.sh inventory ;;

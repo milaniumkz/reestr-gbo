@@ -72,6 +72,15 @@ describe("photo review routing", () => {
     ).toBe(true);
     expect(tx.technicalAlert.upsert).toHaveBeenCalledTimes(1);
   });
+  it('keeps a second-cylinder label warning visible when many other photos need review',async()=>{
+    const tx=fixture();
+    tx.inspectionPhoto.findMany.mockResolvedValueOnce([
+      ...Array.from({length:7},()=>({type:'tech_passport',moderationStatus:'manual_review',moderationReason:'Прочитать документ'})),
+      {type:'cylinder_label_2',moderationStatus:'manual_review',moderationReason:'Проверить оригинальность бирки'},
+    ]);
+    await notifyPhotoReview(tx,'inspection-1');
+    for(const call of tx.notification.upsert.mock.calls as any)expect(call[0].create.body).toContain('бирка второго баллона: Проверить оригинальность бирки');
+  });
   it("aggregates repeated review uploads instead of creating duplicate inbox notices", async () => {
     const tx = fixture();
     await notifyPhotoReview(tx, "inspection-1");

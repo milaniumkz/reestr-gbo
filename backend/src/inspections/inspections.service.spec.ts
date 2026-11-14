@@ -243,7 +243,7 @@ describe('Inspection quality control workflow', () => {
       vehicleOwner: {update:jest.fn(async()=>({}))},
       gasCylinder: {findFirst:jest.fn(async()=>null),update:jest.fn(async()=>({}))},
       user: {findUnique:jest.fn(async()=>({id:'existing_user'})),create:jest.fn(async()=>({id:'new_user'}))},
-      inspectionPhoto: { update: jest.fn(async ({where,data}:{where:{id:string};data:Record<string,unknown>})=>Object.assign(state.photos.find(p=>p.id===where.id)!,data)), findFirst: jest.fn(async ({where}:{where:{type:string;checksum:string;cylinderSerial?:string|null}}) => state.photos.find(p=>p.type===where.type && p.checksum===where.checksum && (p.cylinderSerial??null)===(where.cylinderSerial??null)) ?? null), deleteMany: jest.fn(async ({where}:{where:{inspectionId:string;type:string;id?:{not:string}}}) => { const before=state.photos.length; state.photos=state.photos.filter(p=>p.type!==where.type || p.id===where.id?.not); return {count:before-state.photos.length}; }), create: jest.fn(async ({ data }: { data: { type:string; objectKey:string; checksum:string } }) => {
+      inspectionPhoto: { findMany:jest.fn(async()=>state.photos), update: jest.fn(async ({where,data}:{where:{id:string};data:Record<string,unknown>})=>Object.assign(state.photos.find(p=>p.id===where.id)!,data)), findFirst: jest.fn(async ({where}:{where:{type:string;checksum:string;cylinderSerial?:string|null}}) => state.photos.find(p=>p.type===where.type && p.checksum===where.checksum && (p.cylinderSerial??null)===(where.cylinderSerial??null)) ?? null), deleteMany: jest.fn(async ({where}:{where:{inspectionId:string;type:string;id?:{not:string}}}) => { const before=state.photos.length; state.photos=state.photos.filter(p=>p.type!==where.type || p.id===where.id?.not); return {count:before-state.photos.length}; }), create: jest.fn(async ({ data }: { data: { type:string; objectKey:string; checksum:string } }) => {
         const photo={id:'certificate-photo',...data}; state.photos.push(photo); return photo;
       }) },
       organizationMember: {
@@ -251,8 +251,8 @@ describe('Inspection quality control workflow', () => {
         findFirst: jest.fn(async ({ where }: { where: { userId:string; role:string } }) =>
           (['qc','qc2'].includes(where.userId) && where.role==='quality_control') || (where.userId==='leader' && where.role==='admin') ? {id:'membership'} : null),
       },
-      notification:{create:jest.fn(async()=>({}))},
-      technicalAlert:{create:jest.fn(async()=>({}))},
+      notification:{create:jest.fn(async()=>({})),upsert:jest.fn(async()=>({}))},
+      technicalAlert:{create:jest.fn(async()=>({})),upsert:jest.fn(async()=>({}))},
       technicalEvent:{create:jest.fn(async()=>({}))},
       auditLog: { create: jest.fn(async () => ({})) },
       $transaction: jest.fn(async (action: (tx: unknown) => Promise<unknown>) => action(prisma)),
@@ -317,6 +317,17 @@ describe('Inspection quality control workflow', () => {
     await f.service.uploadPhoto('inspection_1','cylinder_work_record',file,f.user('inspector'));
     expect(f.prisma.inspectionPhoto.create).toHaveBeenCalledTimes(3);
   });
+  it('refreshes a duplicate label check and notifies quality instead of retaining an old acceptance',async()=>{
+    const f=fixture();
+    const file={originalname:'label.jpg',buffer:Buffer.from('same-label')};
+    f.moderation.check.mockResolvedValueOnce({moderationStatus:'local_checked'});
+    const first=await f.service.uploadPhoto('inspection_1','cylinder_label',file,f.user('inspector'));
+    f.moderation.check.mockResolvedValueOnce({moderationStatus:'manual_review',moderationReason:'Проверьте оригинальность бирки'});
+    const repeated=await f.service.uploadPhoto('inspection_1','cylinder_label',file,f.user('inspector'));
+    expect(repeated).toMatchObject({id:first.id,moderationStatus:'manual_review',moderationReason:'Проверьте оригинальность бирки'});
+    expect(f.prisma.inspectionPhoto.update).toHaveBeenCalledWith(expect.objectContaining({where:{id:first.id},data:expect.objectContaining({moderationStatus:'manual_review'})}));
+    expect(f.prisma.notification.upsert).toHaveBeenCalled();
+  });
   it('keeps a single attachment when two upload requests overlap', async () => {
     const f = fixture();
     // Model PostgreSQL parent-row lock: a transaction holds it until commit.
@@ -370,7 +381,7 @@ describe('Inspection quality control workflow', () => {
   it('retains rejected evidence privately without attaching it to inspection',async()=>{
     const f=fixture();
     Object.assign(f.prisma.inspection,{findUniqueOrThrow:jest.fn(async()=>({organizationId:'org_1',organization:{name:'ИО тест'},vehicle:{plateNumber:'TEST01'}}))});
-    Object.assign(f.prisma,{notification:{create:jest.fn(async()=>({}))},technicalAlert:{create:jest.fn(async()=>({}))},technicalEvent:{create:jest.fn(async()=>({}))}});
+    Object.assign(f.prisma,{notification:{create:jest.fn(async()=>({})),upsert:jest.fn(async()=>({}))},technicalAlert:{create:jest.fn(async()=>({})),upsert:jest.fn(async()=>({}))},technicalEvent:{create:jest.fn(async()=>({}))}});
     f.moderation.check.mockRejectedValue(new BadRequestException('Фото экрана другого телефона'));
     await expect(f.service.uploadPhoto('inspection_1','tech_passport',{originalname:'phone.jpg',buffer:Buffer.from('photo')},f.user('inspector'))).rejects.toThrow('Фото экрана');
     expect(f.storage.putObject).toHaveBeenCalledWith(expect.objectContaining({key:expect.stringMatching(/^technical-rejections\//)}));expect(f.prisma.inspectionPhoto.create).not.toHaveBeenCalled();

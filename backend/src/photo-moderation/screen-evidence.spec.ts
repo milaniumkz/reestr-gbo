@@ -72,7 +72,7 @@ describe("combined screen evidence", () => {
       ),
     ).toBe(false);
   });
-  it("requires a new capture before storage for combined signals, including after JPEG encoding", async () => {
+  it.each(["tech_passport","cylinder_label","cylinder_label_2"])("rejects combined screen signals for %s even after JPEG encoding", async (type) => {
     const f = fixture({});
     const jpeg = await sharp(f.data, {
       raw: { width: f.width, height: f.height, channels: 3 },
@@ -84,7 +84,7 @@ describe("combined screen evidence", () => {
       new PhotoModerationService().check(
         jpeg,
         "original-document.jpg",
-        "tech_passport",
+        type,
       ),
     ).rejects.toThrow("совместные признаки");
     expect(
