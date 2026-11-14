@@ -24,6 +24,13 @@ jobs:
           ssh -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 "${DEPLOY_USER:-root}@${DEPLOY_HOST}" 'bash -s' <<'REMOTE'
           set -euo pipefail
           df -h /
+          if command -v docker >/dev/null; then
+            docker system df
+            # Image/build cache only: active containers and all volumes are retained.
+            docker image prune -af
+            docker builder prune -af
+            docker system df
+          fi
           mapfile -t releases < <(find /opt/reestr/releases -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | sort -r)
           printf 'Release directories: %s\n' "${#releases[@]}"
           current="$(readlink -f /opt/reestr/current)"
