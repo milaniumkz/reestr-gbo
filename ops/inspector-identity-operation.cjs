@@ -7,7 +7,9 @@ const operation=process.argv[2];
  if(!['status','activate','deactivate','pilot'].includes(operation))throw Error('Unsupported operation');
  if(operation==='status'){
   const setting=await db.technicalSetting.findUnique({where:{key:IDENTITY_SETTING}});
-  console.log(JSON.stringify({enabled:setting?.value===true,profiles:await db.inspectorIdentityProfile.count()}));return;
+  const users=await db.user.findMany({where:{memberships:{some:{role:{in:['inspector','inspection_org']}}}},select:{id:true,roles:{select:{role:true}},memberships:{select:{role:true}}}});
+  const ids=users.filter(isInspectorSubject).map(u=>u.id);
+  console.log(JSON.stringify({enabled:setting?.value===true,profiles:await db.inspectorIdentityProfile.count(),subjectInspectors:ids.length,activeInspectorSessions:await db.session.count({where:{userId:{in:ids},revokedAt:null,expiresAt:{gt:new Date()}}}),unverifiedInspectorSessions:await db.session.count({where:{userId:{in:ids},revokedAt:null,expiresAt:{gt:new Date()},identityVerifiedAt:null}})}));return;
  }
  if(operation==='activate'||operation==='pilot'){
   const health=await fetch('http://127.0.0.1:8091/health',{signal:AbortSignal.timeout(5000)}).then(r=>r.json());
@@ -15,7 +17,8 @@ const operation=process.argv[2];
   const fs=require('node:fs');
   const release=JSON.parse(fs.readFileSync('/opt/reestr/app/build/web/release.json','utf8'));
   const version=fs.readFileSync('/opt/reestr/app/VERSION','utf8').trim();
-  if(release.version!==version||!fs.existsSync('/opt/reestr/app/build/web/face-guide/guide.js'))throw Error('Deploy matching backend and web before activation');
+  const verifiedCompatibility=process.argv[4]===version+':'+release.version;
+  if((release.version!==version&&!verifiedCompatibility)||!fs.existsSync('/opt/reestr/app/build/web/face-guide/guide.js'))throw Error('Deploy matching backend and web before activation');
  }
  await db.$transaction(async tx=>{
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(8121401)`;
