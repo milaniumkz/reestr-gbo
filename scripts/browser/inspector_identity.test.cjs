@@ -6,6 +6,13 @@ const assert=require('node:assert/strict');
   for(const fixture of [{role:'inspector',enrolled:false},{role:'inspector',enrolled:true},{role:'quality_control'},{role:'admin'}]){
    const context=await browser.newContext({viewport:{width:430,height:920},permissions:['camera']});
    await context.addInitScript(()=>{for(const [key,value] of Object.entries({accessToken:'identity-test',refreshToken:'identity-test',lastRoleCode:'inspection_org',lastOrganizationBin:'123456789012',diagnosticLocationAsked:true}))localStorage.setItem('flutter.'+key,JSON.stringify(value));localStorage.setItem('ersi-install-dismissed-at',String(Date.now()));});
+   await context.addInitScript(()=>{
+    window.__identityStreams=[];window.__identityAudio=[];
+    const media=navigator.mediaDevices;
+    if(media){const capture=media.getUserMedia.bind(media);media.getUserMedia=async constraints=>{const stream=await capture(constraints);window.__identityStreams.push(stream);return stream;};}
+    const play=HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play=function(){if(this.tagName==='AUDIO')this.addEventListener('playing',()=>window.__identityAudio.push({src:this.src,at:performance.now()}),{once:true});return play.call(this);};
+   });
    let verified=false,uploads=0,challenge;
    const errors=[];
    const page=await context.newPage();page.setDefaultTimeout(20000);
@@ -34,8 +41,9 @@ const assert=require('node:assert/strict');
      const start=Date.now();
      await page.waitForFunction(()=>!document.body.innerText.includes('ВИДЕОПРОВЕРКА ИНСПЕКТОРА'),{},{timeout:60000});
      assert.equal(uploads,1);assert(Date.now()-start>=(fixture.enrolled?19000:13000));
-     const live=await page.evaluate(()=>[...document.querySelectorAll('video')].some(v=>v.srcObject?.getTracks().some(t=>t.readyState==='live')));
+     const live=await page.evaluate(()=>window.__identityStreams.some(stream=>stream.getTracks().some(t=>t.readyState==='live')));
      assert.equal(live,false,'camera must be released after completion');
+     const audio=await page.evaluate(()=>window.__identityAudio);assert(audio.some(v=>v.src.startsWith('data:audio/wav;base64,')),'prerecorded prompts must play from prefetched memory');
      console.log('PASS real browser capture + mocked verification:',fixture.enrolled?'new login 20s':'enrollment 14s');
     }else{
      await page.getByText('МОИ ИНСПЕКЦИИ',{exact:true}).first().waitFor();

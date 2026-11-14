@@ -99,7 +99,9 @@ class _InspectorIdentityPageState extends State<InspectorIdentityPage>
         ? 'Не удалось открыть камеру. Разрешите доступ к фронтальной камере и повторите.'
         : error.toString().replaceFirst('Bad state: ', '');
     setState(() => _message = message);
-    if (!_cancelled) _voice.play(identityErrorCue(message));
+    if (!_cancelled) {
+      _voice.play(identityErrorCue(message));
+    }
   }
 
   Future<void> _prepare() async {
