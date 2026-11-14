@@ -14,7 +14,27 @@ set -euo pipefail
 staged="$1"
 commit="$2"
 web=/opt/reestr/app/build/web
-if [ -x /usr/local/bin/backup-reestr.sh ]; then /usr/local/bin/backup-reestr.sh; else /opt/reestr/app/ops/backup-reestr.sh; fi
+# A frontend-only update does not modify DB/storage. Reuse a recent complete
+# full backup when available, and always create a fresh exact web rollback below.
+recent_backup=$(python3 - <<'PYBACKUP'
+from pathlib import Path
+from datetime import datetime,timezone
+import json,re
+for path in sorted(Path('/opt/reestr/backups').iterdir(),reverse=True):
+    if not path.is_dir() or not re.fullmatch(r'\d{8}T\d{6}Z',path.name):continue
+    try:
+        manifest=json.loads((path/'manifest.json').read_text())
+        created=datetime.strptime(manifest['createdAt'],'%Y%m%dT%H%M%SZ').replace(tzinfo=timezone.utc)
+        if 0<=(datetime.now(timezone.utc)-created).total_seconds()<=3600 and manifest.get('appDir')=='/opt/reestr/app' and (path/'postgres.dump').stat().st_size>0 and (path/'storage.tar.gz').stat().st_size>0:
+            print(path);break
+    except (OSError,ValueError,KeyError):continue
+PYBACKUP
+)
+if [[ -n "$recent_backup" ]] && pg_restore --list "$recent_backup/postgres.dump" >/dev/null && gzip -t "$recent_backup/storage.tar.gz"; then
+  echo "Reusing verified recent full backup for frontend-only publication: $recent_backup"
+else
+  if [ -x /usr/local/bin/backup-reestr.sh ]; then /usr/local/bin/backup-reestr.sh; else /opt/reestr/app/ops/backup-reestr.sh; fi
+fi
 # Keep an exact frontend rollback snapshot and the existing APK checksum.
 archive="/opt/reestr/backups/web-$(date -u +%Y%m%dT%H%M%SZ)-${commit:0:12}.tar.gz"
 tar -czf "$archive" -C "$web" .
