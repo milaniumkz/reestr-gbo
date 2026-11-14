@@ -5,7 +5,7 @@ import {RequestUser} from '../common/current-user';
 import {enforceRateLimit} from '../technical/rate-limit';
 import {IdentityEngine} from './identity-engine';
 import {IdentityVault} from './identity-vault';
-import {IDENTITY_CONSENT,IDENTITY_SETTING,isInspectorSubject,similarity,repeatedVideo,confidentRecoveryMotion} from './identity-policy';
+import {IDENTITY_CONSENT,IDENTITY_SETTING,isInspectorSubject,identityEnabledFor,similarity,repeatedVideo,confidentRecoveryMotion} from './identity-policy';
 const hash=(value:string|Buffer)=>createHash('sha256').update(value).digest('hex');
 const failure='Видеопроверка не пройдена. Запишите новое видео по подсказкам.';
 @Injectable()
@@ -16,7 +16,7 @@ export class InspectorIdentityService implements OnModuleInit,OnModuleDestroy {
  onModuleDestroy(){if(this.timer)clearInterval(this.timer);}
  async status(actor:RequestUser){
   const user=await this.prisma.user.findUniqueOrThrow({where:{id:actor.sub},include:{roles:true,memberships:{select:{role:true}},identityProfile:{select:{enrolledAt:true}}}});
-  const enabled=(await this.prisma.technicalSetting.findUnique({where:{key:IDENTITY_SETTING}}))?.value===true;
+  const enabled=identityEnabledFor((await this.prisma.technicalSetting.findUnique({where:{key:IDENTITY_SETTING}}))?.value,actor.sub);
   const session=actor.sid?await this.prisma.session.findUnique({where:{id:actor.sid}}):null;
   const required=enabled&&isInspectorSubject(user);
   return {required,verified:!required||!!session?.identityVerifiedAt,enrolled:!!user.identityProfile,consentVersion:IDENTITY_CONSENT,engineReady:required?await this.engine.ready():true};
@@ -131,9 +131,24 @@ export class InspectorIdentityService implements OnModuleInit,OnModuleDestroy {
   await Promise.allSettled(oldFiles.map(path=>this.vault.remove(userId,path)));
   return {ok:true};
  }
+ private maintenanceRunning=false;
  async maintenance(){
+  if(this.maintenanceRunning)return;
+  this.maintenanceRunning=true;
+  try {
   await this.prisma.inspectorIdentityChallenge.updateMany({where:{status:{in:['READY','PROCESSING']},expiresAt:{lt:new Date()}},data:{status:'EXPIRED',reason:'Срок проверки истёк'}});
   const expired=await this.prisma.inspectorIdentityChallenge.findMany({where:{createdAt:{lt:new Date(Date.now()-7*86400000)},videoPath:{not:null}},take:50});
   for(const row of expired){await this.vault.remove(row.userId,row.videoPath!);await this.prisma.inspectorIdentityChallenge.update({where:{id:row.id},data:{videoPath:null,videoSignature:null}});}
+  for(const owner of await this.vault.owners()) {
+   const user=await this.prisma.user.findUnique({where:{id:owner},select:{id:true}});
+   if(!user){await this.vault.prune(owner,new Set(),true);continue;}
+   const profile=await this.prisma.inspectorIdentityProfile.findUnique({where:{userId:owner}});
+   const attempts=await this.prisma.inspectorIdentityChallenge.findMany({where:{userId:owner,videoPath:{not:null}},select:{videoPath:true}});
+   const keep=new Set(attempts.map(row=>row.videoPath!));
+   if(profile){keep.add(profile.referencePath);keep.add(profile.referenceVideoPath);}
+   await this.vault.prune(owner,keep);
+  }
+  }finally{this.maintenanceRunning=false;}
+
  }
 }

@@ -99,7 +99,7 @@ class _InspectorIdentityPageState extends State<InspectorIdentityPage>
         ? 'Не удалось открыть камеру. Разрешите доступ к фронтальной камере и повторите.'
         : error.toString().replaceFirst('Bad state: ', '');
     setState(() => _message = message);
-    _voice.play(identityErrorCue(message));
+    if (!_cancelled) _voice.play(identityErrorCue(message));
   }
 
   Future<void> _prepare() async {
@@ -297,7 +297,6 @@ class _InspectorIdentityPageState extends State<InspectorIdentityPage>
       }
       if (!mounted) return;
       if (result['status'] == 'VERIFIED') {
-        _voice.play('done');
         Navigator.of(context).pop(true);
         return;
       }

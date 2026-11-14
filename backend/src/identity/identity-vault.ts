@@ -41,4 +41,15 @@ export class IdentityVault {
     }
     async read(owner:string,file:string) {return this.open(await fs.readFile(this.path(owner,file)),owner);}
     async remove(owner:string,file:string) {await fs.rm(this.path(owner,file),{force:true});}
+    async owners() {return (await fs.readdir(this.root,{withFileTypes:true})).filter(v=>v.isDirectory()&&/^[a-f0-9-]{36}$/i.test(v.name)).map(v=>v.name);}
+    async prune(owner:string,keep:Set<string>,deletedOwner=false) {
+        if(!/^[a-f0-9-]{36}$/i.test(owner))throw new Error('Invalid owner');
+        for(const file of await fs.readdir(join(this.root,owner))) {
+            if(!/^[a-f0-9-]{36}\.bin$/i.test(file)||keep.has(file))continue;
+            const path=this.path(owner,file),stat=await fs.stat(path);
+            if(deletedOwner||stat.mtimeMs<Date.now()-7*86400000)await fs.rm(path,{force:true});
+        }
+        if(deletedOwner)await fs.rmdir(join(this.root,owner)).catch(()=>{});
+    }
+
 }

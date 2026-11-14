@@ -38,7 +38,7 @@ const assert=require('node:assert/strict');
      assert.equal(live,false,'camera must be released after completion');
      console.log('PASS real browser capture + mocked verification:',fixture.enrolled?'new login 20s':'enrollment 14s');
     }else{
-     await page.getByText('УЧЕБНЫЙ ОРГАН',{exact:false}).first().waitFor();
+     await page.getByText('МОИ ИНСПЕКЦИИ',{exact:true}).first().waitFor();
      assert.equal(await page.getByRole('checkbox').count(),0);assert.equal(uploads,0);
      console.log('PASS video identity exempt:',fixture.role);
     }

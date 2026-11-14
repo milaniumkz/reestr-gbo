@@ -1,4 +1,4 @@
-import {IDENTITY_SETTING,isInspectorSubject} from '../identity/identity-policy';
+import {IDENTITY_SETTING,isInspectorSubject,identityEnabledFor} from '../identity/identity-policy';
 import {accountContext} from '../observability/account-context';
 import { CanActivate, ExecutionContext, Injectable, InternalServerErrorException, UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -42,7 +42,7 @@ export class JwtAuthGuard implements CanActivate {
     const path=(request.originalUrl??request.url??'').split('?')[0];
     const identityAllowed=path.startsWith('/api/v1/auth/identity/')||['/api/v1/auth/me','/api/v1/auth/logout','/api/v1/auth/password/update'].includes(path);
     if(!identityAllowed&&!session.identityVerifiedAt&&isInspectorSubject(session.user)) {
-      const enabled=(await this.prisma.technicalSetting.findUnique({where:{key:IDENTITY_SETTING}}))?.value===true;
+      const enabled=identityEnabledFor((await this.prisma.technicalSetting.findUnique({where:{key:IDENTITY_SETTING}}))?.value,user.sub);
       if(enabled)throw new ForbiddenException({code:'INSPECTOR_IDENTITY_REQUIRED',message:'Пройдите видеоидентификацию перед работой с инспекциями'});
     }
     request.user = {...user,phone:session.user.phone,roles:session.user.roles.map(item=>item.role)};

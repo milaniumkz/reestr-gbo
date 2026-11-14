@@ -94,3 +94,7 @@ admin/.env.*
 tech/.next/
 tech/node_modules/
 artifacts/private/
+
+# Python model service / maintenance checks
+__pycache__/
+*.pyc

@@ -37,3 +37,10 @@ export function isInspectorSubject(user:{roles?:Array<{role:string}>;memberships
  const members=user.memberships??[];
  return members.some(m=>['inspector','inspection_org'].includes(m.role))&&!members.some(m=>['admin','quality_control'].includes(m.role));
 }
+
+export function identityEnabledFor(value:unknown,userId:string) {
+ if(value===true)return true;
+ if(!value||typeof value!=='object'||Array.isArray(value))return false;
+ const ids=(value as {pilotUserIds?:unknown}).pilotUserIds;
+ return Array.isArray(ids)&&ids.includes(userId);
+}
