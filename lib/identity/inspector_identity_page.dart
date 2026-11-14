@@ -107,6 +107,7 @@ class _InspectorIdentityPageState extends State<InspectorIdentityPage>
   Future<void> _prepare() async {
     if (!_consent || _busy) return;
     var autoStart = false;
+    FocusScope.of(context).unfocus();
     _voice.play('ready');
     setState(() {
       _busy = true;
@@ -174,7 +175,10 @@ class _InspectorIdentityPageState extends State<InspectorIdentityPage>
   Future<void> _record({bool playReady = true}) async {
     final camera = _camera;
     if (camera == null || _busy || _recording) return;
-    if (playReady) _voice.play('ready');
+    FocusScope.of(context).unfocus();
+    if (playReady) {
+      _voice.play('ready');
+    }
     setState(() {
       _busy = true;
       _cancelled = false;
