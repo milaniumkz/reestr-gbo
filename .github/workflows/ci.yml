@@ -111,3 +111,14 @@ jobs:
       - run: flutter analyze
       - run: flutter test
       - run: flutter build web --release --pwa-strategy=none --dart-define=API_BASE_URL=https://89-207-255-42.sslip.io/api/v1 --dart-define=APP_MODE=production
+
+  identity-engine:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pinned local video models
+        run: docker build -t reestr-identity:test services/identity
+      - name: Verify video engine without outbound network
+        run: docker run --rm --network none --read-only --tmpfs /tmp:rw,nosuid,noexec,size=256m --memory 768m --cpus 1.5 --pids-limit 128 --cap-drop ALL --security-opt no-new-privileges --entrypoint python reestr-identity:test -m unittest test_engine
