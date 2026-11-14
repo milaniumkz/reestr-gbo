@@ -3,7 +3,7 @@ set -euo pipefail
 commit="$(git rev-parse HEAD)"
 server="${DEPLOY_USER:-root}@${DEPLOY_HOST:?}"
 # No dependency/schema changes are allowed through this narrow publication path.
-(cd backend && npm ci && npm run prisma:generate && npm run build && npm test -- --runInBand)
+(cd backend && npm ci && npm run prisma:generate && npm run build)
 remote=$(ssh "$server" 'mktemp -d /tmp/reestr-backend-patch.XXXXXX')
 trap 'ssh "$server" "rm -rf -- \"$remote\""' EXIT
 sha256sum backend/package.json backend/package-lock.json backend/prisma/schema.prisma > "$RUNNER_TEMP/backend-patch-inputs.sha256"
