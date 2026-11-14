@@ -1,0 +1,18 @@
+{
+  "purpose": "On-device positioning guidance only, never identity approval",
+  "library": "@mediapipe/tasks-vision",
+  "version": "0.10.21",
+  "license": "Apache-2.0",
+  "model": "MediaPipe BlazeFace short range float16 version 1",
+  "modelSource": "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite",
+  "sha256": {
+    "blaze_face_short_range.tflite": "b4578f35940bf5a1a655214a1cce5cab13eba73c1297cd78e1a04c2380b0152f",
+    "vision_bundle.mjs": "40f4123dfcd75cfa58add046919cc6f52fde66f009ff582997c09ba54c6ba27c",
+    "wasm/vision_wasm_nosimd_internal.wasm": "3821ea9b1f7fb8c549ef2a064ef5c85750bf375c545a49fd6eea0df44a95f1f4",
+    "wasm/vision_wasm_internal.js": "4a97e2520ba506c680ecd6ba6acfb146888afa0e2746d57f205352bc6ebb82eb",
+    "wasm/vision_wasm_internal.wasm": "f00ec4731faa23b3e714d00e88d4d10e2df5c0a427d3a2b4ae6e3526fdd14ef7",
+    "wasm/vision_wasm_nosimd_internal.js": "927def7b465c51b86e4b3060f93646aca4e27121f4b8fc0483786e407ea9cf1f",
+    "vision_bundle_classic.js": "bf58c9b3f592304422947b51e1f7de360c67d4dfeaa900064352da0c5a7c9115"
+  },
+  "execution": "Dedicated Web Worker; downscaled 384px ImageBitmap; one request in flight; slower sampling during recording"
+}

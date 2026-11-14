@@ -1,4 +1,5 @@
 'use client';
+import { InspectorIdentityPanel } from './components/inspector-identity-panel';
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { withRefreshedSession } from './lib/session-action';
@@ -1786,6 +1787,9 @@ export default function AdminDashboard() {
             activity={selectedUserActivity}
             onClose={closeDetails}
           />
+        )}
+        {selectedUser && token && user?.roles.includes('super_admin') && (
+          <InspectorIdentityPanel key={selectedUser.id} token={token} userId={selectedUser.id} />
         )}
         {selectedCertificate && (
           <CertificateDetailPanel

@@ -1,0 +1,163 @@
+{
+  "voice": "Piper ru_RU-irina-medium",
+  "gender": "female",
+  "language": "ru-RU",
+  "repository": "https://huggingface.co/rhasspy/piper-voices",
+  "revision": "e7229f7d33a10e145e109b886d661984201ac3c4",
+  "modelSha256": {
+    "ru_RU-irina-medium.onnx": "8ff38212d23da300bbe3705c645e6e5b9475f0bfde01558eb17813e22acaaaaa",
+    "ru_RU-irina-medium.onnx.json": "c2ec28bb38e2b59e93b959b3e40348c1afebbd272f30fed5d41205d08e98a9d7"
+  },
+  "generator": "piper-tts==1.4.1",
+  "lengthScale": 0.78,
+  "noiseScale": 0.55,
+  "noiseWScale": 0.6,
+  "peakCeiling": 0.9,
+  "edgeSilenceSeconds": [
+    0.05,
+    0.1
+  ],
+  "runtime": "Bundled audio only; no external speech service",
+  "clips": {
+    "prepare": {
+      "text": "Поместите лицо в овал. Свет должен падать на лицо. Держите телефон неподвижно.",
+      "seconds": 5.059,
+      "sha256": "8acf71d04470fe375e74389d86b05160efc856ba0075d87bb0637ebc38fe261c"
+    },
+    "front": {
+      "text": "Смотрите прямо.",
+      "seconds": 1.033,
+      "sha256": "f8b0484f7cd8e8fcf476c4456f2fb710de5d367c5e101b9974dcc8cb0b7f3b30"
+    },
+    "TURN_LEFT": {
+      "text": "Слегка поверните голову налево.",
+      "seconds": 1.855,
+      "sha256": "cdd7631a2e593d5766319ec3329057c85639f657a5d8fe9245adce4b32d9e118"
+    },
+    "TURN_RIGHT": {
+      "text": "Слегка поверните голову направо.",
+      "seconds": 2.09,
+      "sha256": "fce10113063315ea718d3a0cc94bdb7d1624aadf6d8fd94193af39955311a53c"
+    },
+    "LOOK_UP": {
+      "text": "Поднимите подбородок.",
+      "seconds": 1.294,
+      "sha256": "07bc3a78277009220f4413ec1ac64f701d9d5ed2729322de587221e256e8cf4b"
+    },
+    "OPEN_MOUTH": {
+      "text": "Откройте рот.",
+      "seconds": 0.894,
+      "sha256": "8aeefdbc5507e6d419a8d9e350d5bb8561e911555bd7925d069d80a936810c22"
+    },
+    "BLINK": {
+      "text": "Моргните один раз.",
+      "seconds": 1.416,
+      "sha256": "69dda0528bab3b0afca3c9f1291c846515871d8b3e51f73c684f5601cceda9ea"
+    },
+    "done": {
+      "text": "Готово. Проверяем запись.",
+      "seconds": 1.9,
+      "sha256": "3f8e877fbcff09642e3274df500cac19123638a89dce9a7e7fd4948b79e6d775"
+    },
+    "retry": {
+      "text": "Проверка не пройдена. Попробуйте ещё раз.",
+      "seconds": 2.724,
+      "sha256": "b4908abfcc27a35664de9200bf8a8b08eed0d388f1991b8b56d94807196b1a72"
+    },
+    "ready": {
+      "text": "Смотрите прямо в камеру.",
+      "seconds": 1.37,
+      "sha256": "28733f3938988925a9acc6995621dfbae1103463b99e5011aabc67b7a2881c5a"
+    },
+    "guide_position": {
+      "text": "Поместите лицо в овал.",
+      "seconds": 1.263,
+      "sha256": "f6b0b2691bc36bf2b30eea58304908df9d6473934164c6cdb313249859e0ef72"
+    },
+    "guide_closer": {
+      "text": "Поднесите телефон немного ближе.",
+      "seconds": 2.027,
+      "sha256": "130bdaa69a8099839dac0bd26dd12888d430c3c2205593d6c0942206ed96028a"
+    },
+    "error_multiple": {
+      "text": "В кадре должно быть только одно лицо. Уберите лица на заднем плане и повторите запись.",
+      "seconds": 4.835,
+      "sha256": "332662d5f7ab3ef20c25b1f301c00618773dc7de41b5b6dae8fc6af08b8b5545"
+    },
+    "error_frames": {
+      "text": "Камера записала мало кадров. Закройте другие приложения и повторите запись.",
+      "seconds": 4.61,
+      "sha256": "4fe996c28c25e0e402862642c7f40d43d29cdd6468c7c0bed4cdb0c453b69e1a"
+    },
+    "error_front": {
+      "text": "Смотрите прямо в камеру. После каждого движения возвращайтесь в исходное положение и повторите запись.",
+      "seconds": 6.111,
+      "sha256": "47a92b4ce29a75a8dbfb4c19d77183224d2fb1a551e3a4cc634e4b2ead717aa4"
+    },
+    "error_position": {
+      "text": "Лицо пропадает из кадра. Поместите лицо в овал, направьте свет на лицо и повторите запись.",
+      "seconds": 5.389,
+      "sha256": "d6d1f068ff7adbef4a7ca28a4603f93808f2201cf3f06ba85a1857185e8a683c"
+    },
+    "error_blur": {
+      "text": "Изображение размыто. Протрите камеру, держите телефон неподвижно и повторите запись.",
+      "seconds": 5.36,
+      "sha256": "a4476e0186bd6a67eaa3827a3a3911706edd47807fcb0b03e24c5e1f5159b93b"
+    },
+    "error_blink": {
+      "text": "Моргание не распознано. Запишите новое видео. По команде один раз закройте и откройте глаза.",
+      "seconds": 5.778,
+      "sha256": "0f7a5e34c2f3e6de9bba4bea9927fc2376d6e22d43c97fb8db10e73f17a91596"
+    },
+    "error_chin": {
+      "text": "Движение не распознано. Запишите новое видео. По команде слегка поднимите подбородок.",
+      "seconds": 4.895,
+      "sha256": "59c7c0e28732af4efb3b345f799fbd31c16d267f0f2f6c903c5a9829d4da8dc9"
+    },
+    "error_mouth": {
+      "text": "Движение не распознано. Запишите новое видео. По команде откройте рот и снова закройте.",
+      "seconds": 5.269,
+      "sha256": "8a6bb7fe7b931017ef16c3456e311c6d394a091f7b6a2c62b63b2faf52cc586a"
+    },
+    "error_motion": {
+      "text": "Движение не распознано. Запишите новое видео и выполняйте команды после подсказки.",
+      "seconds": 5.557,
+      "sha256": "ce94a7fde78876dd35fe172c6675dafe0b1b9375c3424f4d02f740fba216bcfc"
+    },
+    "error_light": {
+      "text": "Не удалось уверенно проверить живое лицо. Уберите блики, направьте свет на лицо и повторите запись.",
+      "seconds": 5.896,
+      "sha256": "105a9da43fcfbc4c90c0b1893ac79ef36ced44063f41191e2472bb727b5d3590"
+    },
+    "error_camera_missing": {
+      "text": "Камера не найдена. Откройте приложение на устройстве с камерой.",
+      "seconds": 4.059,
+      "sha256": "b3147f785d0485c44459fac6c4a3379986886d2c3d1c173c9718bdd1fc13513c"
+    },
+    "error_camera": {
+      "text": "Не удалось открыть камеру. Разрешите доступ к камере в настройках и попробуйте ещё раз.",
+      "seconds": 5.419,
+      "sha256": "3290cc586d80d776b5dcad0496c8464ad0a2d1e2b48ac150081879443932fb9b"
+    },
+    "error_replay": {
+      "text": "Эта запись уже использовалась. Запишите новое видео с камеры.",
+      "seconds": 3.628,
+      "sha256": "88b148a08f464ddd0fc2e4a021ef3fa7568663c0a626e5b9cdded927653e240c"
+    },
+    "error_match": {
+      "text": "Не удалось подтвердить личность. Повторите запись при ровном освещении.",
+      "seconds": 3.913,
+      "sha256": "b5ba015da198100db99f285e8619c1cd12cbd7b5e9a65ef4ef9734f5cb7ca36f"
+    },
+    "error_network": {
+      "text": "Нет соединения с сервером. Проверьте интернет и повторите попытку.",
+      "seconds": 3.742,
+      "sha256": "fa4867cf26f82f9113ce00e6f3872a2da85484d207084c19f3b4d75a74ec2508"
+    },
+    "error_wait": {
+      "text": "Слишком много попыток. Повторите проверку позже.",
+      "seconds": 3.002,
+      "sha256": "7ae9bcd801feb1250d4234f67ecba49f348f630421628f496acfb4a3d2eaa4d5"
+    }
+  }
+}

@@ -28,6 +28,12 @@ on:
           - diagnose-members
           - diagnose-passwords
           - repair-server-dns
+          - identity-inventory
+          - deploy-identity-engine
+          - identity-status
+          - identity-pilot
+          - activate-inspector-identity
+          - deactivate-inspector-identity
           - photo-moderation-status
           - resume-checked-release
           - status
@@ -37,6 +43,10 @@ on:
           - inventory-inspection-data
           - purge-inspection-data
 
+      identity_pilot_user_id:
+        description: Inspector account UUID for the owner-requested functional trial
+        required: false
+        type: string
       test_manager:
         description: Private isolated test-account configuration JSON
         required: false
@@ -199,6 +209,12 @@ jobs:
             restore-confirmed-inspector) bash ops/restore-confirmed-inspector.sh ;;
             diagnose-members) bash ops/diagnose-members.sh ;;
             diagnose-passwords) bash ops/diagnose-passwords.sh ;;
+            identity-inventory) bash ops/inspector-identity-operation.sh inventory ;;
+            deploy-identity-engine) bash ops/deploy-identity-engine.sh ;;
+            identity-pilot) IDENTITY_PILOT_USER_ID="${{ github.event.inputs.identity_pilot_user_id }}" bash ops/inspector-identity-operation.sh pilot ;;
+            identity-status) bash ops/inspector-identity-operation.sh status ;;
+            activate-inspector-identity) bash ops/inspector-identity-operation.sh activate ;;
+            deactivate-inspector-identity) bash ops/inspector-identity-operation.sh deactivate ;;
             repair-server-dns) bash ops/repair-server-dns.sh ;;
             photo-moderation-status) bash ops/photo-moderation-status.sh ;;
             deploy-admin) DEPLOY_COMPONENTS=admin bash ops/deploy-production.sh "$(git rev-parse HEAD)" ;;

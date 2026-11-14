@@ -8,6 +8,8 @@ datasource db {
 }
 
 model User {
+  identityProfile InspectorIdentityProfile?
+  identityChallenges InspectorIdentityChallenge[]
   id          String    @id @default(uuid())
   phone       String    @unique
   email       String?
@@ -50,6 +52,7 @@ model UserRole {
 model Session {
   id          String    @id @default(uuid())
   userId      String
+  identityVerifiedAt DateTime?
   refreshHash String
   deviceName  String?
   ipAddress   String?
@@ -699,4 +702,38 @@ model BankInvoice {
   issuedBy User? @relation(fields:[issuedById],references:[id],onDelete:SetNull)
   @@unique([organizationId,requestKey])
   @@index([organizationId,createdAt])
+}
+
+model InspectorIdentityProfile {
+ userId String @id
+ user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+ template String
+ referencePath String
+ referenceVideoPath String
+ model String
+ consentVersion String
+ enrolledAt DateTime @default(now())
+}
+
+model InspectorIdentityChallenge {
+ id String @id @default(uuid())
+ userId String
+ user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+ sessionId String
+ passwordVersion Int
+ secretHash String
+ purpose String
+ actions Json
+ consentVersion String
+ status String @default("READY")
+ createdAt DateTime @default(now())
+ expiresAt DateTime
+ videoDigest String?
+ videoSignature String?
+ videoPath String?
+ reason String?
+ completedAt DateTime?
+ @@unique([userId,videoDigest])
+ @@index([userId,createdAt])
+ @@index([expiresAt,status])
 }
