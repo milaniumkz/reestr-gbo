@@ -1,5 +1,6 @@
+import {IDENTITY_SETTING,isInspectorSubject} from '../identity/identity-policy';
 import {accountContext} from '../observability/account-context';
-import { CanActivate, ExecutionContext, Injectable, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
+import { CanActivate, ExecutionContext, Injectable, InternalServerErrorException, UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
@@ -23,7 +24,7 @@ export class JwtAuthGuard implements CanActivate {
     ]);
     if (isPublic) return true;
 
-    const request = context.switchToHttp().getRequest<{ headers: Record<string, string>; user?: RequestUser }>();
+    const request = context.switchToHttp().getRequest<{ headers: Record<string, string>; originalUrl?:string; url?:string; method?:string; user?: RequestUser }>();
     const header = request.headers.authorization ?? '';
     const token = header.startsWith('Bearer ') ? header.slice(7) : '';
     if (!token) throw new UnauthorizedException();
@@ -31,13 +32,19 @@ export class JwtAuthGuard implements CanActivate {
     if (!user.sid || user.scope !== 'session') throw new UnauthorizedException();
     const session = await this.prisma.session.findUnique({
       where: { id: user.sid },
-      select: { expiresAt: true, revokedAt: true, user: {select:{id:true,phone:true,isBlocked:true,mustChangePassword:true,passwordVersion:true,roles:{select:{role:true}}}} },
+      select: { identityVerifiedAt:true, expiresAt: true, revokedAt: true, user: {select:{id:true,phone:true,isBlocked:true,mustChangePassword:true,passwordVersion:true,memberships:{select:{role:true}},roles:{select:{role:true}}}} },
     });
     if(session&&session.user.id===user.sub){accountContext({actorId:user.sub,sessionId:user.sid,verified:false,reasonCode:session.revokedAt?'session_revoked':session.expiresAt<=new Date()?'session_expired':session.user.isBlocked?'account_blocked':session.user.mustChangePassword?'password_change_required':session.user.passwordVersion!==user.pv?'session_version_changed':undefined});}
     if (!session || session.revokedAt || session.expiresAt <= new Date() || session.user.id !== user.sub || session.user.isBlocked || session.user.mustChangePassword || session.user.passwordVersion !== user.pv) {
       throw new UnauthorizedException();
     }
     accountContext({actorId:user.sub,sessionId:user.sid,verified:true});
+    const path=(request.originalUrl??request.url??'').split('?')[0];
+    const identityAllowed=path.startsWith('/api/v1/auth/identity/')||['/api/v1/auth/me','/api/v1/auth/logout','/api/v1/auth/password/update'].includes(path);
+    if(!identityAllowed&&!session.identityVerifiedAt&&isInspectorSubject(session.user)) {
+      const enabled=(await this.prisma.technicalSetting.findUnique({where:{key:IDENTITY_SETTING}}))?.value===true;
+      if(enabled)throw new ForbiddenException({code:'INSPECTOR_IDENTITY_REQUIRED',message:'Пройдите видеоидентификацию перед работой с инспекциями'});
+    }
     request.user = {...user,phone:session.user.phone,roles:session.user.roles.map(item=>item.role)};
     return true;
   }

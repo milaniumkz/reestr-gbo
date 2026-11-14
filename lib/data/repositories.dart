@@ -845,6 +845,7 @@ class AppRepositories {
   }
 
   final ApiClient _api;
+  ApiClient get api => _api;
   set onSessionInvalidated(void Function()? callback) {
     _api.onSessionInvalidated = callback;
   }

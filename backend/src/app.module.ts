@@ -1,3 +1,4 @@
+import {InspectorIdentityModule} from './identity/identity.module';
 import {TechnicalModule} from './technical/technical.module';
 import {ObservabilityModule} from './observability/observability.module';
 import {PasswordRecoveryModule} from './technical/password-recovery.module';
@@ -43,6 +44,7 @@ import { VehiclesModule } from './vehicles/vehicles.module';
     EquipmentModule,
     HealthModule,
     AuthModule,
+    InspectorIdentityModule,
     UsersModule,
     VehiclesModule,
     OrganizationsModule,

@@ -807,3 +807,13 @@ export function markNotificationRead(token: string, id: string) {
 export function deleteNotification(token: string, id: string) {
   return del<NotificationRow>(`/notifications/${id}`, token);
 }
+
+export type InspectorIdentityInfo = {enrolled:boolean;enrolledAt?:string;history:Array<{id:string;status:string;purpose:string;reason?:string;createdAt:string;hasVideo:boolean}>};
+export const getInspectorIdentity = (token:string,id:string) => api<InspectorIdentityInfo>(`/auth/identity/admin/${id}`,token);
+export const resetInspectorIdentity = (token:string,id:string,reason:string) => post<{ok:boolean}>(`/auth/identity/admin/${id}/reset`,{reason},token);
+export async function inspectorIdentityVideo(token:string,id:string,challengeId?:string) {
+ const path=`/auth/identity/admin/${id}/video${challengeId?`?challengeId=${encodeURIComponent(challengeId)}`:''}`;
+ const response=await fetch(`${API_URL}${path}`,{headers:{Authorization:`Bearer ${token}`},cache:'no-store'});
+ if(!response.ok)throw await apiError(response,path);
+ return response.blob();
+}

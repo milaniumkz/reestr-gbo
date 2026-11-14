@@ -1,3 +1,4 @@
+import 'identity/inspector_identity_page.dart';
 import 'widgets/inspection_address_gate.dart';
 import 'widgets/quality_certificate_uploads.dart';
 import 'platform/web_updates.dart';
@@ -730,6 +731,10 @@ class _ErsiDemoState extends State<ErsiDemo> {
         role = _roleLabelFromCode(restoredRoleCode);
       }
       if (currentUser != null) {
+        if (!await _ensureInspectorIdentity()) {
+          if (mounted) setState(() => bootstrapping = false);
+          return;
+        }
         role = _roleLabelFromCode(restoredRoleCode);
         organizations = await repositories.organizations.list();
         if (restoredRoleCode == 'inspection_org') {
@@ -1293,6 +1298,31 @@ class _ErsiDemoState extends State<ErsiDemo> {
     }
   }
 
+  Future<bool> _ensureInspectorIdentity() async {
+    if (AppEnvironment.isDemo) return true;
+    try {
+      final status = await repositories.api.getJson('/auth/identity/status');
+      if (status['required'] != true || status['verified'] == true) return true;
+      if (!mounted) return false;
+      final verified = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (_) => InspectorIdentityPage(api: repositories.api),
+        ),
+      );
+      if (verified == true) return true;
+      await _logout();
+    } catch (_) {
+      await _logout();
+      if (mounted) {
+        setState(
+          () => apiState = 'Не удалось проверить доступ. Войдите заново.',
+        );
+      }
+    }
+    return false;
+  }
+
   Future<void> _enterAuthenticated(AppUser user) async {
     if (!mounted) return;
     setState(() {
@@ -1306,6 +1336,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       }
       apiState = 'Authorized';
     });
+    if (!await _ensureInspectorIdentity()) return;
     if (_roleCode == 'inspection_org') {
       await _loadOrganizations();
       await _loadMyInspections();

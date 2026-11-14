@@ -1,0 +1,12 @@
+[
+  {
+    "file": "2.7_80x80_MiniFASNetV2.onnx",
+    "sha256": "96557b1e03d9458d338f7be168b1469be4c0c5eedfc14ddd2059e7c69a3cf8bf",
+    "source": "2.7_80x80_MiniFASNetV2.pth"
+  },
+  {
+    "file": "4_0_0_80x80_MiniFASNetV1SE.onnx",
+    "sha256": "45562a97d2f68055a6cddbd3bbea5067762c559e29657a95fdbf5329aef9a926",
+    "source": "4_0_0_80x80_MiniFASNetV1SE.pth"
+  }
+]

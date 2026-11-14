@@ -26,6 +26,9 @@ def covered(value):
 missing = []
 checked = 0
 for path in (ROOT / 'lib').rglob('*.dart'):
+    # This helper matches fragments of server errors; it does not render UI text.
+    if path.name == 'identity_error_voice.dart':
+        continue
     if 'l10n' in path.parts:
         continue
     for match in re.finditer(r'''(?<![\\\w])(['"])((?:\\.|(?!\1).)*?)\1''', path.read_text(), re.S):

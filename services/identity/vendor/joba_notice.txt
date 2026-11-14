@@ -1,0 +1,1 @@
+Original descriptor extraction supplied by user in JOBA-face-verification-source.zip, snapshot 022dd87; adapted for InterCity. No liveness was present in the original module.

@@ -30,6 +30,7 @@ class ApiClient {
     if (response.statusCode == 401 &&
         (!path.startsWith('/auth/') ||
             path.startsWith('/auth/recovery/requests') ||
+            path.startsWith('/auth/identity/') ||
             path == '/auth/password/update') &&
         await _refreshAccessToken()) {
       return getJson(path);
@@ -53,6 +54,7 @@ class ApiClient {
     if (response.statusCode == 401 &&
         (!path.startsWith('/auth/') ||
             path.startsWith('/auth/recovery/requests') ||
+            path.startsWith('/auth/identity/') ||
             path == '/auth/password/update') &&
         await _refreshAccessToken()) {
       return postJson(path, body);
@@ -76,6 +78,7 @@ class ApiClient {
     if (response.statusCode == 401 &&
         (!path.startsWith('/auth/') ||
             path.startsWith('/auth/recovery/requests') ||
+            path.startsWith('/auth/identity/') ||
             path == '/auth/password/update') &&
         await _refreshAccessToken()) {
       return patchJson(path, body);
@@ -107,6 +110,7 @@ class ApiClient {
     if (response.statusCode == 401 &&
         (!path.startsWith('/auth/') ||
             path.startsWith('/auth/recovery/requests') ||
+            path.startsWith('/auth/identity/') ||
             path == '/auth/password/update') &&
         await _refreshAccessToken()) {
       return postMultipart(

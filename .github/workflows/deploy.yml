@@ -28,6 +28,11 @@ on:
           - diagnose-members
           - diagnose-passwords
           - repair-server-dns
+          - identity-inventory
+          - deploy-identity-engine
+          - identity-status
+          - activate-inspector-identity
+          - deactivate-inspector-identity
           - photo-moderation-status
           - resume-checked-release
           - status
@@ -199,6 +204,11 @@ jobs:
             restore-confirmed-inspector) bash ops/restore-confirmed-inspector.sh ;;
             diagnose-members) bash ops/diagnose-members.sh ;;
             diagnose-passwords) bash ops/diagnose-passwords.sh ;;
+            identity-inventory) bash ops/inspector-identity-operation.sh inventory ;;
+            deploy-identity-engine) bash ops/deploy-identity-engine.sh ;;
+            identity-status) bash ops/inspector-identity-operation.sh status ;;
+            activate-inspector-identity) bash ops/inspector-identity-operation.sh activate ;;
+            deactivate-inspector-identity) bash ops/inspector-identity-operation.sh deactivate ;;
             repair-server-dns) bash ops/repair-server-dns.sh ;;
             photo-moderation-status) bash ops/photo-moderation-status.sh ;;
             deploy-admin) DEPLOY_COMPONENTS=admin bash ops/deploy-production.sh "$(git rev-parse HEAD)" ;;
