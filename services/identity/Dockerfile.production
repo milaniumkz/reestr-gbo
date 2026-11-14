@@ -6,7 +6,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY models ./models
 COPY download_models.py .
 RUN python download_models.py
-COPY engine.py documents.py test_engine.py .
+COPY engine.py documents.py test_engine.py ./
 COPY vendor/generate_patches.py ./vendor/generate_patches.py
 RUN chmod -R a+rX /app
 RUN useradd --uid 10001 --no-create-home identity

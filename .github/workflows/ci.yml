@@ -118,7 +118,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - uses: docker/setup-docker-action@v4
+        with:
+          version: v20.10.24
       - name: Build pinned local video models
-        run: docker build -f services/identity/Dockerfile.production -t reestr-identity:test services/identity
+        run: DOCKER_BUILDKIT=0 docker build -f services/identity/Dockerfile.production -t reestr-identity:test services/identity
       - name: Verify video engine without outbound network
         run: docker run --rm --network none --read-only --tmpfs /tmp:rw,nosuid,noexec,size=256m --memory 768m --cpus 1.5 --pids-limit 128 --cap-drop ALL --security-opt no-new-privileges --entrypoint python reestr-identity:test -m unittest test_engine
