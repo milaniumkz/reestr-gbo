@@ -43,6 +43,8 @@ export async function notifyPhotoReview(
       p.moderationStatus !== "local_checked" &&
       p.moderationStatus !== "approved",
   );
+  // Surface label substitution warnings even when many other documents need review.
+  uncertain.sort((a:any,b:any)=>Number(['cylinder_label','cylinder_label_2'].includes(b.type))-Number(['cylinder_label','cylinder_label_2'].includes(a.type)));
   const title = uncertain.length
     ? "Перепроверьте фотографии инспекции"
     : "Фотографии инспекции приняты для проверки";

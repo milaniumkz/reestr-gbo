@@ -9,7 +9,7 @@ export type PhotoCheck = {
   moderationCheckedAt?: Date;
   moderationReason?: string;
 };
-const MODEL = "local-screening-v3.2";
+const MODEL = "local-screening-v3.3";
 @Injectable()
 export class PhotoModerationService {
   private readonly limiter = new PhotoAnalysisLimiter();
@@ -21,7 +21,8 @@ export class PhotoModerationService {
       provider: "local",
       model: MODEL,
       authenticityGuaranteed: false,
-      analysisRevision: "v3.2-human-review",
+      analysisRevision: "v3.3-label-original-review",
+      cylinderLabelOriginality: "quality-review-required",
       load: this.limiter.status(),
     };
   }
@@ -30,7 +31,9 @@ export class PhotoModerationService {
     _fileName: string,
     _type: string,
   ): Promise<PhotoCheck> {
-    if (!this.status().enabled) return { moderationStatus: "disabled" };
+    _type = _type.endsWith("_2") ? _type.slice(0, -2) : _type;
+    if (!this.status().enabled && _type !== "cylinder_label")
+      return { moderationStatus: "disabled" };
     if (buffer.length > 12 * 1024 * 1024)
       throw new BadRequestException(
         "Максимальный размер файла для проверки — 12 МБ",
@@ -121,7 +124,7 @@ export class PhotoModerationService {
         throw new BadRequestException(
           "Обнаружены совместные признаки экрана: тёмная рамка и повторяющиеся полосы. Сфотографируйте оригинал документа вне экрана другого устройства",
         );
-      if (document) {
+      if (document || _type === "cylinder_label") {
         const native = await input
           .clone()
           .rotate()
@@ -142,7 +145,7 @@ export class PhotoModerationService {
         );
         if (focus.laplacianVariance < 8 && focus.edgeFraction < 0.003)
           throw new BadRequestException(
-            "На документе почти не различимы детали. Наведите резкость и переснимите оригинал",
+            `На ${document ? "документе" : "бирке баллона"} почти не различимы детали. Наведите резкость и переснимите оригинал`,
           );
         if (focus.laplacianVariance < 28 && focus.edgeFraction < 0.025)
           reasons.push(
@@ -161,6 +164,10 @@ export class PhotoModerationService {
         reasons.push("Повторяющиеся полосы в нескольких участках изображения");
       if (evidence.colorBands)
         reasons.push("Цветные периодические полосы: возможен муар экрана");
+      if (_type === "cylinder_label")
+        reasons.unshift(
+          "Подлинность бирки автоматически не подтверждена. Контроль качества: проверьте, что снята оригинальная бирка непосредственно на баллоне, а не распечатка, экран или изображение другого объекта",
+        );
       return reasons.length
         ? result("manual_review", reasons.join("; "))
         : result(

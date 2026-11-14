@@ -41,9 +41,19 @@ describe("local photo screening", () => {
       "screenshot.png",
       "tech_passport",
     );
-    expect(result.moderationModel).toBe("local-screening-v3.2");
+    expect(result.moderationModel).toBe("local-screening-v3.3");
     expect(result.moderationStatus).toBe("local_checked");
     expect(fetch).not.toHaveBeenCalled();
+  });
+  it.each(['cylinder_label','cylinder_label_2'])('never treats a clean %s as proof of an original label', async(type)=>{
+    const network=jest.spyOn(globalThis,'fetch');
+    const result=await new PhotoModerationService().check(await image(),'original-label.jpg',type);
+    expect(result).toMatchObject({moderationStatus:'manual_review',moderationReason:expect.stringContaining('оригинальная бирка непосредственно на баллоне')});
+    expect(network).not.toHaveBeenCalled();
+  });
+  it('still requests quality review for labels when local image checks are disabled',async()=>{
+    process.env.PHOTO_MODERATION_MODE='off';
+    expect(await new PhotoModerationService().check(await image(),'label.jpg','cylinder_label')).toMatchObject({moderationStatus:'manual_review',moderationReason:expect.stringContaining('оригинальная бирка')});
   });
   it("does not equate periodic printed text and table rules with screen bands", () => {
     const width = 320,

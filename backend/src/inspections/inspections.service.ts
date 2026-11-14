@@ -746,9 +746,14 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
           await tx.inspectionPhoto.deleteMany({where:{inspectionId:id,type,id:{not:existing.id}}});
           if(type==='tech_passport' && pdf) await tx.inspectionPhoto.deleteMany({where:{inspectionId:id,type:'tech_passport_back'}});
         }
+        const labelSlot=['cylinder_label','cylinder_label_2'].includes(type);
+        if(labelSlot) {
+          await tx.inspectionPhoto.update({where:{id:existing.id},data:{...moderation,moderationReason:moderation.moderationReason ?? null}});
+          if(moderation.moderationStatus==='manual_review')await notifyPhotoReview(tx,id,user?.sub);
+        }
         if (isCertificate && !locked[qualityUploadField]) await tx.inspection.update({where:{id},data:{[qualityUploadField]:new Date()}});
         await tx.auditLog.create({data:{actorId:user?.sub,action:"inspection.photo.duplicate_ignored",entity:"inspection",entityId:id,metadata:{photoId:existing.id,fileId:storedObject.id,type,checksum,lat,lng}}});
-        return passportSlot ? {...existing,documentVerification:documentVerification ?? null,...moderation,moderationReason:moderation.moderationReason ?? null} : existing;
+        return passportSlot ? {...existing,documentVerification:documentVerification ?? null,...moderation,moderationReason:moderation.moderationReason ?? null} : labelSlot ? {...existing,...moderation,moderationReason:moderation.moderationReason ?? null} : existing;
       }
       if(['tech_passport','tech_passport_back'].includes(type)) {
         await tx.inspectionPhoto.deleteMany({where:{inspectionId:id,type}});
