@@ -24,6 +24,16 @@ jobs:
           ssh -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 "${DEPLOY_USER:-root}@${DEPLOY_HOST}" 'bash -s' <<'REMOTE'
           set -euo pipefail
           df -h /
+          # The failed publication never produced a valid archive/manifest.
+          # Remove only this known corrupt work product; keep its DB dump and all completed backups.
+          failed_backup=/opt/reestr/backups/20261114T125421Z
+          if [[ -f "$failed_backup/storage.tar.gz" && ! -e "$failed_backup/manifest.json" ]]; then
+            if ! gzip -t "$failed_backup/storage.tar.gz" 2>/dev/null; then
+              stat -c 'Discarding corrupt incomplete archive: %s bytes' "$failed_backup/storage.tar.gz"
+              rm -- "$failed_backup/storage.tar.gz"
+            fi
+          fi
+          du -sh /opt/reestr/backups /opt/reestr/releases /opt/reestr/storage /opt/reestr/app /var/lib/docker
           if command -v docker >/dev/null; then
             docker system df
             # Image/build cache only: active containers and all volumes are retained.
