@@ -1652,7 +1652,6 @@ class _ErsiDemoState extends State<ErsiDemo> {
 
   Future<void> _captureInspectionPhoto(String kind) async {
     try {
-      final initialPosition = await _tryCurrentPosition();
       if (!mounted) return;
       final file = await _captureReviewedPhoto(
         title: kind == 'tech_passport'
@@ -1667,7 +1666,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       final filename = file.name;
       final bytes = file.bytes;
       if (!mounted) return;
-      final position = initialPosition ?? await _tryCurrentPosition();
+      final position = await _tryCurrentPosition();
       if (!mounted) return;
       setState(() {
         if (kind == 'cylinder') {

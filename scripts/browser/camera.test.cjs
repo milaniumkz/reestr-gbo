@@ -90,6 +90,28 @@ async function stopped(page) {
     await page.getByRole('button', { name: 'Launch camera' }).click();
     return page;
   }
+  // The production mobile entry point goes straight to the OS camera, with no web stream.
+  let nativePage=await context.newPage();lastPage=nativePage;
+  await installCameras(nativePage,'native-phone');await nativePage.goto(url+'?native=true');
+  const original=await nativePage.evaluate(()=>{const c=document.createElement('canvas');c.width=4000;c.height=3000;return c.toDataURL('image/jpeg',.98).split(',')[1];});
+  const directChooser=nativePage.waitForEvent('filechooser');
+  await nativePage.getByRole('button',{name:'Launch camera'}).click();
+  const directPicker=await directChooser;
+  assert.equal(await nativePage.getByRole('dialog').count(),0);
+  assert.equal(await nativePage.evaluate(()=>window.cameraTest.calls.length),0);
+  assert.equal(await nativePage.locator('input[type=file]').getAttribute('capture'),'environment');
+  await directPicker.setFiles({name:'phone-original.jpg',mimeType:'image/jpeg',buffer:Buffer.from(original,'base64')});
+  await nativePage.waitForFunction(()=>document.querySelector('#photo')?.naturalWidth===4000);
+  assert.equal((await nativePage.locator('#photo').getAttribute('src')).split(',')[1],original);
+  await nativePage.close();
+  nativePage=await context.newPage();lastPage=nativePage;
+  await installCameras(nativePage,'native-phone');await nativePage.goto(url+'?native=true');
+  const cancelChooser=nativePage.waitForEvent('filechooser');await nativePage.getByRole('button',{name:'Launch camera'}).click();await cancelChooser;
+  await nativePage.locator('input[type=file]').evaluate(input=>input.dispatchEvent(new Event('cancel')));
+  await nativePage.waitForFunction(()=>document.querySelector('#result')?.textContent==='cancelled');
+  assert.equal(await nativePage.locator('input[type=file]').count(),0);
+  assert.equal(await nativePage.evaluate(()=>window.cameraTest.calls.length),0);await nativePage.close();
+  console.log('PASS mobile default opens the OS camera directly, preserves original bytes and cancellation, and never starts web-camera capture');
   // Capture pixels from the selected external camera, not the old phone stream.
   let page = await fixture(); await waitReady(page);
   await page.getByRole('combobox', { name: 'Камера', exact: true }).selectOption('usb'); await waitReady(page);
@@ -107,7 +129,7 @@ async function stopped(page) {
   assert(Math.abs(photo.ratio - 1.6) < .01); await stopped(page);
   await page.close();
   page = await fixture({mode:'native-phone'});await waitReady(page);
-  const original=await page.evaluate(()=>{
+  const originalPhone=await page.evaluate(()=>{
     const c=document.createElement('canvas');c.width=4000;c.height=3000;
     c.getContext('2d').fillStyle='#12994a';c.getContext('2d').fillRect(0,0,4000,3000);
     return c.toDataURL('image/jpeg',.98).split(',')[1];
@@ -118,10 +140,10 @@ async function stopped(page) {
   await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
   await page.waitForTimeout(700);await stopped(page);
   const input=page.locator('input[type=file]');assert.equal(await input.getAttribute('capture'),'environment');
-  await picker.setFiles({name:'original-phone.jpg',mimeType:'image/jpeg',buffer:Buffer.from(original,'base64')});
+  await picker.setFiles({name:'original-phone.jpg',mimeType:'image/jpeg',buffer:Buffer.from(originalPhone,'base64')});
   await page.waitForFunction(()=>document.querySelector('#photo')?.naturalWidth===4000);
   const returned=await page.locator('#photo').getAttribute('src');
-  assert.equal(returned.split(',')[1],original,'native camera file must remain byte-for-byte unchanged');
+  assert.equal(returned.split(',')[1],originalPhone,'native camera file must remain byte-for-byte unchanged');
   await page.close();console.log('PASS native phone camera file unchanged, full resolution and browser camera released first');
   page = await fixture({mode:'native-phone'});await waitReady(page);
   const cancelledPicker=page.waitForEvent('filechooser');

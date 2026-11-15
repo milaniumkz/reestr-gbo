@@ -15,7 +15,13 @@ Future<PickedLocalFile?> pickLocalFile(
   double frameAspectRatio = 0.71,
   bool requireDocumentBounds = true,
 }) async {
-  if (camera) {
+  final phoneCamera =
+      camera &&
+      RegExp(
+        'Android|iPhone|iPad|iPod',
+        caseSensitive: false,
+      ).hasMatch(html.window.navigator.userAgent);
+  if (camera && !phoneCamera) {
     return captureDocumentPhoto(
       frameAspectRatio: frameAspectRatio,
       requireDocumentBounds: requireDocumentBounds,
@@ -32,13 +38,39 @@ Future<PickedLocalFile?> pickLocalFile(
     if (!completer.isCompleted) completer.complete(null);
   });
   html.document.body?.append(input);
-  input.onChange.first.then((_) async {
+  final change = input.onChange.listen((_) async {
+    if (completer.isCompleted) return;
     try {
       final file = input.files?.isNotEmpty == true ? input.files!.first : null;
       if (file == null) {
         if (!completer.isCompleted) completer.complete(null);
         return;
       }
+      if (phoneCamera) {
+        if (file.size > 12 * 1024 * 1024) {
+          throw StateError(
+            'Выберите стандартное разрешение камеры: фото до 12 МБ и 40 мегапикселей.',
+          );
+        }
+        final url = html.Url.createObjectUrlFromBlob(file);
+        final image = html.ImageElement();
+        try {
+          final loaded = image.onLoad.first.timeout(
+            const Duration(seconds: 10),
+          );
+          image.src = url;
+          await loaded;
+          if (image.naturalWidth * image.naturalHeight > 40000000) {
+            throw StateError(
+              'Выберите стандартное разрешение камеры: фото до 12 МБ и 40 мегапикселей.',
+            );
+          }
+        } finally {
+          image.src = '';
+          html.Url.revokeObjectUrl(url);
+        }
+      }
+      if (completer.isCompleted) return;
       final bytes = await _readFileBytes(file);
       if (!completer.isCompleted) {
         completer.complete(PickedLocalFile(name: file.name, bytes: bytes));
@@ -57,6 +89,7 @@ Future<PickedLocalFile?> pickLocalFile(
     );
   } finally {
     await cancel.cancel();
+    await change.cancel();
     input.remove();
   }
 }
