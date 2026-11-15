@@ -156,6 +156,14 @@ async function stopped(page) {
   console.log('PASS native phone camera cancellation resumes the browser preview');
   page = await fixture();await waitReady(page);
   await page.getByRole('button',{name:'ОТМЕНА',exact:true}).click();await stopped(page);
+  // A cylinder-label capture preserves the surrounding image, not only the guide.
+  await page.close();page=await fixture({mode:'still',query:'?full=true'});await waitReady(page);
+  await page.getByRole('button',{name:'СДЕЛАТЬ ФОТО',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('#photo')?.naturalWidth>0);
+  const full=await page.locator('#photo').evaluate(img=>({width:img.naturalWidth,height:img.naturalHeight}));
+  assert.deepEqual(full,{width:4096,height:3072});await stopped(page);await page.close();
+  console.log('PASS contextual label capture preserves the full sensor image and all surrounding edges');
+  page=await fixture();await waitReady(page);await page.getByRole('button',{name:'ОТМЕНА',exact:true}).click();await stopped(page);
   // Native still pixels must replace the lower-resolution preview without the 2200px cap.
   await page.close();
   page = await fixture({mode:'still'});await waitReady(page);

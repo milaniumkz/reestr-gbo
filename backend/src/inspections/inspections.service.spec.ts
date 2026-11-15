@@ -328,6 +328,19 @@ describe('Inspection quality control workflow', () => {
     expect(f.prisma.inspectionPhoto.update).toHaveBeenCalledWith(expect.objectContaining({where:{id:first.id},data:expect.objectContaining({moderationStatus:'manual_review'})}));
     expect(f.prisma.notification.upsert).toHaveBeenCalled();
   });
+  it('keeps one accepted current label per cylinder and preserves the previous label when replacement is refused',async()=>{
+    const f=fixture();
+    const file={originalname:'label.jpg',buffer:Buffer.from('wide-photo')};
+    await f.service.uploadPhoto('inspection_1','cylinder_label',file,f.user('inspector'));
+    expect(f.state.photos.filter(p=>p.type==='cylinder_label')).toHaveLength(1);
+    await f.service.uploadPhoto('inspection_1','cylinder_label',{...file,buffer:Buffer.from('replacement-wide-photo')},f.user('inspector'));
+    expect(f.state.photos.filter(p=>p.type==='cylinder_label')).toHaveLength(1);
+    const current=f.state.photos.find(p=>p.type==='cylinder_label');
+    f.moderation.check.mockRejectedValueOnce(new BadRequestException('Обнаружены совместные признаки экрана'));
+    await expect(f.service.uploadPhoto('inspection_1','cylinder_label',{...file,buffer:Buffer.from('screen-copy')},f.user('inspector'))).rejects.toThrow('признаки экрана');
+    expect(f.state.photos.find(p=>p.type==='cylinder_label')).toBe(current);
+    expect(f.state.photos.some(p=>p.type==='vehicle_photo')).toBe(true);
+  });
   it('keeps a single attachment when two upload requests overlap', async () => {
     const f = fixture();
     // Model PostgreSQL parent-row lock: a transaction holds it until commit.

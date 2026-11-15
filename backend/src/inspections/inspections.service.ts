@@ -748,6 +748,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
         }
         const labelSlot=['cylinder_label','cylinder_label_2'].includes(type);
         if(labelSlot) {
+          await tx.inspectionPhoto.deleteMany({where:{inspectionId:id,type,cylinderSerial:photoData.cylinderSerial,id:{not:existing.id}}});
           await tx.inspectionPhoto.update({where:{id:existing.id},data:{...moderation,moderationReason:moderation.moderationReason ?? null}});
           if(moderation.moderationStatus==='manual_review')await notifyPhotoReview(tx,id,user?.sub);
         }
@@ -755,7 +756,10 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
         await tx.auditLog.create({data:{actorId:user?.sub,action:"inspection.photo.duplicate_ignored",entity:"inspection",entityId:id,metadata:{photoId:existing.id,fileId:storedObject.id,type,checksum,lat,lng}}});
         return passportSlot ? {...existing,documentVerification:documentVerification ?? null,...moderation,moderationReason:moderation.moderationReason ?? null} : labelSlot ? {...existing,...moderation,moderationReason:moderation.moderationReason ?? null} : existing;
       }
-      if(['tech_passport','tech_passport_back'].includes(type)) {
+      if(['cylinder_label','cylinder_label_2'].includes(type)) {
+        // One current photo per cylinder label. Stored originals/audit history remain.
+        await tx.inspectionPhoto.deleteMany({where:{inspectionId:id,type,cylinderSerial:photoData.cylinderSerial}});
+      } else if(['tech_passport','tech_passport_back'].includes(type)) {
         await tx.inspectionPhoto.deleteMany({where:{inspectionId:id,type}});
         if(type==='tech_passport' && pdf) await tx.inspectionPhoto.deleteMany({where:{inspectionId:id,type:'tech_passport_back'}});
       } else if(inspection.status === "submitted" && !isCertificate){

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reestr_ts_demo/platform/local_file.dart';
 import 'package:reestr_ts_demo/widgets/captured_photo_preview.dart';
+import 'package:reestr_ts_demo/widgets/cylinder_label_photo_guide.dart';
 import 'test_fonts.dart';
 
 Future<void> _decodePhoto(WidgetTester tester) async {
@@ -14,7 +15,8 @@ Future<void> _decodePhoto(WidgetTester tester) async {
 }
 
 class _Host extends StatelessWidget {
-  const _Host(this.capture, this.done);
+  const _Host(this.capture, this.done, {this.labelContext = false});
+  final bool labelContext;
   final Future<PickedLocalFile?> Function() capture;
   final void Function(PickedLocalFile?) done;
   @override
@@ -26,6 +28,7 @@ class _Host extends StatelessWidget {
             context,
             title: 'Фото техпаспорта',
             capture: capture,
+            requireLabelContext: labelContext,
           ),
         ),
         child: const Text('Camera'),
@@ -200,6 +203,62 @@ void main() {
         find.text('Не удалось открыть фото. Переснимите его.'),
         findsOneWidget,
       );
+    },
+  );
+  testWidgets(
+    'one contextual label photo must be checked before confirmation, and retaking resets that check',
+    (tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      var captures = 0, completed = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: _Host(
+            () async {
+              captures++;
+              return first;
+            },
+            (_) => completed++,
+            labelContext: true,
+          ),
+        ),
+      );
+      await tester.tap(find.text('Camera'));
+      await tester.pumpAndSettle();
+      await _decodePhoto(tester);
+      final use = find.widgetWithText(FilledButton, 'Использовать фото');
+      expect(find.text(labelPhotoInstructions), findsOneWidget);
+      expect(tester.widget<FilledButton>(use).onPressed, isNull);
+      await tester.tap(find.byType(Checkbox));
+      await tester.pumpAndSettle();
+      expect(tester.widget<FilledButton>(use).onPressed, isNotNull);
+      expect(tester.getRect(use).bottom, lessThanOrEqualTo(640));
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Переснять'));
+      await tester.pumpAndSettle();
+      await _decodePhoto(tester);
+      expect(captures, 2);
+      expect(completed, 0);
+      expect(tester.widget<FilledButton>(use).onPressed, isNull);
+      await tester.tap(find.byType(Checkbox));
+      await tester.pumpAndSettle();
+      await tester.tap(use);
+      await tester.pumpAndSettle();
+      expect(completed, 1);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'the example explains a single full label and surrounding cylinder',
+    (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(home: Scaffold(body: CylinderLabelPhotoGuide())),
+      );
+      expect(find.text('Как снять бирку'), findsOneWidget);
+      expect(find.text(labelPhotoInstructions), findsOneWidget);
+      expect(find.byType(CustomPaint), findsWidgets);
+      expect(tester.takeException(), isNull);
     },
   );
 }
