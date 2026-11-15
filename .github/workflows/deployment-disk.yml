@@ -15,7 +15,7 @@ jobs:
       - uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
-      - name: Keep two full backups and remove obsolete builds and APK downloads
+      - name: Remove completed web-publication rollback and keep two verified full backups
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
@@ -24,4 +24,4 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
-          bash ops/reclaim-production-storage.sh
+          ssh "${DEPLOY_USER:-root}@${DEPLOY_HOST}" 'python3 /opt/reestr/app/ops/prune-backups.py /opt/reestr/backups; df -h /'
