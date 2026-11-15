@@ -17,6 +17,23 @@ http.Response pendingIdentity() => http.Response(
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
   test(
+    'identity status always uses a fresh URL instead of a cached session result',
+    () async {
+      Uri? requested;
+      final api = ApiClient(
+        baseUrl: 'https://example.test',
+        httpClient: MockClient((r) async {
+          requested = r.url;
+          return http.Response('{"required":true,"verified":false}', 200);
+        }),
+      );
+      final status = await api.getJson('/auth/identity/status');
+      expect(status['verified'], false);
+      expect(requested!.path, '/auth/identity/status');
+      expect(requested!.queryParameters['_fresh'], isNotEmpty);
+    },
+  );
+  test(
     'parallel blocked requests share one video check and resume their original requests',
     () async {
       final check = Completer<bool>();
