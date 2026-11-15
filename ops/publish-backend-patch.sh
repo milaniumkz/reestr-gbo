@@ -19,7 +19,10 @@ BACKUP_SCOPE=database bash "$staged/backup.sh"
 backup="/opt/reestr/backups/backend-patch-$(date -u +%Y%m%dT%H%M%SZ)"
 install -d -m700 "$backup"
 tar -czf "$backup/backend.tar.gz" -C "$app" backend/dist backend/src VERSION
-sha256sum "$app/build/web/release.json" "$app/build/web/downloads/ersi-gbo.apk" > "$staged/preserved.sha256"
+sha256sum "$app/build/web/release.json" > "$staged/preserved.sha256"
+if [[ -f "$app/build/web/downloads/ersi-gbo.apk" ]]; then
+ sha256sum "$app/build/web/downloads/ersi-gbo.apk" >> "$staged/preserved.sha256"
+fi
 rollback() {
  status=$?
  if [[ "$status" != 0 ]]; then

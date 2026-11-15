@@ -29,7 +29,7 @@ const assert=require('node:assert/strict');
     return route.fulfill({json});
    });
    try {
-    await page.goto('http://127.0.0.1:8787/');
+    await page.goto(process.env.APP_URL || 'http://127.0.0.1:8787/');
     await page.locator('#startup').waitFor({state:'detached',timeout:60000});
     const semantics=page.locator('flt-semantics-placeholder');if(await semantics.count())await semantics.evaluate(e=>e.click());
     if(fixture.role==='inspector'){

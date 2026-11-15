@@ -38,15 +38,20 @@ fi
 # Keep an exact frontend rollback snapshot and the existing APK checksum.
 archive="/opt/reestr/backups/web-$(date -u +%Y%m%dT%H%M%SZ)-${commit:0:12}.tar.gz"
 tar -czf "$archive" -C "$web" .
-old_apk="$(sha256sum "$web/downloads/ersi-gbo.apk" | cut -d' ' -f1)"
+old_apk=absent
+if [[ -f "$web/downloads/ersi-gbo.apk" ]]; then old_apk="$(sha256sum "$web/downloads/ersi-gbo.apk" | cut -d' ' -f1)"; fi
 # Retain previous versioned bundles so already-open clients can still load them.
 # Publish the entrypoint last; individual files are replaced through temp files.
-rsync -a --chmod=D755,F644 --delay-updates --exclude=/index.html --exclude=/release.json "$staged/" "$web/"
+rsync -a --chmod=D755,F644 --delay-updates --exclude=/index.html --exclude=/release.json --exclude=/downloads/ersi-gbo.apk --exclude=/downloads/ersi-gbo.apk.sha256 "$staged/" "$web/"
 install -m644 "$staged/index.html" "$web/.index.next.html"
 mv -f "$web/.index.next.html" "$web/index.html"
 install -m644 "$staged/release.json" "$web/.release.next.json"
 mv -f "$web/.release.next.json" "$web/release.json"
-test "$old_apk" = "$(sha256sum "$web/downloads/ersi-gbo.apk" | cut -d' ' -f1)"
+if [[ "$old_apk" == absent ]]; then
+  test ! -e "$web/downloads/ersi-gbo.apk"
+else
+  test "$old_apk" = "$(sha256sum "$web/downloads/ersi-gbo.apk" | cut -d' ' -f1)"
+fi
 printf '%s\n' "$commit" > "$web/frontend-commit.txt"
 REMOTE
 curl --fail --silent --show-error https://89-207-255-42.sslip.io/install.js -o "$RUNNER_TEMP/public-install.js"

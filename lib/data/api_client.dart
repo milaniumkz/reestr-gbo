@@ -139,7 +139,18 @@ class ApiClient {
     return response.bodyBytes;
   }
 
-  Uri _uri(String path) => Uri.parse('$baseUrl$path');
+  Uri _uri(String path) {
+    final uri = Uri.parse('$baseUrl$path');
+    if (path.split('?').first == '/auth/identity/status') {
+      return uri.replace(
+        queryParameters: {
+          ...uri.queryParameters,
+          '_fresh': '${DateTime.now().microsecondsSinceEpoch}',
+        },
+      );
+    }
+    return uri;
+  }
 
   Map<String, String> get _headers => {
     if (_accessToken != null) 'Authorization': 'Bearer $_accessToken',

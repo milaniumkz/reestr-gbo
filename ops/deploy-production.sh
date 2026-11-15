@@ -91,8 +91,10 @@ NEXT_PUBLIC_API_URL='${PUBLIC_ORIGIN}/api/v1' npm run build
 cd '$REMOTE_RELEASE'
 if [ '$DEPLOY_COMPONENTS' = all ]; then
 test -f build/web/main.dart.js
+if [ -f build/web/downloads/ersi-gbo.apk ]; then
 test -s build/web/downloads/ersi-gbo.apk
 (cd build/web/downloads && sha256sum -c ersi-gbo.apk.sha256)
+fi
 python3 scripts/stamp_web_frontend.py '$COMMIT_SHA'
 fi
 
