@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart' hide Text;
 import '../platform/local_file.dart';
 import 'uppercase_text.dart';
+import 'cylinder_label_photo_guide.dart';
 
 enum _PhotoDecision { use, retake }
 
@@ -11,6 +12,7 @@ Future<PickedLocalFile?> capturePhotoWithPreview(
   BuildContext context, {
   required String title,
   required Future<PickedLocalFile?> Function() capture,
+  bool requireLabelContext = false,
 }) async {
   while (context.mounted) {
     final file = await capture();
@@ -18,7 +20,11 @@ Future<PickedLocalFile?> capturePhotoWithPreview(
     final decision = await Navigator.of(context).push<_PhotoDecision>(
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (_) => _CapturedPhotoPreview(title: title, file: file),
+        builder: (_) => _CapturedPhotoPreview(
+          title: title,
+          file: file,
+          requireLabelContext: requireLabelContext,
+        ),
       ),
     );
     if (!context.mounted || decision == null) return null;
@@ -28,7 +34,12 @@ Future<PickedLocalFile?> capturePhotoWithPreview(
 }
 
 class _CapturedPhotoPreview extends StatefulWidget {
-  const _CapturedPhotoPreview({required this.title, required this.file});
+  const _CapturedPhotoPreview({
+    required this.title,
+    required this.file,
+    required this.requireLabelContext,
+  });
+  final bool requireLabelContext;
   final String title;
   final PickedLocalFile file;
   @override
@@ -38,6 +49,7 @@ class _CapturedPhotoPreview extends StatefulWidget {
 class _CapturedPhotoPreviewState extends State<_CapturedPhotoPreview> {
   late final MemoryImage _image;
   bool _readable = false;
+  bool _contextConfirmed = false;
   @override
   void initState() {
     super.initState();
@@ -110,10 +122,21 @@ class _CapturedPhotoPreviewState extends State<_CapturedPhotoPreview> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  'Увеличьте фото и проверьте резкость. Если текст размыт — переснимите.',
+                Text(
+                  widget.requireLabelContext
+                      ? labelPhotoInstructions
+                      : 'Увеличьте фото и проверьте резкость. Если текст размыт — переснимите.',
                   textAlign: TextAlign.center,
                 ),
+                if (widget.requireLabelContext)
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: _contextConfirmed,
+                    onChanged: (value) =>
+                        setState(() => _contextConfirmed = value == true),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: const Text(labelPhotoConfirmation),
+                  ),
                 const SizedBox(height: 12),
                 Row(
                   children: [
@@ -128,7 +151,10 @@ class _CapturedPhotoPreviewState extends State<_CapturedPhotoPreview> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: FilledButton(
-                        onPressed: _readable
+                        onPressed:
+                            _readable &&
+                                (!widget.requireLabelContext ||
+                                    _contextConfirmed)
                             ? () =>
                                   Navigator.of(context).pop(_PhotoDecision.use)
                             : null,

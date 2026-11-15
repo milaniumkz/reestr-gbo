@@ -32,6 +32,7 @@ import 'platform/browser_geolocation.dart';
 import 'platform/local_file_picker.dart';
 import 'widgets/document_camera_screen.dart';
 import 'widgets/captured_photo_preview.dart';
+import 'widgets/cylinder_label_photo_guide.dart';
 
 void main() => runApp(const ErsiGboApp());
 
@@ -1121,6 +1122,27 @@ class _ErsiDemoState extends State<ErsiDemo> {
       return;
     }
     if (notification.entity == 'inspection') {
+      if (_isQualityControl &&
+          RegExp(
+            r'^[a-fA-F0-9]{8}-[a-fA-F0-9-]{27}$',
+          ).hasMatch(notification.entityId)) {
+        try {
+          final detail = await repositories.inspections.detail(
+            notification.entityId,
+          );
+          if (!mounted) return;
+          await _openInspectionDetail(detail);
+        } catch (error) {
+          if (mounted) {
+            setState(
+              () => apiState = error is ApiException
+                  ? error.message
+                  : 'Не удалось загрузить данные',
+            );
+          }
+        }
+        return;
+      }
       go(_roleCode == 'inspection_org' ? 14 : 37);
       return;
     }
@@ -1622,11 +1644,13 @@ class _ErsiDemoState extends State<ErsiDemo> {
     required String title,
     required double frameAspectRatio,
     required bool requireDocumentBounds,
+    bool labelContext = false,
   }) {
     final languageCode = Localizations.localeOf(context).languageCode;
     return capturePhotoWithPreview(
       context,
       title: title,
+      requireLabelContext: labelContext,
       capture: () async {
         if (kIsWeb) {
           return pickLocalFile(
@@ -1635,6 +1659,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
             languageCode: languageCode,
             frameAspectRatio: frameAspectRatio,
             requireDocumentBounds: requireDocumentBounds,
+            preserveFullFrame: labelContext,
           );
         }
         return Navigator.of(context).push<PickedLocalFile>(
@@ -1661,6 +1686,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
             : 'Фото автомобиля',
         frameAspectRatio: 1.6,
         requireDocumentBounds: kind == 'tech_passport',
+        labelContext: kind == 'cylinder',
       );
       if (file == null) return;
       final filename = file.name;
@@ -1786,6 +1812,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       if (camera) {
         file = await _captureReviewedPhoto(
           title: label,
+          labelContext: type == 'cylinder_label' || type == 'cylinder_label_2',
           requireDocumentBounds: type != 'cylinder_label_2',
           frameAspectRatio:
               (type == 'tech_passport_back' || type == 'cylinder_label_2')
@@ -1797,9 +1824,18 @@ class _ErsiDemoState extends State<ErsiDemo> {
             (type == 'tech_passport_back' || type == 'cylinder_label_2')
             ? const ['jpg', 'jpeg', 'png']
             : const ['pdf', 'jpg', 'jpeg', 'png'];
-        file = kIsWeb
-            ? await pickLocalFile(extensions)
-            : await _pickPluginFile(extensions);
+        Future<PickedLocalFile?> pick() =>
+            kIsWeb ? pickLocalFile(extensions) : _pickPluginFile(extensions);
+        if (type == 'cylinder_label' || type == 'cylinder_label_2') {
+          file = await capturePhotoWithPreview(
+            context,
+            title: label,
+            capture: pick,
+            requireLabelContext: true,
+          );
+        } else {
+          file = await pick();
+        }
       }
       if (file == null) {
         if (mounted) setState(() => apiState = 'Документ не выбран');
@@ -3000,6 +3036,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       ),
       18 => _PhotoStep(
         step: 4,
+        labelPhoto: true,
         title: usesTwoCylinders
             ? 'Фото бирки первого баллона'
             : 'Фото бирки баллона',
@@ -3044,7 +3081,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
                 ],
               )
             : null,
-        caption: 'Поместите бирку в рамку',
+        caption: 'Бирка целиком и баллон вокруг неё',
         photoName: cylinderPhotoName,
         photoBytes: cylinderPhotoBytes,
         uploaded: cylinderPhotoUploaded,
@@ -7007,6 +7044,7 @@ class _PhotoStep extends StatelessWidget {
     required this.uploaded,
     this.locked = false,
     this.passportMode = false,
+    this.labelPhoto = false,
     this.onUploadPhoto,
     this.onUploadPdf,
     this.existingFiles = const [],
@@ -7022,6 +7060,7 @@ class _PhotoStep extends StatelessWidget {
   final bool uploaded;
   final bool locked;
   final bool passportMode;
+  final bool labelPhoto;
   final VoidCallback? onUploadPhoto, onUploadPdf;
   final List<InspectionFileInfo> existingFiles;
   final Widget? secondary;
@@ -7042,6 +7081,7 @@ class _PhotoStep extends StatelessWidget {
         children: [
           _ProgressDots(step: step),
           const SizedBox(height: 14),
+          if (labelPhoto) const CylinderLabelPhotoGuide(),
           if (passportMode) ...[
             _PrimaryButton(
               text: 'Сфотографировать бумажный техпаспорт',

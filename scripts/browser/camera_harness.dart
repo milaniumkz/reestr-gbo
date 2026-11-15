@@ -14,6 +14,7 @@ void main() {
           ? await pickLocalFile(const ['jpg'], camera: true)
           : await captureDocumentPhoto(
               frameAspectRatio: 1.6,
+              preserveFullFrame: Uri.base.queryParameters['full'] == 'true',
               requireDocumentBounds:
                   Uri.base.queryParameters['document'] == 'true',
               languageCode: Uri.base.queryParameters['lang'] ?? 'ru',

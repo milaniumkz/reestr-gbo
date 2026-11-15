@@ -9,7 +9,7 @@ export type PhotoCheck = {
   moderationCheckedAt?: Date;
   moderationReason?: string;
 };
-const MODEL = "local-screening-v3.3";
+const MODEL = "local-screening-v3.4";
 @Injectable()
 export class PhotoModerationService {
   private readonly limiter = new PhotoAnalysisLimiter();
@@ -21,7 +21,7 @@ export class PhotoModerationService {
       provider: "local",
       model: MODEL,
       authenticityGuaranteed: false,
-      analysisRevision: "v3.3-label-original-review",
+      analysisRevision: "v3.4-single-label-context-review",
       cylinderLabelOriginality: "quality-review-required",
       load: this.limiter.status(),
     };
@@ -166,7 +166,7 @@ export class PhotoModerationService {
         reasons.push("Цветные периодические полосы: возможен муар экрана");
       if (_type === "cylinder_label")
         reasons.unshift(
-          "Подлинность бирки автоматически не подтверждена. Контроль качества: проверьте, что снята оригинальная бирка непосредственно на баллоне, а не распечатка, экран или изображение другого объекта",
+          "Подлинность бирки автоматически не подтверждена. Контроль качества: проверьте, что снята оригинальная бирка непосредственно на баллоне. На одном общем снимке должны быть видны вся бирка или выбитая маркировка и баллон по краям, а номер и даты должны читаться. Исключите края листа A4, корпус телефона или монитора, распечатку и изображение другого объекта",
         );
       return reasons.length
         ? result("manual_review", reasons.join("; "))

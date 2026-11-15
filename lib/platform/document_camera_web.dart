@@ -12,6 +12,7 @@ import 'dart:math' as math;
 Future<PickedLocalFile?> captureDocumentPhoto({
   double frameAspectRatio = 0.71,
   bool requireDocumentBounds = true,
+  bool preserveFullFrame = false,
   String languageCode = 'ru',
 }) async {
   final devices = html.window.navigator.mediaDevices;
@@ -109,7 +110,9 @@ Future<PickedLocalFile?> captureDocumentPhoto({
         'position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(90%,${frameAspectRatio * 70}vh);aspect-ratio:$frameAspectRatio;border:3px solid white;border-radius:12px;box-shadow:0 0 0 999px rgba(0,0,0,.35);pointer-events:none';
   final hint = html.DivElement()
     ..text = translateKazakh(
-      'В СНИМОК ПОПАДЁТ ТОЛЬКО ОБЛАСТЬ ВНУТРИ РАМКИ',
+      preserveFullFrame
+          ? 'СОХРАНИТСЯ ВЕСЬ КАДР. ОСТАВЬТЕ БАЛЛОН ВОКРУГ БИРКИ'
+          : 'В СНИМОК ПОПАДЁТ ТОЛЬКО ОБЛАСТЬ ВНУТРИ РАМКИ',
       languageCode,
     ).toUpperCase()
     ..style.cssText =
@@ -189,7 +192,11 @@ Future<PickedLocalFile?> captureDocumentPhoto({
         ? '#65ffad'
         : '#ffb74d';
     hint.text = translateKazakh(
-      ready ? documentAutoMessage : documentManualMessage,
+      preserveFullFrame
+          ? 'СОХРАНИТСЯ ВЕСЬ КАДР. ОСТАВЬТЕ БАЛЛОН ВОКРУГ БИРКИ'
+          : ready
+          ? documentAutoMessage
+          : documentManualMessage,
       languageCode,
     ).toUpperCase();
     if (ready &&
@@ -257,8 +264,12 @@ Future<PickedLocalFile?> captureDocumentPhoto({
         snapshot.width!.toDouble(),
         snapshot.height! * video.videoWidth / video.videoHeight,
       );
-      final sourceWidth = widthInView / scale / video.videoWidth * viewWidth;
-      final sourceHeight = sourceWidth / frameAspectRatio;
+      final sourceWidth = preserveFullFrame
+          ? snapshot.width!.toDouble()
+          : widthInView / scale / video.videoWidth * viewWidth;
+      final sourceHeight = preserveFullFrame
+          ? snapshot.height!.toDouble()
+          : sourceWidth / frameAspectRatio;
       final outputWidth = sourceWidth.round();
       final outputHeight = sourceHeight.round();
       canvas = html.CanvasElement(width: outputWidth, height: outputHeight);
@@ -326,8 +337,11 @@ Future<PickedLocalFile?> captureDocumentPhoto({
       bounds.height / video.videoHeight,
     );
     final width = math.min(
-      video.videoWidth * scale * .9,
-      video.videoHeight * scale * .82 * frameAspectRatio,
+      video.videoWidth * scale * (preserveFullFrame ? .5 : .9),
+      video.videoHeight *
+          scale *
+          (preserveFullFrame ? .6 : .82) *
+          frameAspectRatio,
     );
     frame.style.width = '${width}px';
     frame.style.height = '${width / frameAspectRatio}px';

@@ -6,4 +6,5 @@ Future<PickedLocalFile?> pickLocalFile(
   String languageCode = 'ru',
   double frameAspectRatio = 0.71,
   bool requireDocumentBounds = true,
+  bool preserveFullFrame = false,
 }) async => null;
