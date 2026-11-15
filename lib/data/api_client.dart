@@ -16,13 +16,18 @@ class ApiClient {
   bool _sessionInvalidated = false;
   Future<bool>? _refreshing;
   void Function()? onSessionInvalidated;
+  Future<bool> Function()? onIdentityRequired;
+  Future<bool>? _identityRecovering;
 
   void setAccessToken(String? token) {
     _accessToken = token;
     if (token != null) _sessionInvalidated = false;
   }
 
-  Future<Map<String, dynamic>> getJson(String path) async {
+  Future<Map<String, dynamic>> getJson(
+    String path, {
+    bool recoverIdentity = true,
+  }) async {
     final response = await _http.get(
       _uri(path),
       headers: {..._headers, ...await ClientTelemetry.headers()},
@@ -33,15 +38,19 @@ class ApiClient {
             path.startsWith('/auth/identity/') ||
             path == '/auth/password/update') &&
         await _refreshAccessToken()) {
-      return getJson(path);
+      return getJson(path, recoverIdentity: recoverIdentity);
+    }
+    if (recoverIdentity && await _recoverRequiredIdentity(response, path)) {
+      return getJson(path, recoverIdentity: false);
     }
     return _decode(response);
   }
 
   Future<Map<String, dynamic>> postJson(
     String path,
-    Map<String, dynamic> body,
-  ) async {
+    Map<String, dynamic> body, {
+    bool recoverIdentity = true,
+  }) async {
     final response = await _http.post(
       _uri(path),
       headers: {
@@ -57,15 +66,19 @@ class ApiClient {
             path.startsWith('/auth/identity/') ||
             path == '/auth/password/update') &&
         await _refreshAccessToken()) {
-      return postJson(path, body);
+      return postJson(path, body, recoverIdentity: recoverIdentity);
+    }
+    if (recoverIdentity && await _recoverRequiredIdentity(response, path)) {
+      return postJson(path, body, recoverIdentity: false);
     }
     return _decode(response);
   }
 
   Future<Map<String, dynamic>> patchJson(
     String path,
-    Map<String, dynamic> body,
-  ) async {
+    Map<String, dynamic> body, {
+    bool recoverIdentity = true,
+  }) async {
     final response = await _http.patch(
       _uri(path),
       headers: {
@@ -81,7 +94,10 @@ class ApiClient {
             path.startsWith('/auth/identity/') ||
             path == '/auth/password/update') &&
         await _refreshAccessToken()) {
-      return patchJson(path, body);
+      return patchJson(path, body, recoverIdentity: recoverIdentity);
+    }
+    if (recoverIdentity && await _recoverRequiredIdentity(response, path)) {
+      return patchJson(path, body, recoverIdentity: false);
     }
     return _decode(response);
   }
@@ -93,6 +109,7 @@ class ApiClient {
     required List<int> bytes,
     String? contentType,
     Map<String, String> fields = const {},
+    bool recoverIdentity = true,
   }) async {
     final request = http.MultipartRequest('POST', _uri(path));
     request.headers.addAll({..._headers, ...await ClientTelemetry.headers()});
@@ -120,23 +137,71 @@ class ApiClient {
         bytes: bytes,
         contentType: contentType,
         fields: fields,
+        recoverIdentity: recoverIdentity,
+      );
+    }
+    if (recoverIdentity && await _recoverRequiredIdentity(response, path)) {
+      return postMultipart(
+        path,
+        fieldName: fieldName,
+        filename: filename,
+        bytes: bytes,
+        contentType: contentType,
+        fields: fields,
+        recoverIdentity: false,
       );
     }
     return _decode(response);
   }
 
-  Future<Uint8List> getBytes(String path) async {
+  Future<Uint8List> getBytes(String path, {bool recoverIdentity = true}) async {
     final response = await _http.get(
       _uri(path),
       headers: {..._headers, ...await ClientTelemetry.headers()},
     );
     if (response.statusCode == 401 && await _refreshAccessToken()) {
-      return getBytes(path);
+      return getBytes(path, recoverIdentity: recoverIdentity);
+    }
+    if (recoverIdentity && await _recoverRequiredIdentity(response, path)) {
+      return getBytes(path, recoverIdentity: false);
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       _decode(response);
     }
     return response.bodyBytes;
+  }
+
+  Future<bool> _recoverRequiredIdentity(
+    http.Response response,
+    String path,
+  ) async {
+    if (response.statusCode != 403 ||
+        path.startsWith('/auth/') ||
+        onIdentityRequired == null) {
+      return false;
+    }
+    try {
+      final body = jsonDecode(response.body);
+      if (body is! Map ||
+          (body['code'] != 'INSPECTOR_IDENTITY_REQUIRED' &&
+              body['message'] !=
+                  'Пройдите видеоидентификацию перед работой с инспекциями')) {
+        return false;
+      }
+    } catch (_) {
+      return false;
+    }
+    final pending = _identityRecovering;
+    if (pending != null) return pending;
+    final next = Future<bool>.sync(
+      onIdentityRequired!,
+    ).catchError((Object _) => false);
+    _identityRecovering = next;
+    try {
+      return await next;
+    } finally {
+      if (identical(_identityRecovering, next)) _identityRecovering = null;
+    }
   }
 
   Uri _uri(String path) => Uri.parse('$baseUrl$path');

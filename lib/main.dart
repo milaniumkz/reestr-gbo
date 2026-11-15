@@ -657,6 +657,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
   void initState() {
     super.initState();
     repositories.onSessionInvalidated = _onSessionInvalidated;
+    repositories.api.onIdentityRequired = _ensureInspectorIdentity;
     _loadInitialData();
   }
 
@@ -664,6 +665,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
   void dispose() {
     _qualityQueueTimer?.cancel();
     repositories.onSessionInvalidated = null;
+    repositories.api.onIdentityRequired = null;
     super.dispose();
   }
 
@@ -2318,8 +2320,13 @@ class _ErsiDemoState extends State<ErsiDemo> {
       if (!mounted) return;
       setState(() => apiState = '');
       go(16);
-    } catch (_) {
-      if (mounted) setState(() => apiState = 'Ошибка проверки номера');
+    } catch (error) {
+      if (mounted)
+        setState(
+          () => apiState = error is ApiException
+              ? error.message
+              : 'Ошибка проверки номера',
+        );
     } finally {
       _ownerNextBusy = false;
     }
