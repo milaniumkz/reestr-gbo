@@ -6,12 +6,31 @@ const url = process.env.CAMERA_TEST_URL || 'http://127.0.0.1:8084/';
 
 async function installCameras(page, mode = 'normal', initial = ['back', 'usb']) {
   await page.addInitScript(({ mode, initial }) => {
+    if (mode === 'native-phone') Object.defineProperty(navigator,'userAgent',{value:'Android camera test'});
     const devices = navigator.mediaDevices;
     const realEnumerate = devices.enumerateDevices.bind(devices);
     const state = window.cameraTest = {
       mode, ids: initial, streams: [], calls: [], failUsb: false,
-      denied: mode === 'denied', delayed: mode === 'delayed', failEnumerate: false,
+      denied: mode === 'denied', delayed: mode === 'delayed', failEnumerate: false, photos: [], jpegQualities: [],
     };
+    const encode = HTMLCanvasElement.prototype.toDataURL;
+    HTMLCanvasElement.prototype.toDataURL = function(type, quality) {
+      if (type === 'image/jpeg') state.jpegQualities.push(quality);
+      return encode.call(this, type, quality);
+    };
+    window.ImageCapture = mode.startsWith('still') ? class {
+      constructor(track) { this.track = track; }
+      async getPhotoCapabilities() { return {imageWidth:{max:4096},imageHeight:{max:3072}}; }
+      async takePhoto(settings) {
+        state.photos.push({id:this.track.getSettings().deviceId,settings});
+        if (mode === 'still-fails') throw new DOMException('Unsupported','NotSupportedError');
+        if (mode === 'still-delayed') await new Promise(resolve=>state.resolvePhoto=resolve);
+        const canvas=document.createElement('canvas');canvas.width=4096;canvas.height=3072;
+        const ctx=canvas.getContext('2d');ctx.fillStyle='#19d14c';ctx.fillRect(0,0,4096,3072);
+        ctx.fillStyle='#050505';for(let x=0;x<4096;x+=64)ctx.fillRect(x,0,2,3072);
+        return new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.99));
+      }
+    } : undefined;
     const names = { back: 'Phone rear camera', usb: 'USB Endoscope', extra: 'External camera' };
     devices.enumerateDevices = async () => {
       if (state.failEnumerate) throw new Error('Enumeration unavailable');
@@ -86,6 +105,69 @@ async function stopped(page) {
   });
   assert(photo.pixel[2] > 180 && photo.pixel[0] < 60, JSON.stringify(photo));
   assert(Math.abs(photo.ratio - 1.6) < .01); await stopped(page);
+  await page.close();
+  page = await fixture({mode:'native-phone'});await waitReady(page);
+  const original=await page.evaluate(()=>{
+    const c=document.createElement('canvas');c.width=4000;c.height=3000;
+    c.getContext('2d').fillStyle='#12994a';c.getContext('2d').fillRect(0,0,4000,3000);
+    return c.toDataURL('image/jpeg',.98).split(',')[1];
+  });
+  const chooser=page.waitForEvent('filechooser');
+  await page.getByRole('button',{name:'Камера телефона — оригинал',exact:true}).click();
+  const picker=await chooser;await stopped(page);
+  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+  await page.waitForTimeout(700);await stopped(page);
+  const input=page.locator('input[type=file]');assert.equal(await input.getAttribute('capture'),'environment');
+  await picker.setFiles({name:'original-phone.jpg',mimeType:'image/jpeg',buffer:Buffer.from(original,'base64')});
+  await page.waitForFunction(()=>document.querySelector('#photo')?.naturalWidth===4000);
+  const returned=await page.locator('#photo').getAttribute('src');
+  assert.equal(returned.split(',')[1],original,'native camera file must remain byte-for-byte unchanged');
+  await page.close();console.log('PASS native phone camera file unchanged, full resolution and browser camera released first');
+  page = await fixture({mode:'native-phone'});await waitReady(page);
+  const cancelledPicker=page.waitForEvent('filechooser');
+  await page.getByRole('button',{name:'Камера телефона — оригинал',exact:true}).click();
+  await cancelledPicker;await stopped(page);
+  await page.locator('input[type=file]').evaluate(input=>input.dispatchEvent(new Event('cancel')));
+  await waitReady(page);
+  assert.equal(await page.locator('#photo').count(),0);
+  await page.getByRole('button',{name:'ОТМЕНА',exact:true}).click();await stopped(page);await page.close();
+  console.log('PASS native phone camera cancellation resumes the browser preview');
+  page = await fixture();await waitReady(page);
+  await page.getByRole('button',{name:'ОТМЕНА',exact:true}).click();await stopped(page);
+  // Native still pixels must replace the lower-resolution preview without the 2200px cap.
+  await page.close();
+  page = await fixture({mode:'still'});await waitReady(page);
+  await page.locator('select').selectOption('usb');await waitReady(page);
+  assert(await page.evaluate(()=>window.cameraTest.calls.at(-1).video.width.ideal>=4096));
+  await page.getByRole('button',{name:'СДЕЛАТЬ ФОТО',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('#photo')?.naturalWidth>0);
+  const still=await page.evaluate(()=>{
+    const img=document.querySelector('#photo'),c=document.createElement('canvas');c.width=c.height=1;c.getContext('2d').drawImage(img,0,0,1,1);
+    return {width:img.naturalWidth,height:img.naturalHeight,pixel:[...c.getContext('2d').getImageData(0,0,1,1).data],photos:window.cameraTest.photos,quality:window.cameraTest.jpegQualities};
+  });
+  assert(still.width>2200,JSON.stringify(still));assert(Math.abs(still.width/still.height-1.6)<.01);
+  assert(still.pixel[1]>150&&still.pixel[2]<120,JSON.stringify(still));
+  assert.equal(still.photos[0].id,'usb');assert.equal(still.photos[0].settings.imageWidth,4096);
+  assert.equal(still.quality[0],.96);await stopped(page);await page.close();
+  console.log('PASS native full-resolution still capture, selected USB track, sensor/video crop mapping, JPEG quality and no 2200px cap');
+
+  page = await fixture({mode:'still-fails'});await waitReady(page);
+  await page.getByRole('button',{name:'СДЕЛАТЬ ФОТО',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('#photo')?.naturalWidth>0);
+  assert.equal(await page.evaluate(()=>window.cameraTest.photos.length),1);await stopped(page);await page.close();
+  console.log('PASS unsupported still capture falls back to the active video camera');
+
+  page = await fixture({mode:'still-delayed'});await waitReady(page);
+  await page.getByRole('button',{name:'СДЕЛАТЬ ФОТО',exact:true}).click();
+  await page.waitForFunction(()=>window.cameraTest.resolvePhoto);
+  await page.getByRole('button',{name:'ОТМЕНА',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('#result')?.textContent==='cancelled');
+  await page.evaluate(()=>window.cameraTest.resolvePhoto());
+  await page.waitForTimeout(300);await stopped(page);
+  assert.equal(await page.locator('#photo').count(),0);await page.close();
+  console.log('PASS cancellation during native still capture never returns a late photo');
+  page = await fixture(); await waitReady(page);
+  await page.getByRole('button',{name:'ОТМЕНА',exact:true}).click();await stopped(page);
   // A removed remembered USB device falls back only when opening a new dialog.
   await page.evaluate(() => { window.cameraTest.ids = ['back']; });
   await page.getByRole('button', { name: 'Launch camera' }).click(); await waitReady(page);
