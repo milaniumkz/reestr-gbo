@@ -162,9 +162,13 @@ jobs:
         if: github.event.inputs.operation != 'deploy'
         run: |
           mkdir -p build/web/downloads
-          scp "${DEPLOY_USER:-root}@${DEPLOY_HOST}:/opt/reestr/app/build/web/downloads/ersi-gbo.apk" build/web/downloads/ersi-gbo.apk
-          scp "${DEPLOY_USER:-root}@${DEPLOY_HOST}:/opt/reestr/app/build/web/downloads/ersi-gbo.apk.sha256" build/web/downloads/ersi-gbo.apk.sha256
-          (cd build/web/downloads && sha256sum -c ersi-gbo.apk.sha256)
+          if ssh "${DEPLOY_USER:-root}@${DEPLOY_HOST}" 'test -f /opt/reestr/app/build/web/downloads/ersi-gbo.apk'; then
+            scp "${DEPLOY_USER:-root}@${DEPLOY_HOST}:/opt/reestr/app/build/web/downloads/ersi-gbo.apk" build/web/downloads/ersi-gbo.apk
+            scp "${DEPLOY_USER:-root}@${DEPLOY_HOST}:/opt/reestr/app/build/web/downloads/ersi-gbo.apk.sha256" build/web/downloads/ersi-gbo.apk.sha256
+            (cd build/web/downloads && sha256sum -c ersi-gbo.apk.sha256)
+          else
+            echo 'Web-only deployment: no native APK to preserve'
+          fi
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
@@ -178,6 +182,7 @@ jobs:
           PUBLIC_ORIGIN: https://89-207-255-42.sslip.io
 
       - name: Verify public APK download
+        if: github.event.inputs.operation == 'deploy'
         run: |
           curl --fail --show-error --location --retry 3 https://89-207-255-42.sslip.io/downloads/ersi-gbo.apk --output "$RUNNER_TEMP/published-ersi-gbo.apk"
           cmp build/web/downloads/ersi-gbo.apk "$RUNNER_TEMP/published-ersi-gbo.apk"

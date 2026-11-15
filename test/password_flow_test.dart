@@ -30,6 +30,9 @@ void main() {
         final api = ApiClient(
           baseUrl: 'https://example.test',
           httpClient: MockClient((req) async {
+            if (req.url.path == '/auth/identity/status') {
+              return http.Response('{"required":false,"verified":true}', 200);
+            }
             if (req.url.path == '/auth/refresh') {
               return http.Response('{}', 401);
             }
