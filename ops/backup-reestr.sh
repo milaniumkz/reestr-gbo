@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 umask 077
+exec 9>/run/lock/reestr-backup.lock
+flock -n 9 || { echo "Backup already in progress" >&2; exit 1; }
 
 APP_DIR="${APP_DIR:-/opt/reestr/app}"
 BACKUP_DIR="${BACKUP_DIR:-/opt/reestr/backups}"
@@ -46,5 +48,7 @@ cat > "$target/manifest.json" <<JSON
 }
 JSON
 
-find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d -mtime +"$RETENTION_DAYS" -exec rm -rf {} +
+if [[ "$BACKUP_SCOPE" == full ]]; then
+  python3 "$APP_DIR/ops/prune-backups.py" "$BACKUP_DIR"
+fi
 echo "Backup completed: $target"
