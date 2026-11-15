@@ -48,3 +48,8 @@ Checks use real canvas-backed MediaStreams with distinct phone/endoscope pixels,
 synthetic device enumeration, fixed-focus and busy-camera failures, disconnects,
 permission retry, delayed stream cleanup, crop output and Russian/Kazakh controls.
 They validate browser behavior, not compatibility of a particular physical USB unit.
+
+
+## Inspection photo review
+
+All inspection camera actions (including automatic document capture, first/second cylinder labels, passports and work records) pass their captured file through `capturePhotoWithPreview` before storing or uploading it. The entire captured image is shown with zoom, confirmation and retake controls. The camera implementation closes its stream before this review. Retake opens capture again, retaining the browser camera preference; closing the review cancels the operation and leaves the previous form photo untouched. No file is returned until explicit confirmation, and undecodable images cannot be confirmed. The preview evicts its full-resolution image cache entry on close. Existing framing/cropping and server checks remain in force. The raw-camera browser harness tests camera operation separately; widget tests cover confirmation, repeated capture, cancellation, undecodable files and narrow-screen controls.

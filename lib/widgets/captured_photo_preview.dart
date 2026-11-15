@@ -1,0 +1,150 @@
+import 'dart:typed_data';
+import 'package:flutter/material.dart' hide Text;
+import '../platform/local_file.dart';
+import 'uppercase_text.dart';
+
+enum _PhotoDecision { use, retake }
+
+/// Camera streams are closed by the capture implementation before review.
+/// Only an explicitly accepted shot is returned to the inspection form.
+Future<PickedLocalFile?> capturePhotoWithPreview(
+  BuildContext context, {
+  required String title,
+  required Future<PickedLocalFile?> Function() capture,
+}) async {
+  while (context.mounted) {
+    final file = await capture();
+    if (!context.mounted || file == null || file.bytes.isEmpty) return null;
+    final decision = await Navigator.of(context).push<_PhotoDecision>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => _CapturedPhotoPreview(title: title, file: file),
+      ),
+    );
+    if (!context.mounted || decision == null) return null;
+    if (decision == _PhotoDecision.use) return file;
+  }
+  return null;
+}
+
+class _CapturedPhotoPreview extends StatefulWidget {
+  const _CapturedPhotoPreview({required this.title, required this.file});
+  final String title;
+  final PickedLocalFile file;
+  @override
+  State<_CapturedPhotoPreview> createState() => _CapturedPhotoPreviewState();
+}
+
+class _CapturedPhotoPreviewState extends State<_CapturedPhotoPreview> {
+  late final MemoryImage _image;
+  bool _readable = false;
+  @override
+  void initState() {
+    super.initState();
+    final bytes = widget.file.bytes;
+    _image = MemoryImage(
+      bytes is Uint8List ? bytes : Uint8List.fromList(bytes),
+    );
+  }
+
+  @override
+  void dispose() {
+    // Repeated retakes must not retain old full-resolution images in the cache.
+    _image.evict();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: Colors.black,
+    appBar: AppBar(
+      title: const Text('Предпросмотр фото'),
+      backgroundColor: Colors.black,
+      foregroundColor: Colors.white,
+    ),
+    body: SafeArea(
+      top: false,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Text(
+              widget.title,
+              style: const TextStyle(color: Colors.white),
+            ),
+          ),
+          Expanded(
+            child: InteractiveViewer(
+              minScale: 1,
+              maxScale: 5,
+              child: SizedBox.expand(
+                child: Image(
+                  image: _image,
+                  fit: BoxFit.contain,
+                  frameBuilder: (_, child, frame, loaded) {
+                    if ((loaded || frame != null) && !_readable) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted && !_readable) {
+                          setState(() => _readable = true);
+                        }
+                      });
+                    }
+                    return child;
+                  },
+                  errorBuilder: (_, _, _) {
+                    return const Center(
+                      child: Text(
+                        'Не удалось открыть фото. Переснимите его.',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            color: Colors.white,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Увеличьте фото и проверьте резкость. Если текст размыт — переснимите.',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () =>
+                            Navigator.of(context).pop(_PhotoDecision.retake),
+                        icon: const Icon(Icons.camera_alt_outlined),
+                        label: const Text('Переснять'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: _readable
+                            ? () =>
+                                  Navigator.of(context).pop(_PhotoDecision.use)
+                            : null,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF007A4D),
+                        ),
+                        child: const Text('Использовать фото'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}

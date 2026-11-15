@@ -31,6 +31,7 @@ import 'data/repositories.dart';
 import 'platform/browser_geolocation.dart';
 import 'platform/local_file_picker.dart';
 import 'widgets/document_camera_screen.dart';
+import 'widgets/captured_photo_preview.dart';
 
 void main() => runApp(const ErsiGboApp());
 
@@ -1617,46 +1618,54 @@ class _ErsiDemoState extends State<ErsiDemo> {
     return 'Ошибка импорта XLSX: $clean';
   }
 
-  Future<void> _captureInspectionPhoto(String kind) async {
+  Future<PickedLocalFile?> _captureReviewedPhoto({
+    required String title,
+    required double frameAspectRatio,
+    required bool requireDocumentBounds,
+  }) {
     final languageCode = Localizations.localeOf(context).languageCode;
-    try {
-      final initialPosition = await _tryCurrentPosition();
-      final String filename;
-      final List<int> bytes;
-      if (kIsWeb) {
-        final file = await pickLocalFile(
-          const ['jpg', 'jpeg', 'png', 'heic', 'webp'],
-          camera: true,
-          languageCode: languageCode,
-          frameAspectRatio: 1.6,
-          requireDocumentBounds: kind == 'tech_passport',
-        );
-        final pickedBytes = file?.bytes;
-        if (file == null || pickedBytes == null || pickedBytes.isEmpty) {
-          if (mounted) setState(() => apiState = 'Фото не выбрано');
-          return;
+    return capturePhotoWithPreview(
+      context,
+      title: title,
+      capture: () async {
+        if (kIsWeb) {
+          return pickLocalFile(
+            const ['jpg', 'jpeg', 'png', 'heic', 'webp'],
+            camera: true,
+            languageCode: languageCode,
+            frameAspectRatio: frameAspectRatio,
+            requireDocumentBounds: requireDocumentBounds,
+          );
         }
-        filename = file.name;
-        bytes = pickedBytes;
-      } else {
-        if (!mounted) return;
-        final file = await Navigator.of(context).push<PickedLocalFile>(
+        return Navigator.of(context).push<PickedLocalFile>(
           MaterialPageRoute(
             builder: (_) => DocumentCameraScreen(
-              title: kind == 'tech_passport'
-                  ? 'Фото техпаспорта'
-                  : kind == 'cylinder'
-                  ? 'Фото бирки баллона'
-                  : 'Фото автомобиля',
-              frameAspectRatio: 1.6,
-              requireDocumentBounds: kind == 'tech_passport',
+              title: title,
+              frameAspectRatio: frameAspectRatio,
+              requireDocumentBounds: requireDocumentBounds,
             ),
           ),
         );
-        if (file == null) return;
-        filename = file.name;
-        bytes = file.bytes;
-      }
+      },
+    );
+  }
+
+  Future<void> _captureInspectionPhoto(String kind) async {
+    try {
+      final initialPosition = await _tryCurrentPosition();
+      if (!mounted) return;
+      final file = await _captureReviewedPhoto(
+        title: kind == 'tech_passport'
+            ? 'Фото техпаспорта'
+            : kind == 'cylinder'
+            ? 'Фото бирки баллона'
+            : 'Фото автомобиля',
+        frameAspectRatio: 1.6,
+        requireDocumentBounds: kind == 'tech_passport',
+      );
+      if (file == null) return;
+      final filename = file.name;
+      final bytes = file.bytes;
       if (!mounted) return;
       final position = initialPosition ?? await _tryCurrentPosition();
       if (!mounted) return;
@@ -1775,18 +1784,14 @@ class _ErsiDemoState extends State<ErsiDemo> {
     }
     try {
       PickedLocalFile? file;
-      if (camera && !kIsWeb) {
-        file = await Navigator.of(context).push<PickedLocalFile>(
-          MaterialPageRoute(
-            builder: (_) => DocumentCameraScreen(
-              title: label,
-              requireDocumentBounds: type != 'cylinder_label_2',
-              frameAspectRatio:
-                  (type == 'tech_passport_back' || type == 'cylinder_label_2')
-                  ? 1.6
-                  : .71,
-            ),
-          ),
+      if (camera) {
+        file = await _captureReviewedPhoto(
+          title: label,
+          requireDocumentBounds: type != 'cylinder_label_2',
+          frameAspectRatio:
+              (type == 'tech_passport_back' || type == 'cylinder_label_2')
+              ? 1.6
+              : .71,
         );
       } else {
         final extensions =
@@ -1794,16 +1799,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
             ? const ['jpg', 'jpeg', 'png']
             : const ['pdf', 'jpg', 'jpeg', 'png'];
         file = kIsWeb
-            ? await pickLocalFile(
-                extensions,
-                camera: camera,
-                requireDocumentBounds: type != 'cylinder_label_2',
-                languageCode: Localizations.localeOf(context).languageCode,
-                frameAspectRatio:
-                    (type == 'tech_passport_back' || type == 'cylinder_label_2')
-                    ? 1.6
-                    : .71,
-              )
+            ? await pickLocalFile(extensions)
             : await _pickPluginFile(extensions);
       }
       if (file == null) {
