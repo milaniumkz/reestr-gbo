@@ -52,6 +52,18 @@ Future<PickedLocalFile?> captureDocumentPhoto({
     ..text = translateKazakh('Обновить камеры', languageCode)
     ..style.cssText =
         'min-height:44px;padding:10px;border:0;border-radius:10px;background:#e8f5ee;color:#003c2b;font-size:14px';
+  final phoneCamera = html.ButtonElement()
+    ..text = translateKazakh('Камера телефона — оригинал', languageCode)
+    ..hidden = !RegExp(
+      'Android|iPhone|iPad|iPod',
+      caseSensitive: false,
+    ).hasMatch(html.window.navigator.userAgent)
+    ..style.cssText =
+        'width:100%;min-height:44px;padding:10px;margin-top:8px;border:0;border-radius:10px;background:#e8f5ee;color:#003c2b;font-size:14px';
+  final phoneInput = html.FileUploadInputElement()
+    ..accept = 'image/*'
+    ..setAttribute('capture', 'environment')
+    ..style.display = 'none';
   final cameraLabel = html.LabelElement()
     ..htmlFor = cameraSelect.id
     ..text = translateKazakh('Камера', languageCode)
@@ -78,7 +90,14 @@ Future<PickedLocalFile?> captureDocumentPhoto({
     ..style.cssText =
         'color:#ffd59b;font-size:14px;padding:4px 0;flex-shrink:0';
   final cameraControls = html.DivElement();
-  cameraControls.children.addAll([cameraLabel, cameraRow, help, status]);
+  cameraControls.children.addAll([
+    cameraLabel,
+    cameraRow,
+    phoneCamera,
+    phoneInput,
+    help,
+    status,
+  ]);
   final controls = html.DivElement()
     ..style.cssText = 'display:flex;gap:12px;padding-top:16px';
   controls.children.addAll([cancel, capture]);
@@ -108,6 +127,9 @@ Future<PickedLocalFile?> captureDocumentPhoto({
   Timer? analysisTimer;
   Timer? autoCapture;
   var automaticCapture = false;
+  var capturing = false;
+  var phonePicking = false;
+  var phoneReading = false;
   final analysisCanvas = html.CanvasElement();
   DocumentBounds checkFrame([html.CanvasElement? snapshot]) {
     if (video.videoWidth == 0 || video.videoHeight == 0) {
@@ -121,7 +143,26 @@ Future<PickedLocalFile?> captureDocumentPhoto({
         h = (video.videoHeight * scale).round();
     analysisCanvas.width = w;
     analysisCanvas.height = h;
-    analysisCanvas.context2D.drawImageScaled(snapshot ?? video, 0, 0, w, h);
+    if (snapshot == null) {
+      analysisCanvas.context2D.drawImageScaled(video, 0, 0, w, h);
+    } else {
+      final viewWidth = math.min(
+        snapshot.width!.toDouble(),
+        snapshot.height! * video.videoWidth / video.videoHeight,
+      );
+      final viewHeight = viewWidth * video.videoHeight / video.videoWidth;
+      analysisCanvas.context2D.drawImageScaledFromSource(
+        snapshot,
+        (snapshot.width! - viewWidth) / 2,
+        (snapshot.height! - viewHeight) / 2,
+        viewWidth,
+        viewHeight,
+        0,
+        0,
+        w,
+        h,
+      );
+    }
     final rgba = analysisCanvas.context2D.getImageData(0, 0, w, h).data;
     final gray = Uint8List(w * h);
     for (var i = 0; i < gray.length; i++) {
@@ -139,6 +180,7 @@ Future<PickedLocalFile?> captureDocumentPhoto({
 
   late BrowserCameraSession session;
   void refreshGate() {
+    if (capturing) return;
     final ready = session.ready && gate.ready(DateTime.now());
     capture.disabled = !session.ready || session.opening;
     capture.style.backgroundColor = '#007a4d';
@@ -171,24 +213,32 @@ Future<PickedLocalFile?> captureDocumentPhoto({
     }
   }
 
-  final captureSub = capture.onClick.listen((_) {
+  final captureSub = capture.onClick.listen((_) async {
+    if (result.isCompleted || capturing || !session.ready || session.opening) {
+      return;
+    }
+    html.CanvasElement? snapshot;
+    html.CanvasElement? canvas;
     try {
-      if (result.isCompleted || !session.ready || session.opening) return;
       final automatic = automaticCapture;
       if (automatic && requireDocumentBounds && !gate.ready(DateTime.now())) {
         refreshGate();
         return;
       }
-      // Analyze and crop one frozen full-resolution frame, not two video frames.
-      final snapshot = html.CanvasElement(
-        width: video.videoWidth,
-        height: video.videoHeight,
-      );
-      snapshot.context2D.drawImage(video, 0, 0);
+      capturing = true;
+      autoCapture?.cancel();
+      autoCapture = null;
+      capture.disabled = true;
+      cameraSelect.disabled = true;
+      refresh.disabled = true;
+      phoneCamera.disabled = true;
+      status.text = translateKazakh('Снимаем фото…', languageCode);
+      snapshot = await session.snapshot();
+      if (result.isCompleted) return;
       if (automatic && requireDocumentBounds) {
-        gate.update(checkFrame(snapshot), DateTime.now());
-        refreshGate();
-        if (!gate.ready(DateTime.now())) return;
+        final frozenBounds = checkFrame(snapshot);
+        gate.update(frozenBounds, DateTime.now());
+        if (!frozenBounds.fits) return;
       }
       final bounds = video.getBoundingClientRect();
       final scale = math.min(
@@ -201,22 +251,21 @@ Future<PickedLocalFile?> captureDocumentPhoto({
         visibleWidth * .9,
         visibleHeight * .82 * frameAspectRatio,
       );
-      final sourceWidth = widthInView / scale;
+      // A still image can include more sensor area than the video preview.
+      // Map the guide through the centred video field of view before cropping.
+      final viewWidth = math.min(
+        snapshot.width!.toDouble(),
+        snapshot.height! * video.videoWidth / video.videoHeight,
+      );
+      final sourceWidth = widthInView / scale / video.videoWidth * viewWidth;
       final sourceHeight = sourceWidth / frameAspectRatio;
-      final outputScale = math.min(
-        1.0,
-        2200 / math.max(sourceWidth, sourceHeight),
-      );
-      final outputWidth = (sourceWidth * outputScale).round();
-      final outputHeight = (sourceHeight * outputScale).round();
-      final canvas = html.CanvasElement(
-        width: outputWidth,
-        height: outputHeight,
-      );
+      final outputWidth = sourceWidth.round();
+      final outputHeight = sourceHeight.round();
+      canvas = html.CanvasElement(width: outputWidth, height: outputHeight);
       canvas.context2D.drawImageScaledFromSource(
         snapshot,
-        (video.videoWidth - sourceWidth) / 2,
-        (video.videoHeight - sourceHeight) / 2,
+        (snapshot.width! - sourceWidth) / 2,
+        (snapshot.height! - sourceHeight) / 2,
         sourceWidth,
         sourceHeight,
         0,
@@ -224,17 +273,50 @@ Future<PickedLocalFile?> captureDocumentPhoto({
         outputWidth,
         outputHeight,
       );
-      final data = canvas.toDataUrl('image/jpeg', 0.82);
+      var bytes = base64Decode(
+        canvas.toDataUrl('image/jpeg', 0.96).split(',').last,
+      );
+      // Keep native pixel dimensions; reduce JPEG compression quality only if
+      // needed to satisfy the existing 12 MiB upload limit.
+      for (final quality in [0.94, 0.92, 0.90]) {
+        if (bytes.length <= 12 * 1024 * 1024) break;
+        bytes = base64Decode(
+          canvas.toDataUrl('image/jpeg', quality).split(',').last,
+        );
+      }
+      if (bytes.length > 12 * 1024 * 1024) {
+        throw StateError(
+          'Фото больше 12 МБ. Снимите документ крупнее внутри рамки.',
+        );
+      }
       if (!result.isCompleted) {
         result.complete(
           PickedLocalFile(
             name: 'document-${DateTime.now().millisecondsSinceEpoch}.jpg',
-            bytes: base64Decode(data.split(',').last),
+            bytes: bytes,
           ),
         );
       }
     } catch (error, trace) {
       if (!result.isCompleted) result.completeError(error, trace);
+    } finally {
+      if (snapshot != null) {
+        snapshot.width = 1;
+        snapshot.height = 1;
+      }
+      if (canvas != null) {
+        canvas.width = 1;
+        canvas.height = 1;
+      }
+      capturing = false;
+      if (!result.isCompleted) {
+        gate.reset();
+        capture.disabled = !session.ready || session.opening;
+        cameraSelect.disabled = session.opening || session.cameras.isEmpty;
+        refresh.disabled = session.opening;
+        status.text = '';
+        phoneCamera.disabled = false;
+      }
     }
   });
   void alignFrame() {
@@ -253,7 +335,7 @@ Future<PickedLocalFile?> captureDocumentPhoto({
   }
 
   session = BrowserCameraSession(devices, video, () {
-    if (result.isCompleted) return;
+    if (result.isCompleted || capturing) return;
     cameraSelect.children.clear();
     if (session.cameras.isEmpty) {
       cameraSelect.append(
@@ -303,6 +385,96 @@ Future<PickedLocalFile?> captureDocumentPhoto({
     capture.disabled = !session.ready || session.opening;
     if (requireDocumentBounds && session.ready) refreshGate();
   });
+  void resumePhonePreview() {
+    if (!phonePicking || phoneReading || result.isCompleted) return;
+    phonePicking = false;
+    capturing = false;
+    phoneCamera.disabled = false;
+    phoneInput.value = '';
+    gate.reset();
+    unawaited(session.open(deviceId: session.selectedId));
+  }
+
+  final phoneSub = phoneCamera.onClick.listen((_) {
+    if (capturing || result.isCompleted) return;
+    capturing = true;
+    phonePicking = true;
+    phoneReading = false;
+    autoCapture?.cancel();
+    autoCapture = null;
+    phoneCamera.disabled = true;
+    capture.disabled = true;
+    cameraSelect.disabled = true;
+    refresh.disabled = true;
+    session.pause();
+    status.text = translateKazakh(
+      'Сделайте снимок в камере телефона',
+      languageCode,
+    );
+    phoneInput.value = '';
+    phoneInput.click();
+  });
+  final phoneCancelSub = phoneInput.on['cancel'].listen(
+    (_) => resumePhonePreview(),
+  );
+  final phoneChangeSub = phoneInput.onChange.listen((_) async {
+    final file = phoneInput.files?.isNotEmpty == true
+        ? phoneInput.files!.first
+        : null;
+    if (file == null) {
+      resumePhonePreview();
+      return;
+    }
+    if (result.isCompleted) return;
+    phoneReading = true;
+    String? imageUrl;
+    try {
+      if (file.size > 12 * 1024 * 1024) {
+        throw StateError(
+          'Выберите стандартное разрешение камеры: фото до 12 МБ и 40 мегапикселей.',
+        );
+      }
+      imageUrl = html.Url.createObjectUrlFromBlob(file);
+      final image = html.ImageElement();
+      final loaded = image.onLoad.first.timeout(const Duration(seconds: 10));
+      image.src = imageUrl;
+      await loaded;
+      final pixels = image.naturalWidth * image.naturalHeight;
+      image.src = '';
+      if (pixels <= 0 || pixels > 40000000) {
+        throw StateError(
+          'Выберите стандартное разрешение камеры: фото до 12 МБ и 40 мегапикселей.',
+        );
+      }
+      final reader = html.FileReader();
+      final read = reader.onLoadEnd.first;
+      reader.readAsArrayBuffer(file);
+      await read;
+      if (reader.error != null) {
+        throw StateError('Не удалось прочитать фото. Повторите съёмку.');
+      }
+      final raw = reader.result;
+      final bytes = raw is ByteBuffer
+          ? raw.asUint8List()
+          : raw is Uint8List
+          ? raw
+          : Uint8List.fromList((raw as List).cast<int>());
+      if (!result.isCompleted) {
+        result.complete(PickedLocalFile(name: file.name, bytes: bytes));
+      }
+    } catch (error) {
+      phoneReading = false;
+      resumePhonePreview();
+      status.text = translateKazakh(
+        error is StateError
+            ? error.message.toString()
+            : 'Не удалось прочитать фото. Повторите съёмку.',
+        languageCode,
+      );
+    } finally {
+      if (imageUrl != null) html.Url.revokeObjectUrl(imageUrl);
+    }
+  });
   final selectSub = cameraSelect.onChange.listen((_) {
     final id = cameraSelect.value;
     if (id != null && id.isNotEmpty) unawaited(session.open(deviceId: id));
@@ -323,7 +495,12 @@ Future<PickedLocalFile?> captureDocumentPhoto({
     });
     if (requireDocumentBounds) {
       analysisTimer = Timer.periodic(const Duration(milliseconds: 300), (_) {
-        if (result.isCompleted || !session.ready || session.opening) return;
+        if (result.isCompleted ||
+            capturing ||
+            !session.ready ||
+            session.opening) {
+          return;
+        }
         try {
           gate.update(checkFrame(), DateTime.now());
         } catch (_) {
@@ -340,6 +517,9 @@ Future<PickedLocalFile?> captureDocumentPhoto({
     analysisTimer?.cancel();
     autoCapture?.cancel();
     await session.dispose();
+    await phoneSub.cancel();
+    await phoneCancelSub.cancel();
+    await phoneChangeSub.cancel();
     await selectSub.cancel();
     await refreshSub.cancel();
     await helpSub.cancel();

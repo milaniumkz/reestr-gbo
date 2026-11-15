@@ -1,6 +1,7 @@
 // ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
 import 'dart:async';
 import 'dart:html' as html;
+import 'browser_camera_photo.dart';
 
 // Remember the chosen camera only in this tab, including subsequent tag photos.
 String? _preferredCameraId;
@@ -90,7 +91,8 @@ class BrowserCameraSession {
     'video': {
       if (id == null) 'facingMode': {'ideal': 'environment'},
       if (id != null) 'deviceId': {'exact': id},
-      'width': {'ideal': 1800},
+      'width': {'ideal': 4096},
+      'height': {'ideal': 3072},
     },
   });
 
@@ -181,6 +183,46 @@ class BrowserCameraSession {
         await refresh();
       }
     }
+  }
+
+  void pause() {
+    if (_disposed) return;
+    _generation++;
+    opening = false;
+    _stopStream();
+    onChanged();
+  }
+
+  Future<html.CanvasElement> snapshot() async {
+    final generation = _generation;
+    final stream = _stream;
+    if (_disposed || !ready || opening || stream == null) {
+      throw StateError('Камера недоступна');
+    }
+    html.CanvasElement? photo;
+    try {
+      photo = await captureStillPhoto(stream.getVideoTracks().first);
+    } catch (_) {
+      /* Unsupported still capture falls back to the live camera. */
+    }
+    if (_disposed ||
+        generation != _generation ||
+        !identical(stream, _stream) ||
+        !ready) {
+      if (photo != null) {
+        photo.width = 1;
+        photo.height = 1;
+      }
+      throw StateError('Камера недоступна');
+    }
+    if (photo != null) return photo;
+    if (video.videoWidth <= 0 || video.videoHeight <= 0) {
+      throw StateError('Камера недоступна');
+    }
+    return html.CanvasElement(
+      width: video.videoWidth,
+      height: video.videoHeight,
+    )..context2D.drawImage(video, 0, 0);
   }
 
   Future<void> dispose() async {
