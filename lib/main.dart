@@ -657,7 +657,6 @@ class _ErsiDemoState extends State<ErsiDemo> {
   void initState() {
     super.initState();
     repositories.onSessionInvalidated = _onSessionInvalidated;
-    repositories.api.onIdentityRequired = _ensureInspectorIdentity;
     _loadInitialData();
   }
 
@@ -665,7 +664,6 @@ class _ErsiDemoState extends State<ErsiDemo> {
   void dispose() {
     _qualityQueueTimer?.cancel();
     repositories.onSessionInvalidated = null;
-    repositories.api.onIdentityRequired = null;
     super.dispose();
   }
 
@@ -1304,7 +1302,10 @@ class _ErsiDemoState extends State<ErsiDemo> {
     if (AppEnvironment.isDemo) return true;
     try {
       final status = await repositories.api.getJson('/auth/identity/status');
-      if (status['required'] != true || status['verified'] == true) return true;
+      if (status['verified'] == true) return true;
+      if (status['required'] != true) {
+        throw StateError('Invalid identity status');
+      }
       if (!mounted) return false;
       final verified = await Navigator.of(context).push<bool>(
         MaterialPageRoute(
@@ -1312,7 +1313,12 @@ class _ErsiDemoState extends State<ErsiDemo> {
           builder: (_) => InspectorIdentityPage(api: repositories.api),
         ),
       );
-      if (verified == true) return true;
+      if (verified == true) {
+        final confirmed = await repositories.api.getJson(
+          '/auth/identity/status',
+        );
+        if (confirmed['verified'] == true) return true;
+      }
       await _logout();
     } catch (_) {
       await _logout();
@@ -2321,12 +2327,13 @@ class _ErsiDemoState extends State<ErsiDemo> {
       setState(() => apiState = '');
       go(16);
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         setState(
           () => apiState = error is ApiException
               ? error.message
               : 'Ошибка проверки номера',
         );
+      }
     } finally {
       _ownerNextBusy = false;
     }
