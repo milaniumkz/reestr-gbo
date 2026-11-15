@@ -34,6 +34,7 @@ jobs:
             fi
           fi
           du -sh /opt/reestr/backups /opt/reestr/releases /opt/reestr/storage /opt/reestr/app /var/lib/docker
+          pg_lsclusters || true
           if command -v docker >/dev/null; then
             docker system df
             # Image/build cache only: active containers and all volumes are retained.
@@ -44,8 +45,8 @@ jobs:
           mapfile -t releases < <(find /opt/reestr/releases -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | sort -r)
           printf 'Release directories: %s\n' "${#releases[@]}"
           current="$(readlink -f /opt/reestr/current)"
-          # Preserve the three newest releases, the current release, all source files, uploads and backups.
-          for release in "${releases[@]:3}"; do
+          # Emergency login recovery: preserve the current release and newest release; rebuildable caches only.
+          for release in "${releases[@]:1}"; do
             [[ "$release" =~ ^[0-9]{8}T[0-9]{6}Z-[0-9a-f]+$ ]] || continue
             release_path="/opt/reestr/releases/$release"
             [[ "$release_path" != "$current" ]] || continue
@@ -65,4 +66,16 @@ jobs:
           done
           npm cache clean --force
           df -h /
+          # Read-only diagnostics: emit error categories only, without statements/phone numbers.
+          systemctl is-active reestr-backend postgresql redis-server || true
+          set -a
+          source /opt/reestr/app/backend/.env
+          set +a
+          cd /opt/reestr/app/backend
+          node <<'NODE'
+          const {PrismaClient}=require('@prisma/client');
+          const db=new PrismaClient({log:[]});
+          (async()=>{await db.$queryRaw`SELECT 1`;console.log(JSON.stringify({databaseReachable:true}));})().catch(e=>{console.log(JSON.stringify({databaseReachable:false,code:e.code??null,name:e.constructor.name,diskFull:/No space left|disk.*full/i.test(e.message),connectionFailure:/P1001|connect.*server|not accept.*connection/i.test(e.message)}));}).finally(()=>db.$disconnect());
+          NODE
+          pg_lsclusters || true
           REMOTE
