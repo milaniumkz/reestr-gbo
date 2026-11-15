@@ -2,6 +2,7 @@
 import 'dart:convert';
 import 'dart:html' as html;
 import 'package:reestr_ts_demo/platform/local_file_picker.dart';
+import 'package:reestr_ts_demo/platform/document_camera_web.dart';
 
 void main() {
   final button = html.ButtonElement()..text = 'Launch camera';
@@ -9,13 +10,14 @@ void main() {
     html.document.querySelector('#result')?.remove();
     html.document.querySelector('#photo')?.remove();
     try {
-      final file = await pickLocalFile(
-        const ['jpg'],
-        camera: true,
-        frameAspectRatio: 1.6,
-        requireDocumentBounds: Uri.base.queryParameters['document'] == 'true',
-        languageCode: Uri.base.queryParameters['lang'] ?? 'ru',
-      );
+      final file = Uri.base.queryParameters['native'] == 'true'
+          ? await pickLocalFile(const ['jpg'], camera: true)
+          : await captureDocumentPhoto(
+              frameAspectRatio: 1.6,
+              requireDocumentBounds:
+                  Uri.base.queryParameters['document'] == 'true',
+              languageCode: Uri.base.queryParameters['lang'] ?? 'ru',
+            );
       html.document.body!.append(
         html.DivElement()
           ..id = 'result'
