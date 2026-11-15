@@ -23,7 +23,7 @@ void main() {
       final api = ApiClient(
         baseUrl: 'https://example.test',
         httpClient: MockClient((request) async {
-          if (request.url.path == '/auth/refresh')
+          if (request.url.path == '/auth/refresh') {
             return http.Response(
               jsonEncode({
                 'accessToken': 'new',
@@ -36,11 +36,14 @@ void main() {
               }),
               200,
             );
-          if (request.url.path == '/auth/identity/status')
+          }
+          if (request.url.path == '/auth/identity/status') {
             return http.Response('{}', 200);
+          }
           if (request.url.path == '/organizations' ||
-              request.url.path == '/inspections')
+              request.url.path == '/inspections') {
             protected.add(request.url.path);
+          }
           return http.Response('{"items":[]}', 200);
         }),
       );
