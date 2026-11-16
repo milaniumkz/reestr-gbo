@@ -166,6 +166,13 @@ export class InspectionsController {
   @Roles("inspection_org", "operator", "super_admin")
   moderationStatus() { return this.inspections.moderationStatus(); }
 
+  @Post("photo-moderation/check")
+  @Roles("inspection_org", "operator", "super_admin")
+  @UseInterceptors(FileInterceptor("file", { limits: { fileSize: 12 * 1024 * 1024 } }))
+  checkPhoto(@Body("type") type: string, @UploadedFile() file: UploadedInspectionFile) {
+    return this.inspections.checkPhoto(type, file);
+  }
+
   @Post(":id/photos")
   @Roles("inspection_org", "operator", "super_admin")
   @UseInterceptors(FileInterceptor("file", { limits: { fileSize: 12 * 1024 * 1024 } }))

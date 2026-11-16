@@ -13,6 +13,7 @@ Future<PickedLocalFile?> capturePhotoWithPreview(
   required String title,
   required Future<PickedLocalFile?> Function() capture,
   bool requireLabelContext = false,
+  Future<void> Function(PickedLocalFile)? validate,
 }) async {
   while (context.mounted) {
     final file = await capture();
@@ -23,6 +24,7 @@ Future<PickedLocalFile?> capturePhotoWithPreview(
         builder: (_) => _CapturedPhotoPreview(
           title: title,
           file: file,
+          validate: validate,
           requireLabelContext: requireLabelContext,
         ),
       ),
@@ -37,8 +39,10 @@ class _CapturedPhotoPreview extends StatefulWidget {
   const _CapturedPhotoPreview({
     required this.title,
     required this.file,
+    this.validate,
     required this.requireLabelContext,
   });
+  final Future<void> Function(PickedLocalFile)? validate;
   final bool requireLabelContext;
   final String title;
   final PickedLocalFile file;
@@ -48,6 +52,27 @@ class _CapturedPhotoPreview extends StatefulWidget {
 
 class _CapturedPhotoPreviewState extends State<_CapturedPhotoPreview> {
   late final MemoryImage _image;
+  bool _checking = false;
+  String? _error;
+  Future<void> _accept() async {
+    setState(() {
+      _checking = true;
+      _error = null;
+    });
+    try {
+      await widget.validate?.call(widget.file);
+      if (mounted) Navigator.of(context).pop(_PhotoDecision.use);
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () => _error = error.toString().replaceFirst('Bad state: ', ''),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _checking = false);
+    }
+  }
+
   bool _readable = false;
   bool _contextConfirmed = false;
   @override
@@ -137,13 +162,23 @@ class _CapturedPhotoPreviewState extends State<_CapturedPhotoPreview> {
                     controlAffinity: ListTileControlAffinity.leading,
                     title: const Text(labelPhotoConfirmation),
                   ),
+                if (_error != null)
+                  Text(
+                    _error!,
+                    style: const TextStyle(color: Colors.red),
+                    textAlign: TextAlign.center,
+                  ),
+                if (_checking) const LinearProgressIndicator(),
                 const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: () =>
-                            Navigator.of(context).pop(_PhotoDecision.retake),
+                        onPressed: _checking
+                            ? null
+                            : () => Navigator.of(
+                                context,
+                              ).pop(_PhotoDecision.retake),
                         icon: const Icon(Icons.camera_alt_outlined),
                         label: const Text('Переснять'),
                       ),
@@ -152,11 +187,11 @@ class _CapturedPhotoPreviewState extends State<_CapturedPhotoPreview> {
                     Expanded(
                       child: FilledButton(
                         onPressed:
-                            _readable &&
+                            !_checking &&
+                                _readable &&
                                 (!widget.requireLabelContext ||
                                     _contextConfirmed)
-                            ? () =>
-                                  Navigator.of(context).pop(_PhotoDecision.use)
+                            ? _accept
                             : null,
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xFF007A4D),

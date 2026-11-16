@@ -656,6 +656,25 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
 
   moderationStatus() { return this.photoModeration.status(); }
 
+  async checkPhoto(type: string, file: UploadedInspectionFile) {
+    if (!file?.buffer?.length) throw new BadRequestException('Выберите непустой файл');
+    if (!['cylinder_label','cylinder_label_2','vehicle_photo','tech_passport','tech_passport_back','applicant_application','applicant_questionnaire','gas_work_record','cylinder_work_record','gas_inspection_report','cylinder_inspection_report','cylinder_work_record_2','cylinder_inspection_report_2','certificate_document','certificate_document_2','photo'].includes(type)) throw new BadRequestException('Неизвестный тип документа');
+    const labels: Record<string,string> = {
+      cylinder_label:'Бирка первого баллона', cylinder_label_2:'Бирка второго баллона', vehicle_photo:'Фото автомобиля',
+      tech_passport:'Техпаспорт, лицевая сторона', tech_passport_back:'Техпаспорт, обратная сторона',
+      applicant_application:'Заявка заявителя', applicant_questionnaire:'Анкета оценки заявителя',
+      gas_work_record:'Рабочая запись ГБО', cylinder_work_record:'Рабочая запись первого баллона', cylinder_work_record_2:'Рабочая запись второго баллона',
+      gas_inspection_report:'Отчет инспекции ГБО', cylinder_inspection_report:'Отчет инспекции первого баллона', cylinder_inspection_report_2:'Отчет инспекции второго баллона',
+      certificate_document:'Первое свидетельство', certificate_document_2:'Второе свидетельство', photo:'Фотография',
+    };
+    try {
+      return await this.photoModeration.check(file.buffer, file.originalname, type);
+    } catch (error) {
+      if (error instanceof BadRequestException) throw new BadRequestException(`Ошибка: ${labels[type]} — ${error.message}`);
+      throw error;
+    }
+  }
+
   async uploadPhoto(
     id: string,
     type: string,
@@ -685,7 +704,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
     let documentVerification:Awaited<ReturnType<TechPassportService['verify']>>['proof']|undefined;
     try{
       if(['tech_passport','tech_passport_back'].includes(type) && file.originalname.toLowerCase().endsWith('.pdf') && file.buffer.subarray(0,5).toString()!=='%PDF-') throw new BadRequestException('Выберите настоящий PDF-файл техпаспорта');
-      moderation=await this.photoModeration.check(file.buffer,file.originalname,type.endsWith("_2") ? type.slice(0,-2) : type);
+      moderation=await this.checkPhoto(type,file);
       if(['tech_passport','tech_passport_back'].includes(type) && file.buffer.subarray(0,5).toString()==='%PDF-'){
         const vehicle=await this.prisma.vehicle.findUnique({where:{id:inspection.vehicleId}});
         if(!vehicle) throw new BadRequestException('Автомобиль не найден');

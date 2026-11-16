@@ -694,6 +694,24 @@ class InspectionRepository {
     return InspectionFileInfo.fromJson(response);
   }
 
+  Future<void> checkPhoto({
+    required String type,
+    required String filename,
+    required List<int> bytes,
+  }) async {
+    if (AppEnvironment.isDemo) return;
+    await _api
+        .postMultipart(
+          '/inspections/photo-moderation/check',
+          fieldName: 'file',
+          filename: filename,
+          bytes: bytes,
+          contentType: _contentTypeFor(filename),
+          fields: {'type': type},
+        )
+        .timeout(const Duration(seconds: 40));
+  }
+
   Future<void> uploadPhoto({
     required String inspectionId,
     required String type,

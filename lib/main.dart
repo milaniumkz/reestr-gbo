@@ -618,6 +618,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
   bool qualityConfirmed = false;
   bool qualityBusy = false;
   bool _inspectionSubmitting = false;
+  bool _checkingSelectedFile = false;
   Map<String, String> packageDocumentNames = const {};
   Map<String, List<int>> packageDocumentBytes = const {};
   Map<String, Position> packageDocumentPositions = const {};
@@ -1645,12 +1646,14 @@ class _ErsiDemoState extends State<ErsiDemo> {
     required double frameAspectRatio,
     required bool requireDocumentBounds,
     bool labelContext = false,
+    required String photoType,
   }) {
     final languageCode = Localizations.localeOf(context).languageCode;
     return capturePhotoWithPreview(
       context,
       title: title,
       requireLabelContext: labelContext,
+      validate: (file) => _validateSelectedFile(photoType, title, file),
       capture: () async {
         if (kIsWeb) {
           return pickLocalFile(
@@ -1687,6 +1690,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         frameAspectRatio: 1.6,
         requireDocumentBounds: kind == 'tech_passport',
         labelContext: kind == 'cylinder',
+        photoType: _inspectionPhotoType(kind),
       );
       if (file == null) return;
       final filename = file.name;
@@ -1752,6 +1756,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
               String.fromCharCodes(file.bytes.take(5)) != '%PDF-')) {
         throw StateError('Выберите настоящий PDF-файл техпаспорта');
       }
+      await _validateSelectedFile('tech_passport', 'Техпаспорт', file);
       final position = await _tryCurrentPosition();
       if (!mounted) return;
       setState(() {
@@ -1780,6 +1785,36 @@ class _ErsiDemoState extends State<ErsiDemo> {
               : 'Не удалось выбрать техпаспорт',
         );
       }
+    }
+  }
+
+  Future<void> _validateSelectedFile(
+    String type,
+    String label,
+    PickedLocalFile file,
+  ) async {
+    if (_checkingSelectedFile) {
+      throw StateError('Дождитесь завершения проверки файла');
+    }
+    setState(() {
+      _checkingSelectedFile = true;
+      apiState = 'Проверка файла: $label';
+    });
+    try {
+      await repositories.inspections.checkPhoto(
+        type: type,
+        filename: file.name,
+        bytes: file.bytes,
+      );
+    } catch (error) {
+      final message = _uploadErrorText(error);
+      final detail = message.startsWith('Ошибка:')
+          ? message
+          : 'Ошибка: $label — $message';
+      if (mounted) setState(() => apiState = detail);
+      throw StateError(detail);
+    } finally {
+      if (mounted) setState(() => _checkingSelectedFile = false);
     }
   }
 
@@ -1812,6 +1847,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       if (camera) {
         file = await _captureReviewedPhoto(
           title: label,
+          photoType: type,
           labelContext: type == 'cylinder_label' || type == 'cylinder_label_2',
           requireDocumentBounds: type != 'cylinder_label_2',
           frameAspectRatio:
@@ -1832,6 +1868,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
             title: label,
             capture: pick,
             requireLabelContext: true,
+            validate: (file) => _validateSelectedFile(type, label, file),
           );
         } else {
           file = await pick();
@@ -1840,6 +1877,9 @@ class _ErsiDemoState extends State<ErsiDemo> {
       if (file == null) {
         if (mounted) setState(() => apiState = 'Документ не выбран');
         return;
+      }
+      if (!camera && type != 'cylinder_label' && type != 'cylinder_label_2') {
+        await _validateSelectedFile(type, label, file);
       }
       final selectedFile = file;
       final bytes = selectedFile.bytes;
@@ -2043,7 +2083,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
   }
 
   Future<void> _submitInspection() async {
-    if (_inspectionSubmitting) return;
+    if (_inspectionSubmitting || _checkingSelectedFile) return;
     setState(() => _inspectionSubmitting = true);
     try {
       if (_editingQualityInspection) {
@@ -2139,7 +2179,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         .replaceFirst('Exception: ', '')
         .trim();
     if (clean.isEmpty) return 'Ошибка отправки инспекции';
-    return clean;
+    return clean.startsWith('Ошибка:') ? clean : 'Ошибка: $clean';
   }
 
   void _goToMissingInspectionStep(String message) {
@@ -2474,6 +2514,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
   }
 
   void go(int index) {
+    if (_checkingSelectedFile) return;
     final requested = index.clamp(0, 40);
     final target = passwordChangeToken != null && requested >= 4
         ? 3
@@ -3617,6 +3658,7 @@ class _AppAlertBanner extends StatelessWidget {
 
   _AlertTone _toneFor(String value) {
     final lower = value.toLowerCase();
+    if (lower.startsWith('ошибка:')) return _AlertTone.error;
     if (lower.contains('загрузка') ||
         lower.contains('поиск') ||
         lower.contains('проверка') ||
@@ -3627,7 +3669,9 @@ class _AppAlertBanner extends StatelessWidget {
         lower.contains('error') ||
         lower.contains('offline') ||
         lower.contains('недоступ') ||
-        lower.contains('не удалось')) {
+        lower.contains('не удалось') ||
+        lower.contains('не различим') ||
+        lower.contains('переснимите')) {
       return _AlertTone.error;
     }
     if (lower.contains('выберите') ||
