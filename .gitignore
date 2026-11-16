@@ -98,3 +98,6 @@ artifacts/private/
 # Python model service / maintenance checks
 __pycache__/
 *.pyc
+
+# Generated public photo-detector weights (downloaded and hash-verified at build time)
+services/photo/models/*.onnx

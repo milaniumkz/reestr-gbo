@@ -1,0 +1,12 @@
+{
+  "id": "local-yolox-s-coco-v1",
+  "file": "yolox_s.onnx",
+  "url": "https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_s.onnx",
+  "sha256": "c5c2d13e59ae883e6af3b45daea64af4833a4951c92d116ec270d9ddbe998063",
+  "size": 35858002,
+  "inputSize": 640,
+  "preprocessing": "BGR float32 0..255, top-left letterbox filled with 114; decode strides 8,16,32",
+  "license": "Apache-2.0",
+  "source": "Megvii-BaseDetection/YOLOX",
+  "note": "Public pretrained object detector. Not trained to authenticate cylinder labels or identify people. Only device/book categories are returned."
+}

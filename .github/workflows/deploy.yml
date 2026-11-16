@@ -35,6 +35,8 @@ on:
           - identity-pilot
           - activate-inspector-identity
           - deactivate-inspector-identity
+          - photo-engine-diagnostics
+          - deploy-photo-engine
           - photo-moderation-status
           - publish-backend-patch
           - resume-checked-release
@@ -230,6 +232,8 @@ jobs:
             activate-inspector-identity) bash ops/inspector-identity-operation.sh activate ;;
             deactivate-inspector-identity) bash ops/inspector-identity-operation.sh deactivate ;;
             repair-server-dns) bash ops/repair-server-dns.sh ;;
+            photo-engine-diagnostics) bash ops/diagnose-photo-engine.sh ;;
+            deploy-photo-engine) bash ops/deploy-photo-engine.sh ;;
             photo-moderation-status) bash ops/photo-moderation-status.sh ;;
             publish-backend-patch) bash ops/publish-backend-patch.sh ;;
             deploy-admin) DEPLOY_COMPONENTS=admin bash ops/deploy-production.sh "$(git rev-parse HEAD)" ;;
