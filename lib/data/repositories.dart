@@ -694,13 +694,13 @@ class InspectionRepository {
     return InspectionFileInfo.fromJson(response);
   }
 
-  Future<void> checkPhoto({
+  Future<Map<String, dynamic>> checkPhoto({
     required String type,
     required String filename,
     required List<int> bytes,
   }) async {
-    if (AppEnvironment.isDemo) return;
-    await _api
+    if (AppEnvironment.isDemo) return {'moderationStatus': 'local_checked'};
+    return _api
         .postMultipart(
           '/inspections/photo-moderation/check',
           fieldName: 'file',

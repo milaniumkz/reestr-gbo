@@ -619,6 +619,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
   bool qualityBusy = false;
   bool _inspectionSubmitting = false;
   bool _checkingSelectedFile = false;
+  final Map<String, String> _photoReviewNotices = {};
   Map<String, String> packageDocumentNames = const {};
   Map<String, List<int>> packageDocumentBytes = const {};
   Map<String, Position> packageDocumentPositions = const {};
@@ -1719,7 +1720,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         }
         apiState = position == null
             ? 'Фото выбрано. Геолокация недоступна. Включите её и разрешите доступ к местоположению перед отправкой инспекции.'
-            : 'Фото выбрано';
+            : _photoReviewNotices[_inspectionPhotoType(kind)] ?? 'Фото выбрано';
       });
     } catch (error) {
       final message = error is StateError
@@ -1775,6 +1776,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
             ..remove('tech_passport_back');
         }
         apiState =
+            _photoReviewNotices['tech_passport'] ??
             'Техпаспорт выбран. PDF проверяется по содержимому и данным автомобиля; фотография — только по качеству снимка';
       });
     } catch (error) {
@@ -1801,11 +1803,24 @@ class _ErsiDemoState extends State<ErsiDemo> {
       apiState = 'Проверка файла: $label';
     });
     try {
-      await repositories.inspections.checkPhoto(
+      final checked = await repositories.inspections.checkPhoto(
         type: type,
         filename: file.name,
         bytes: file.bytes,
       );
+      if (![
+        'manual_review',
+        'local_checked',
+      ].contains(checked['moderationStatus'])) {
+        throw StateError(
+          'Сервер не подтвердил проверку файла. Повторите загрузку.',
+        );
+      }
+      _photoReviewNotices.remove(type);
+      if (checked['moderationStatus'] == 'manual_review') {
+        _photoReviewNotices[type] =
+            'Контроль качества: $label — ${checked['moderationReason'] ?? 'Требуется ручная проверка'}';
+      }
     } catch (error) {
       final message = _uploadErrorText(error);
       final detail = message.startsWith('Ошибка:')
@@ -1819,6 +1834,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
   }
 
   String _uploadErrorText(Object error) {
+    if (error is StateError) return error.message.toString();
     if (error is ApiException && [400, 413, 503].contains(error.statusCode)) {
       return error.message;
     }
@@ -1903,7 +1919,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
           documentFileName = selectedFile.name;
           apiState = position == null
               ? 'Документ выбран. Геолокация недоступна. Включите её и разрешите доступ к местоположению перед отправкой инспекции.'
-              : 'Документ выбран: $label';
+              : _photoReviewNotices[type] ?? 'Документ выбран: $label';
         });
       }
     } catch (error) {
@@ -3678,6 +3694,7 @@ class _AppAlertBanner extends StatelessWidget {
 
   _AlertTone _toneFor(String value) {
     final lower = value.toLowerCase();
+    if (lower.startsWith('контроль качества:')) return _AlertTone.warning;
     if (lower.startsWith('ошибка:')) return _AlertTone.error;
     if (lower.contains('ошибка') ||
         lower.contains('error') ||
