@@ -113,4 +113,4 @@ jobs:
       - run: flutter pub get ${{ github.event_name != 'pull_request' && '--enforce-lockfile' || '' }}
       - run: flutter analyze
       - run: flutter test
-      - run: flutter build web --release --pwa-strategy=none --dart-define=API_BASE_URL=https://89-207-255-42.sslip.io/api/v1 --dart-define=APP_MODE=production
+      - run: flutter build web --release --pwa-strategy=none --dart-define=API_BASE_URL=/api/v1 --dart-define=APP_MODE=production

@@ -113,7 +113,21 @@
     if (ready) return;
     ready = true;
     if ('serviceWorker' in navigator && window.isSecureContext) {
-      navigator.serviceWorker.register('/ersi-pwa-sw.js', {scope:'/', updateViaCache:'none'}).catch(() => {});
+      let registration, updating = false;
+      const updateWorker = async () => {
+        if (updating || document.visibilityState === 'hidden') return;
+        updating = true;
+        try {
+          registration ||= await navigator.serviceWorker.register('/ersi-pwa-sw.js', {scope:'/', updateViaCache:'none'});
+          await registration.update();
+        } catch (_) { /* Keep the working page and retry on return/next interval. */ }
+        finally { updating = false; }
+      };
+      updateWorker();
+      window.addEventListener('pageshow', updateWorker);
+      window.addEventListener('online', updateWorker);
+      document.addEventListener('visibilitychange', updateWorker);
+      setInterval(updateWorker, 60000);
     }
     setTimeout(() => show(), 1000);
   }

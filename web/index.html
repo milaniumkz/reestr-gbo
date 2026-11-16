@@ -53,6 +53,7 @@
         event.preventDefault();
       }
     });
+    const recoverWorker = /(?:^|[?&])recover=1(?:&|$)/.test(window.location.search || '');
     const startup = document.getElementById('startup');
     let started = false;
     function startupFailed() {
@@ -84,7 +85,7 @@
               const registrations = await navigator.serviceWorker.getRegistrations();
               await Promise.all(registrations.filter((registration) => {
                 const worker = registration.active || registration.waiting || registration.installing;
-                return worker && /\/flutter_service_worker\.js(?:\?|$)/.test(worker.scriptURL);
+                return worker && (/\/flutter_service_worker\.js(?:\?|$)/.test(worker.scriptURL) || (recoverWorker && /\/ersi-pwa-sw\.js(?:\?|$)/.test(worker.scriptURL)));
               }).map((registration) => registration.unregister()));
             }
             if ('caches' in window) {
@@ -97,6 +98,13 @@
       } catch (error) {
         console.warn('Browser cache cleanup unavailable', error);
       } finally {
+        if (recoverWorker && window.history?.replaceState) {
+          try {
+            const clean = new URL(window.location.href);
+            clean.searchParams.delete('recover');
+            window.history.replaceState(null, '', clean.toString());
+          } catch (_) {}
+        }
         const script = document.createElement('script');
         script.src = 'flutter_bootstrap.js?v=' + Date.now();
         script.async = true;
