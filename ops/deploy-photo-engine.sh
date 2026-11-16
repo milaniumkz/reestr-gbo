@@ -46,7 +46,7 @@ done
 python3 "$remote/configure-proxy.py" "$worker_ip"
 sha256sum -c "$remote/web-preserved.sha256"
 systemctl is-active --quiet reestr-backend
-test "$(docker inspect -f '{{json .HostConfig.PortBindings}}' reestr-photo)" = '{}'
+docker inspect -f '{{json .HostConfig.PortBindings}}' reestr-photo | python3 -c 'import json,sys;assert not json.load(sys.stdin)'
 trap - EXIT
 echo 'Photo worker ready: 512 MiB limit, 0.75 CPU, no published ports, internal-only network. Backend activation is separate.'
 REMOTE
