@@ -2,6 +2,8 @@ import 'identity/inspector_identity_page.dart';
 import 'widgets/inspection_address_gate.dart';
 import 'widgets/quality_certificate_uploads.dart';
 import 'platform/web_updates.dart';
+import 'platform/inspection_recovery_store.dart';
+import 'data/inspection_recovery.dart';
 import 'platform/web_install.dart';
 import 'widgets/bank_invoice_screen.dart';
 import 'widgets/password_access_screen.dart';
@@ -34,7 +36,13 @@ import 'widgets/document_camera_screen.dart';
 import 'widgets/captured_photo_preview.dart';
 import 'widgets/cylinder_label_photo_guide.dart';
 
-void main() => runApp(const ErsiGboApp());
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  if (kIsWeb) {
+    PaintingBinding.instance.imageCache.maximumSizeBytes = 32 * 1024 * 1024;
+  }
+  runApp(const ErsiGboApp());
+}
 
 const darkGreen = Color(0xFF003C2B);
 const green = Color(0xFF007A4D);
@@ -493,20 +501,56 @@ class ErsiDemo extends StatefulWidget {
     super.key,
     this.initialScreen = 0,
     this.showStepper = false,
+    this.recoveryStore,
     this.repositories,
   });
 
   final AppRepositories? repositories;
   final int initialScreen;
   final bool showStepper;
+  final InspectionRecoveryStore? recoveryStore;
 
   @override
   State<ErsiDemo> createState() => _ErsiDemoState();
 }
 
-class _ErsiDemoState extends State<ErsiDemo> {
+class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
   late int screen = widget.initialScreen.clamp(0, 40);
   bool _webInspectionInProgress = false;
+  late final InspectionRecoveryStore _recovery =
+      widget.recoveryStore ?? InspectionRecoveryStore();
+  Timer? _recoveryTimer;
+  bool _restoringRecovery = false;
+  bool _recoveryWarningShown = false;
+  bool _recoveryCompleted = false;
+  bool get _canRecover =>
+      !_recoveryCompleted &&
+      (kIsWeb || widget.recoveryStore != null) &&
+      currentUser != null &&
+      _roleCode == 'inspection_org' &&
+      !_isQualityControl &&
+      !_editingQualityInspection;
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    if (!_restoringRecovery && _canRecover && screen >= 15 && screen <= 23) {
+      _recoveryTimer?.cancel();
+      _recoveryTimer = Timer(
+        const Duration(milliseconds: 300),
+        () => unawaited(_persistInspectionRecovery()),
+      );
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.paused) {
+      unawaited(_persistInspectionRecovery());
+    }
+  }
+
   int? _webPreviousScreen;
   late final AppRepositories repositories =
       widget.repositories ?? AppRepositories.current();
@@ -660,12 +704,15 @@ class _ErsiDemoState extends State<ErsiDemo> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     repositories.onSessionInvalidated = _onSessionInvalidated;
     _loadInitialData();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _recoveryTimer?.cancel();
     _qualityQueueTimer?.cancel();
     repositories.onSessionInvalidated = null;
     super.dispose();
@@ -673,6 +720,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
 
   void _onSessionInvalidated() {
     if (!mounted) return;
+    unawaited(_persistInspectionRecovery());
     setState(() {
       authPhone = currentUser?.phone ?? authPhone;
       currentUser = null;
@@ -692,6 +740,234 @@ class _ErsiDemoState extends State<ErsiDemo> {
       sessionNotice =
           'Сеанс завершён. Войдите повторно. После входа с временным паролем потребуется установить собственный пароль.';
     });
+  }
+
+  InspectionRecoverySnapshot _inspectionRecoverySnapshot() =>
+      InspectionRecoverySnapshot(
+        fields: {
+          'screen': screen,
+          'organizationId': _currentInspectionOrganization?.id,
+          'inspectionCertificateNumber': inspectionCertificateNumber,
+          'ownerId': ownerId,
+          'ownerName': ownerName,
+          'ownerPhone': ownerPhone,
+          'ownerAddress': ownerAddress,
+          'ownerKind': ownerKind,
+          'inspectionIssuedAt': inspectionIssuedAt,
+          'vehiclePlate': vehiclePlate,
+          'vehicleVin': vehicleVin,
+          'vehicleMakeModel': vehicleMakeModel,
+          'vehicleYear': vehicleYear,
+          'vehicleColor': vehicleColor,
+          'cylinderNumber': cylinderNumber,
+          'secondCylinderNumber': secondCylinderNumber,
+          'cylinderMaker': cylinderMaker,
+          'cylinderVolume': cylinderVolume,
+          'cylinderProductionDate': cylinderProductionDate,
+          'cylinderFuel': cylinderFuel,
+          'reducerName': reducerName,
+          'controlUnitName': controlUnitName,
+          'cylinderShape': cylinderShape,
+          'draftVehicleId': draftVehicleId,
+          'draftInspectionId': draftInspectionId,
+          'cylinderPhotoName': cylinderPhotoName,
+          'vehiclePhotoName': vehiclePhotoName,
+          'techPassportPhotoName': techPassportPhotoName,
+          'documentFileName': documentFileName,
+          'usesTwoCylinders': usesTwoCylinders,
+          'cylinderPhotoUploaded': cylinderPhotoUploaded,
+          'vehiclePhotoUploaded': vehiclePhotoUploaded,
+          'techPassportPhotoUploaded': techPassportPhotoUploaded,
+          'protectedInspectionPhotosLocked': protectedInspectionPhotosLocked,
+          'secondCylinderValues': {...secondCylinderValues},
+          'packageDocumentNames': {...packageDocumentNames},
+          'packageDocumentUploaded': {...packageDocumentUploaded},
+          'photoReviewNotices': {..._photoReviewNotices},
+          'cylinderPhotoPosition': cylinderPhotoPosition?.toJson(),
+          'vehiclePhotoPosition': vehiclePhotoPosition?.toJson(),
+          'techPassportPhotoPosition': techPassportPhotoPosition?.toJson(),
+          'packageDocumentPositions': {
+            for (final e in packageDocumentPositions.entries)
+              e.key: e.value.toJson(),
+          },
+        },
+        files: {
+          'primary_cylinder': ?cylinderPhotoBytes,
+          'primary_vehicle': ?vehiclePhotoBytes,
+          'primary_tech': ?techPassportPhotoBytes,
+          ...packageDocumentBytes,
+        },
+      );
+
+  Future<void> _persistInspectionRecovery() async {
+    if (!_canRecover || _restoringRecovery || screen < 15 || screen > 23) {
+      return;
+    }
+    _recoveryTimer?.cancel();
+    final owner = currentUser!.id;
+    final snapshot = _inspectionRecoverySnapshot();
+    try {
+      await _recovery.save(owner, snapshot);
+    } catch (_) {
+      if (mounted && !_recoveryWarningShown) {
+        _recoveryWarningShown = true;
+        setState(
+          () => apiState =
+              'Не удалось сохранить восстановление формы на телефоне. Не закрывайте страницу до отправки инспекции.',
+        );
+      }
+    }
+  }
+
+  Future<bool> _restoreInspectionRecovery() async {
+    if (!_canRecover) return false;
+    _restoringRecovery = true;
+    try {
+      final owner = currentUser!.id;
+      final saved = await _recovery.read(owner);
+      if (!mounted || saved == null || currentUser?.id != owner) return false;
+      final f = saved.fields;
+      final target = f['screen'];
+      if (target is! int ||
+          target < 15 ||
+          target > 23 ||
+          f['organizationId'] is! String ||
+          f['organizationId'] != _currentInspectionOrganization?.id) {
+        return false;
+      }
+      InspectionSummary? detail;
+      final id = f['draftInspectionId'];
+      if (id is String && id.isNotEmpty) {
+        detail = await repositories.inspections.detail(id);
+        if (!['draft', 'rejected'].contains(detail.status)) {
+          await _recovery.clear(owner);
+          return false;
+        }
+      }
+      if (!mounted || currentUser?.id != owner) return false;
+      Position? position(dynamic data) =>
+          data is Map ? Position.fromMap(data) : null;
+      setWebUpdateBusy('screen', true);
+      setState(() {
+        if (f['inspectionCertificateNumber'] is String) {
+          inspectionCertificateNumber =
+              f['inspectionCertificateNumber'] as String;
+        }
+        if (f['ownerId'] is String) ownerId = f['ownerId'] as String;
+        if (f['ownerName'] is String) ownerName = f['ownerName'] as String;
+        if (f['ownerPhone'] is String) ownerPhone = f['ownerPhone'] as String;
+        if (f['ownerAddress'] is String) {
+          ownerAddress = f['ownerAddress'] as String;
+        }
+        if (f['ownerKind'] is String) ownerKind = f['ownerKind'] as String;
+        if (f['inspectionIssuedAt'] is String) {
+          inspectionIssuedAt = f['inspectionIssuedAt'] as String;
+        }
+        if (f['vehiclePlate'] is String) {
+          vehiclePlate = f['vehiclePlate'] as String;
+        }
+        if (f['vehicleVin'] is String) vehicleVin = f['vehicleVin'] as String;
+        if (f['vehicleMakeModel'] is String) {
+          vehicleMakeModel = f['vehicleMakeModel'] as String;
+        }
+        if (f['vehicleYear'] is String) {
+          vehicleYear = f['vehicleYear'] as String;
+        }
+        if (f['vehicleColor'] is String) {
+          vehicleColor = f['vehicleColor'] as String;
+        }
+        if (f['cylinderNumber'] is String) {
+          cylinderNumber = f['cylinderNumber'] as String;
+        }
+        if (f['secondCylinderNumber'] is String) {
+          secondCylinderNumber = f['secondCylinderNumber'] as String;
+        }
+        if (f['cylinderMaker'] is String) {
+          cylinderMaker = f['cylinderMaker'] as String;
+        }
+        if (f['cylinderVolume'] is String) {
+          cylinderVolume = f['cylinderVolume'] as String;
+        }
+        if (f['cylinderProductionDate'] is String) {
+          cylinderProductionDate = f['cylinderProductionDate'] as String;
+        }
+        if (f['cylinderFuel'] is String) {
+          cylinderFuel = f['cylinderFuel'] as String;
+        }
+        if (f['reducerName'] is String) {
+          reducerName = f['reducerName'] as String;
+        }
+        if (f['controlUnitName'] is String) {
+          controlUnitName = f['controlUnitName'] as String;
+        }
+        if (f['cylinderShape'] is String) {
+          cylinderShape = f['cylinderShape'] as String;
+        }
+        draftVehicleId = f['draftVehicleId'] as String?;
+        draftInspectionId = f['draftInspectionId'] as String?;
+        cylinderPhotoName = f['cylinderPhotoName'] as String?;
+        vehiclePhotoName = f['vehiclePhotoName'] as String?;
+        techPassportPhotoName = f['techPassportPhotoName'] as String?;
+        documentFileName = f['documentFileName'] as String?;
+        usesTwoCylinders = f['usesTwoCylinders'] == true;
+        cylinderPhotoUploaded = f['cylinderPhotoUploaded'] == true;
+        vehiclePhotoUploaded = f['vehiclePhotoUploaded'] == true;
+        techPassportPhotoUploaded = f['techPassportPhotoUploaded'] == true;
+        protectedInspectionPhotosLocked =
+            f['protectedInspectionPhotosLocked'] == true;
+        secondCylinderValues = Map<String, String>.from(
+          f['secondCylinderValues'] as Map? ?? {},
+        );
+        packageDocumentNames = Map<String, String>.from(
+          f['packageDocumentNames'] as Map? ?? {},
+        );
+        packageDocumentUploaded = Map<String, bool>.from(
+          f['packageDocumentUploaded'] as Map? ?? {},
+        );
+        _photoReviewNotices
+          ..clear()
+          ..addAll(
+            Map<String, String>.from(f['photoReviewNotices'] as Map? ?? {}),
+          );
+        cylinderPhotoPosition = position(f['cylinderPhotoPosition']);
+        vehiclePhotoPosition = position(f['vehiclePhotoPosition']);
+        techPassportPhotoPosition = position(f['techPassportPhotoPosition']);
+        packageDocumentPositions = {
+          for (final e in (f['packageDocumentPositions'] as Map? ?? {}).entries)
+            e.key as String: Position.fromMap(e.value),
+        };
+        cylinderPhotoBytes = saved.files['primary_cylinder'];
+        vehiclePhotoBytes = saved.files['primary_vehicle'];
+        techPassportPhotoBytes = saved.files['primary_tech'];
+        packageDocumentBytes = {...saved.files}
+          ..removeWhere((key, _) => key.startsWith('primary_'));
+        selectedInspection = detail;
+        if (detail != null) {
+          final types = detail.files.map((file) => file.type).toSet();
+          cylinderPhotoUploaded =
+              cylinderPhotoUploaded && types.contains('cylinder_label');
+          vehiclePhotoUploaded =
+              vehiclePhotoUploaded && types.contains('vehicle_photo');
+          techPassportPhotoUploaded =
+              techPassportPhotoUploaded && types.contains('tech_passport');
+          packageDocumentUploaded.updateAll(
+            (key, value) => value && types.contains(key),
+          );
+        }
+        _history
+          ..clear()
+          ..add(_homeScreenForRoleCode(_roleCode));
+        screen = target;
+        _webInspectionInProgress = true;
+        apiState =
+            'Незавершённая инспекция восстановлена. Продолжайте с сохранённого шага.';
+      });
+      return true;
+    } catch (_) {
+      return false;
+    } finally {
+      _restoringRecovery = false;
+    }
   }
 
   Future<void> _loadInitialData() async {
@@ -754,15 +1030,21 @@ class _ErsiDemoState extends State<ErsiDemo> {
           viewHistory = await repositories.audit.myViews();
         }
       }
+      final recovered = await _restoreInspectionRecovery();
       if (mounted) {
         setState(() {
           bootstrapping = false;
-          apiState = currentUser == null
+          apiState = recovered
+              ? 'Незавершённая инспекция восстановлена. Продолжайте с сохранённого шага.'
+              : currentUser == null
               ? AppEnvironment.isDemo
                     ? 'Demo data'
                     : 'API online'
               : 'Session restored';
-          if (currentUser != null && widget.initialScreen == 0) {
+          if (!recovered &&
+              currentUser != null &&
+              widget.initialScreen == 0 &&
+              screen <= 3) {
             screen = _homeScreenForRoleCode(_roleCode);
           }
         });
@@ -1357,6 +1639,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
   }
 
   Future<void> _enterAuthenticated(AppUser user) async {
+    _recoveryCompleted = false;
     if (!mounted) return;
     setState(() {
       currentUser = user;
@@ -1381,8 +1664,9 @@ class _ErsiDemoState extends State<ErsiDemo> {
       await _loadNotifications();
       await _loadViewHistory();
     }
+    final recovered = await _restoreInspectionRecovery();
     if (mounted) {
-      go(_homeScreenForRoleCode(_roleCode));
+      if (!recovered) go(_homeScreenForRoleCode(_roleCode));
       unawaited(_askDiagnosticLocationConsent().catchError((Object _) {}));
     }
   }
@@ -1680,6 +1964,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
   }
 
   Future<void> _captureInspectionPhoto(String kind) async {
+    unawaited(_persistInspectionRecovery());
     try {
       if (!mounted) return;
       final file = await _captureReviewedPhoto(
@@ -1740,6 +2025,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
           false);
 
   Future<void> _pickTechPassportFile({required bool pdf}) async {
+    unawaited(_persistInspectionRecovery());
     try {
       final extensions = pdf
           ? const ['pdf']
@@ -1851,6 +2137,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
     String label, {
     bool camera = false,
   }) async {
+    unawaited(_persistInspectionRecovery());
     if (_isQualityControl && protectedInspectionDocuments.contains(type)) {
       setState(
         () =>
@@ -2153,12 +2440,23 @@ class _ErsiDemoState extends State<ErsiDemo> {
         return;
       }
       await repositories.inspections.setStatus(inspectionId, 'submitted');
+      _recoveryCompleted = true;
+      _recoveryTimer?.cancel();
+      if (currentUser != null) {
+        try {
+          await _recovery.clear(currentUser!.id);
+        } catch (_) {}
+      }
       await _loadMyInspections();
       if (!mounted) return;
       setState(() {
         _webInspectionInProgress = false;
         markWebChangesSaved();
         apiState = 'Инспекция отправлена';
+        cylinderPhotoBytes = null;
+        vehiclePhotoBytes = null;
+        techPassportPhotoBytes = null;
+        packageDocumentBytes = const {};
         draftVehicleId = null;
         draftInspectionId = null;
         protectedInspectionPhotosLocked = false;
@@ -2471,6 +2769,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
   }
 
   void _startNewInspection() {
+    _recoveryCompleted = false;
     setState(() {
       draftVehicleId = null;
       draftInspectionId = null;
@@ -2541,6 +2840,10 @@ class _ErsiDemoState extends State<ErsiDemo> {
         ? 2
         : requested;
     if (target == screen) return;
+    if (target >= 15 && target <= 23) {
+      _webInspectionInProgress = true;
+      setWebUpdateBusy('screen', true);
+    }
     setState(() {
       _history.add(screen);
       screen = target;
@@ -2728,6 +3031,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
   }
 
   Future<void> _logout() async {
+    unawaited(_persistInspectionRecovery());
     await repositories.auth.logout();
     if (!mounted) return;
     setState(() {
@@ -2761,7 +3065,8 @@ class _ErsiDemoState extends State<ErsiDemo> {
     _webPreviousScreen = screen;
     setWebUpdateBusy(
       'screen',
-      _webInspectionInProgress ||
+      bootstrapping ||
+          _webInspectionInProgress ||
           (screen == 2 && (authBusy || authPassword.isNotEmpty)) ||
           screen == 3 ||
           screen == 40 ||

@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:html' as html;
 import 'dart:typed_data';
+import 'encoded_image_dimensions.dart';
 
 import 'local_file.dart';
 import 'document_camera_web.dart';
@@ -48,32 +49,22 @@ Future<PickedLocalFile?> pickLocalFile(
         if (!completer.isCompleted) completer.complete(null);
         return;
       }
+      if (phoneCamera && file.size > 12 * 1024 * 1024) {
+        throw StateError(
+          'Выберите стандартное разрешение камеры: фото до 12 МБ и 40 мегапикселей.',
+        );
+      }
+      if (completer.isCompleted) return;
+      final bytes = await _readFileBytes(file);
       if (phoneCamera) {
-        if (file.size > 12 * 1024 * 1024) {
+        final dimensions = encodedImageDimensions(bytes);
+        if (dimensions != null &&
+            dimensions.width * dimensions.height > 40000000) {
           throw StateError(
             'Выберите стандартное разрешение камеры: фото до 12 МБ и 40 мегапикселей.',
           );
         }
-        final url = html.Url.createObjectUrlFromBlob(file);
-        final image = html.ImageElement();
-        try {
-          final loaded = image.onLoad.first.timeout(
-            const Duration(seconds: 10),
-          );
-          image.src = url;
-          await loaded;
-          if (image.naturalWidth * image.naturalHeight > 40000000) {
-            throw StateError(
-              'Выберите стандартное разрешение камеры: фото до 12 МБ и 40 мегапикселей.',
-            );
-          }
-        } finally {
-          image.src = '';
-          html.Url.revokeObjectUrl(url);
-        }
       }
-      if (completer.isCompleted) return;
-      final bytes = await _readFileBytes(file);
       if (!completer.isCompleted) {
         completer.complete(PickedLocalFile(name: file.name, bytes: bytes));
       }

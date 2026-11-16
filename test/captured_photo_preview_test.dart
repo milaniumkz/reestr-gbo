@@ -157,7 +157,10 @@ void main() {
       expect(completed, 0);
       expect(
         identical(
-          (tester.widget<Image>(find.byType(Image)).image as MemoryImage).bytes,
+          ((tester.widget<Image>(find.byType(Image)).image as ResizeImage)
+                      .imageProvider
+                  as MemoryImage)
+              .bytes,
           second.bytes,
         ),
         true,
