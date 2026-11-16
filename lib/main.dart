@@ -2762,7 +2762,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
     setWebUpdateBusy(
       'screen',
       _webInspectionInProgress ||
-          screen == 2 ||
+          (screen == 2 && (authBusy || authPassword.isNotEmpty)) ||
           screen == 3 ||
           screen == 40 ||
           qualityBusy ||
