@@ -9,6 +9,7 @@ import 'identity_face_monitor.dart';
 import 'identity_face_guide_model.dart';
 import 'identity_voice.dart';
 import 'identity_error_voice.dart';
+import '../platform/web_updates.dart';
 
 const inspectorIdentityConsent = 'ersi-gbo-inspector-face-2026-11-v1';
 const _actions = {
@@ -34,6 +35,7 @@ class _InspectorIdentityPageState extends State<InspectorIdentityPage>
   IdentityFaceSample _sample = IdentityFaceSample.unavailable;
   Map<String, dynamic>? _challenge;
   Timer? _timer;
+  bool _cameraPermissionDenied = false;
   bool _consent = false,
       _busy = false,
       _recording = false,
@@ -57,11 +59,13 @@ class _InspectorIdentityPageState extends State<InspectorIdentityPage>
   @override
   void initState() {
     super.initState();
+    setWebUpdateBusy('identity', true);
     WidgetsBinding.instance.addObserver(this);
   }
 
   @override
   void dispose() {
+    setWebUpdateBusy('identity', false);
     WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
     _voice.dispose();
@@ -93,6 +97,11 @@ class _InspectorIdentityPageState extends State<InspectorIdentityPage>
 
   void _error(Object error) {
     if (!mounted) return;
+    _cameraPermissionDenied =
+        error is CameraException &&
+        (error.code.toLowerCase().contains('access') ||
+            error.code.toLowerCase().contains('permission') ||
+            error.code.toLowerCase().contains('denied'));
     final message = error is ApiException
         ? error.message
         : error is CameraException
@@ -108,12 +117,14 @@ class _InspectorIdentityPageState extends State<InspectorIdentityPage>
     if (!_consent || _busy) return;
     var autoStart = false;
     FocusScope.of(context).unfocus();
-    _voice.play('ready');
+    _voice.stop();
+    _voice.unlock();
     setState(() {
       _busy = true;
       _cancelled = false;
       _countdown = 0;
       _message = '';
+      _cameraPermissionDenied = false;
     });
     try {
       final status = await widget.api.getJson('/auth/identity/status');
@@ -148,17 +159,18 @@ class _InspectorIdentityPageState extends State<InspectorIdentityPage>
         imageFormatGroup: identityCameraFormat,
       );
       _camera = camera;
-      await camera.initialize();
+      await camera.initialize().timeout(const Duration(seconds: 25));
       if (!mounted || _cancelled) {
         await camera.dispose();
         return;
       }
       setState(() => _sample = IdentityFaceSample.unavailable);
-      unawaited(
-        _monitor.start(camera, (sample) {
-          if (mounted) setState(() => _sample = sample);
-        }),
-      );
+      await WidgetsBinding.instance.endOfFrame;
+      await _monitor.waitForCamera(camera);
+      if (!mounted || _cancelled || _camera != camera) return;
+      await _monitor.start(camera, (sample) {
+        if (mounted) setState(() => _sample = sample);
+      });
       autoStart = true;
     } catch (error) {
       await _closeCamera().catchError((_) {});
@@ -168,7 +180,7 @@ class _InspectorIdentityPageState extends State<InspectorIdentityPage>
     }
     if (autoStart && mounted && !_cancelled) {
       await WidgetsBinding.instance.endOfFrame;
-      if (mounted && !_cancelled) await _record(playReady: false);
+      if (mounted && !_cancelled) await _record();
     }
   }
 
@@ -176,15 +188,29 @@ class _InspectorIdentityPageState extends State<InspectorIdentityPage>
     final camera = _camera;
     if (camera == null || _busy || _recording) return;
     FocusScope.of(context).unfocus();
-    if (playReady) {
-      _voice.play('ready');
-    }
+
     setState(() {
       _busy = true;
       _cancelled = false;
       _message = '';
     });
     try {
+      await _monitor.waitForCamera(camera);
+      if (!mounted || _cancelled || _camera != camera) return;
+      final faceDeadline = DateTime.now().add(const Duration(seconds: 20));
+      while (_sample.available && _sample.faces.length != 1) {
+        if (!mounted || _cancelled || _camera != camera) return;
+        if (DateTime.now().isAfter(faceDeadline)) {
+          throw StateError(
+            _sample.faces.isEmpty
+                ? 'Лицо не видно. Расположите лицо в овале и повторите запись.'
+                : 'В кадре несколько лиц. Останьтесь перед камерой один и повторите запись.',
+          );
+        }
+        setState(() => _message = facePositionText(facePosition(_sample)));
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      }
+      if (playReady) _voice.play('ready');
       final expires = DateTime.tryParse('${_challenge?['expiresAt']}');
       if (expires == null ||
           expires.difference(DateTime.now()).inSeconds < 45) {
@@ -225,6 +251,11 @@ class _InspectorIdentityPageState extends State<InspectorIdentityPage>
       final clock = Stopwatch()..start();
       _timer = Timer.periodic(const Duration(milliseconds: 100), (_) {
         if (!mounted || !_recording) return;
+        if (!_monitor.isCameraLive(camera)) {
+          _cancelled = true;
+          unawaited(_finish(discard: true));
+          return;
+        }
         setState(() => _seconds = clock.elapsedMilliseconds / 1000);
         final actions = _challenge?['actions'] as List? ?? [];
         final phase = ((_seconds - 2) / 6).floor();
@@ -390,7 +421,11 @@ class _InspectorIdentityPageState extends State<InspectorIdentityPage>
                             ? null
                             : (cameraReady ? _record : _prepare),
                         child: Text(
-                          cameraReady ? 'Начать запись' : 'Открыть камеру',
+                          cameraReady
+                              ? 'Начать запись'
+                              : _cameraPermissionDenied
+                              ? 'Повторно запросить доступ к камере'
+                              : 'Открыть камеру',
                         ),
                       ),
                     ],
@@ -398,6 +433,10 @@ class _InspectorIdentityPageState extends State<InspectorIdentityPage>
                       const SizedBox(height: 8),
                       const LinearProgressIndicator(),
                     ],
+                    if (_cameraPermissionDenied)
+                      const Text(
+                        'Нажмите «Повторно запросить доступ к камере». Если запрос не появляется, откройте настройки сайта в браузере, разрешите камеру и повторите.',
+                      ),
                     if (_message.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 8),

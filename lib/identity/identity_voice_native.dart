@@ -5,6 +5,7 @@ class IdentityVoice {
   AudioPlayer? _player;
   int _generation = 0;
   Future<void> warmup() async {}
+  void unlock() {}
   bool muted = false;
   bool failed = false;
   void play(String cue) {
