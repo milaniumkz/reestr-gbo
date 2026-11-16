@@ -3129,6 +3129,10 @@ class _ErsiDemoState extends State<ErsiDemo> {
         locked: protectedInspectionPhotosLocked && cylinderPhotoUploaded,
         onCamera: () => _captureInspectionPhoto('cylinder'),
         onNext: () {
+          if (!cylinderPhotoUploaded && cylinderPhotoBytes == null) {
+            setState(() => apiState = 'Ошибка: Добавьте фото бирки баллона');
+            return;
+          }
           if (usesTwoCylinders &&
               packageDocumentUploaded['cylinder_label_2'] != true &&
               !packageDocumentBytes.containsKey('cylinder_label_2')) {
@@ -3147,7 +3151,13 @@ class _ErsiDemoState extends State<ErsiDemo> {
         uploaded: vehiclePhotoUploaded,
         locked: protectedInspectionPhotosLocked && vehiclePhotoUploaded,
         onCamera: () => _captureInspectionPhoto('vehicle'),
-        onNext: () => go(20),
+        onNext: () {
+          if (!vehiclePhotoUploaded && vehiclePhotoBytes == null) {
+            setState(() => apiState = 'Ошибка: Добавьте фото автомобиля');
+            return;
+          }
+          go(20);
+        },
       ),
       20 => _PhotoStep(
         step: 6,
@@ -3219,7 +3229,13 @@ class _ErsiDemoState extends State<ErsiDemo> {
       21 => _ValidityStep(
         issuedAt: inspectionIssuedAt,
         validUntil: _plusYearsIso(inspectionIssuedAt, 2),
-        onNext: () => go(22),
+        onNext: () {
+          if (!techPassportPhotoUploaded && techPassportPhotoBytes == null) {
+            setState(() => apiState = 'Ошибка: Добавьте техпаспорт');
+            return;
+          }
+          go(22);
+        },
       ),
       22 => _DocumentScanStep(
         usesTwoCylinders: usesTwoCylinders,
@@ -3625,10 +3641,14 @@ class _AppAlertBanner extends StatelessWidget {
                   const SizedBox(height: 3),
                   Text(
                     body,
-                    maxLines: text.toLowerCase().contains('геолокац')
+                    maxLines:
+                        tone == _AlertTone.error ||
+                            text.toLowerCase().contains('геолокац')
                         ? null
                         : 4,
-                    overflow: text.toLowerCase().contains('геолокац')
+                    overflow:
+                        tone == _AlertTone.error ||
+                            text.toLowerCase().contains('геолокац')
                         ? TextOverflow.visible
                         : TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -3659,12 +3679,6 @@ class _AppAlertBanner extends StatelessWidget {
   _AlertTone _toneFor(String value) {
     final lower = value.toLowerCase();
     if (lower.startsWith('ошибка:')) return _AlertTone.error;
-    if (lower.contains('загрузка') ||
-        lower.contains('поиск') ||
-        lower.contains('проверка') ||
-        lower.contains('loading')) {
-      return _AlertTone.loading;
-    }
     if (lower.contains('ошибка') ||
         lower.contains('error') ||
         lower.contains('offline') ||
@@ -3673,6 +3687,12 @@ class _AppAlertBanner extends StatelessWidget {
         lower.contains('не различим') ||
         lower.contains('переснимите')) {
       return _AlertTone.error;
+    }
+    if (lower.contains('загрузка') ||
+        lower.contains('поиск') ||
+        lower.contains('проверка') ||
+        lower.contains('loading')) {
+      return _AlertTone.loading;
     }
     if (lower.contains('выберите') ||
         lower.contains('введите') ||

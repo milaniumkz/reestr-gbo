@@ -140,68 +140,75 @@ class _CapturedPhotoPreviewState extends State<_CapturedPhotoPreview> {
               ),
             ),
           ),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            color: Colors.white,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  widget.requireLabelContext
-                      ? labelPhotoInstructions
-                      : 'Увеличьте фото и проверьте резкость. Если текст размыт — переснимите.',
-                  textAlign: TextAlign.center,
-                ),
-                if (widget.requireLabelContext)
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: _contextConfirmed,
-                    onChanged: (value) =>
-                        setState(() => _contextConfirmed = value == true),
-                    controlAffinity: ListTileControlAffinity.leading,
-                    title: const Text(labelPhotoConfirmation),
-                  ),
-                if (_error != null)
-                  Text(
-                    _error!,
-                    style: const TextStyle(color: Colors.red),
-                    textAlign: TextAlign.center,
-                  ),
-                if (_checking) const LinearProgressIndicator(),
-                const SizedBox(height: 12),
-                Row(
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(context).height * .55,
+            ),
+            child: SingleChildScrollView(
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                color: Colors.white,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _checking
-                            ? null
-                            : () => Navigator.of(
-                                context,
-                              ).pop(_PhotoDecision.retake),
-                        icon: const Icon(Icons.camera_alt_outlined),
-                        label: const Text('Переснять'),
-                      ),
+                    Text(
+                      widget.requireLabelContext
+                          ? labelPhotoInstructions
+                          : 'Увеличьте фото и проверьте резкость. Если текст размыт — переснимите.',
+                      textAlign: TextAlign.center,
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: FilledButton(
-                        onPressed:
-                            !_checking &&
-                                _readable &&
-                                (!widget.requireLabelContext ||
-                                    _contextConfirmed)
-                            ? _accept
-                            : null,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF007A4D),
-                        ),
-                        child: const Text('Использовать фото'),
+                    if (widget.requireLabelContext)
+                      CheckboxListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: _contextConfirmed,
+                        onChanged: (value) =>
+                            setState(() => _contextConfirmed = value == true),
+                        controlAffinity: ListTileControlAffinity.leading,
+                        title: const Text(labelPhotoConfirmation),
                       ),
+                    if (_error != null)
+                      Text(
+                        _error!,
+                        style: const TextStyle(color: Colors.red),
+                        textAlign: TextAlign.center,
+                      ),
+                    if (_checking) const LinearProgressIndicator(),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _checking
+                                ? null
+                                : () => Navigator.of(
+                                    context,
+                                  ).pop(_PhotoDecision.retake),
+                            icon: const Icon(Icons.camera_alt_outlined),
+                            label: const Text('Переснять'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: FilledButton(
+                            onPressed:
+                                !_checking &&
+                                    _readable &&
+                                    (!widget.requireLabelContext ||
+                                        _contextConfirmed)
+                                ? _accept
+                                : null,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF007A4D),
+                            ),
+                            child: const Text('Использовать фото'),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
+              ),
             ),
           ),
         ],
