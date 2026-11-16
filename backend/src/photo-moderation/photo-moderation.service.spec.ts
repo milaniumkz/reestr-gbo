@@ -8,6 +8,7 @@ import {
 } from "@jest/globals";
 import sharp from "sharp";
 import { PhotoModerationService } from "./photo-moderation.service";
+import { DEVICE_MODEL } from './local-device-evidence';
 import { analyzePixels } from "./local-photo-analysis";
 const saved = process.env.PHOTO_MODERATION_MODE;
 beforeEach(() => {
@@ -27,6 +28,22 @@ async function image() {
   return sharp(documentSvg()).jpeg().toBuffer();
 }
 describe("local photo screening", () => {
+  it('checks both label slots against local device evidence without modifying original bytes',async()=>{
+    const original=await image();const saved=Buffer.from(original);
+    const detector={model:DEVICE_MODEL,analyze:jest.fn(async()=>({model:DEVICE_MODEL,authenticityGuaranteed:false as const,pageLikeBorder:false,detections:[{kind:'phone' as const,confidence:.95,agreement:.9,box:[.1,.1,.8,.8] as [number,number,number,number]}]}))};
+    const service=new PhotoModerationService(detector);
+    for(const type of ['cylinder_label','cylinder_label_2'])await expect(service.check(original,'label.jpg',type)).rejects.toThrow('В центре снимка распознан телефон');
+    expect(original.equals(saved)).toBe(true);expect(detector.analyze).toHaveBeenCalledTimes(2);
+    await expect(service.check(original,'passport.jpg','tech_passport')).resolves.toHaveProperty('moderationStatus');
+    expect(detector.analyze).toHaveBeenCalledTimes(2);
+  });
+  it('adds unavailable-detector and paper evidence to human review without automatic approval',async()=>{
+    const analyze=jest.fn(async()=>undefined as any);const service=new PhotoModerationService({model:DEVICE_MODEL,analyze});
+    expect((await service.check(await image(),'label.jpg','cylinder_label')).moderationReason).toContain('недоступна');
+    analyze.mockResolvedValueOnce({model:DEVICE_MODEL,authenticityGuaranteed:false,pageLikeBorder:true,detections:[]});
+    expect(await service.check(await image(),'label.jpg','cylinder_label')).toMatchObject({moderationStatus:'manual_review',moderationReason:expect.stringContaining('лист бумаги')});
+  });
+
   it("runs without a key or network even when legacy AI settings exist", async () => {
     process.env.PHOTO_MODERATION_MODE = "required";
     const fetch = jest.spyOn(globalThis, "fetch");
@@ -41,7 +58,7 @@ describe("local photo screening", () => {
       "screenshot.png",
       "tech_passport",
     );
-    expect(result.moderationModel).toBe("local-screening-v3.4");
+    expect(result.moderationModel).toBe("local-screening-v3.5");
     expect(result.moderationStatus).toBe("local_checked");
     expect(fetch).not.toHaveBeenCalled();
   });

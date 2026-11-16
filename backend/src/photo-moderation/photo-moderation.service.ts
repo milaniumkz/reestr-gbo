@@ -1,17 +1,20 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable, Optional } from "@nestjs/common";
 import sharp from "sharp";
 import { PhotoAnalysisLimiter } from "./photo-analysis-limiter";
 import { screenEvidence, shouldReshoot } from "./screen-evidence";
 import { analyzePixels, reviewReasons } from "./local-photo-analysis";
+import { LocalPhotoDeviceService } from './local-photo-device.service';
+import { deviceDecision } from './local-device-evidence';
 export type PhotoCheck = {
   moderationStatus: string;
   moderationModel?: string;
   moderationCheckedAt?: Date;
   moderationReason?: string;
 };
-const MODEL = "local-screening-v3.4";
+const MODEL = "local-screening-v3.5";
 @Injectable()
 export class PhotoModerationService {
+  constructor(@Optional() private readonly devices?:LocalPhotoDeviceService) {}
   private readonly limiter = new PhotoAnalysisLimiter();
   status() {
     return {
@@ -21,7 +24,8 @@ export class PhotoModerationService {
       provider: "local",
       model: MODEL,
       authenticityGuaranteed: false,
-      analysisRevision: "v3.4-single-label-context-review",
+      analysisRevision: "v3.5-local-device-and-page-context",
+      deviceDetection: this.devices?.model ?? 'not-configured',
       cylinderLabelOriginality: "quality-review-required",
       load: this.limiter.status(),
     };
@@ -168,6 +172,14 @@ export class PhotoModerationService {
         reasons.unshift(
           "Подлинность бирки автоматически не подтверждена. Контроль качества: проверьте, что снята оригинальная бирка непосредственно на баллоне. На одном общем снимке должны быть видны вся бирка или выбитая маркировка и баллон по краям, а номер и даты должны читаться. Исключите края листа A4, корпус телефона или монитора, распечатку и изображение другого объекта",
         );
+      if (_type === "cylinder_label" && this.devices) {
+        // Analysis derivative only. Original upload bytes and stored file remain untouched.
+        const analysis = await input.clone().rotate().flatten({background:'#ffffff'})
+          .resize({width:1280,height:1280,fit:'inside',withoutEnlargement:true}).jpeg({quality:90}).toBuffer();
+        const decision=deviceDecision(await this.devices.analyze(analysis));
+        if(decision.rejectReason)throw new BadRequestException(decision.rejectReason);
+        reasons.unshift(...decision.reasons);
+      }
       return reasons.length
         ? result("manual_review", reasons.join("; "))
         : result(
