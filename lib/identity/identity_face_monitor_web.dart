@@ -11,10 +11,33 @@ external void _recordingGuide();
 @JS('intercityFaceGuide.stop')
 external void _stopGuide();
 
+@JS('intercityFaceGuide.cameraIsLive')
+external bool _cameraIsLive();
+@JS('intercityFaceGuide.waitForCamera')
+external JSPromise<JSAny?> _waitForCamera();
+
 const identityCameraFormat = ImageFormatGroup.unknown;
 
 class IdentityFaceMonitor {
   bool get usesCameraStream => false;
+  bool isCameraLive(CameraController camera) {
+    try {
+      return _cameraIsLive();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> waitForCamera(CameraController camera) async {
+    try {
+      await _waitForCamera().toDart;
+    } catch (_) {
+      throw StateError(
+        'Камера не передаёт изображение. Разрешите доступ к камере и нажмите «Открыть камеру» повторно.',
+      );
+    }
+  }
+
   Future<void> start(
     CameraController camera,
     void Function(IdentityFaceSample) report,

@@ -10496,61 +10496,74 @@ class _PhotoBox extends StatelessWidget {
   final List<int>? imageBytes;
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      height: imageBytes == null ? (tall ? 400 : 300) : null,
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: softGreen,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: line),
-      ),
-      child: imageBytes == null
-          ? Column(
-              mainAxisAlignment: tall
-                  ? MainAxisAlignment.end
-                  : MainAxisAlignment.center,
-              children: [
-                CircleAvatar(
-                  radius: tall ? 34 : 20,
-                  backgroundColor: Colors.white,
-                  child: Icon(
-                    Icons.camera_alt_rounded,
-                    color: green,
-                    size: tall ? 30 : 24,
+  Widget build(BuildContext context) {
+    final original = imageBytes;
+    final preview = original == null
+        ? null
+        : ResizeImage.resizeIfNeeded(
+            1200,
+            null,
+            MemoryImage(
+              original is Uint8List ? original : Uint8List.fromList(original),
+            ),
+          );
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: imageBytes == null ? (tall ? 400 : 300) : null,
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: softGreen,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: line),
+        ),
+        child: imageBytes == null
+            ? Column(
+                mainAxisAlignment: tall
+                    ? MainAxisAlignment.end
+                    : MainAxisAlignment.center,
+                children: [
+                  CircleAvatar(
+                    radius: tall ? 34 : 20,
+                    backgroundColor: Colors.white,
+                    child: Icon(
+                      Icons.camera_alt_rounded,
+                      color: green,
+                      size: tall ? 30 : 24,
+                    ),
+                  ),
+                  SizedBox(height: tall ? 128 : 16),
+                  Text(caption, style: _bold),
+                  Text(
+                    tall
+                        ? 'Текст должен быть резким и полностью видимым'
+                        : 'Нажмите для открытия камеры',
+                    style: _muted,
+                  ),
+                  if (tall) const SizedBox(height: 32),
+                ],
+              )
+            : DocumentImageFrame(
+                image: preview!,
+                evictOnDispose: true,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(22),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image(
+                        image: preview,
+                        fit: BoxFit.contain,
+                        gaplessPlayback: true,
+                      ),
+                    ],
                   ),
                 ),
-                SizedBox(height: tall ? 128 : 16),
-                Text(caption, style: _bold),
-                Text(
-                  tall
-                      ? 'Текст должен быть резким и полностью видимым'
-                      : 'Нажмите для открытия камеры',
-                  style: _muted,
-                ),
-                if (tall) const SizedBox(height: 32),
-              ],
-            )
-          : DocumentImageFrame(
-              image: MemoryImage(Uint8List.fromList(imageBytes!)),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(22),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    Image.memory(
-                      Uint8List.fromList(imageBytes!),
-                      fit: BoxFit.contain,
-                      gaplessPlayback: true,
-                    ),
-                  ],
-                ),
               ),
-            ),
-    ),
-  );
+      ),
+    );
+  }
 }
 
 class _ProgressDots extends StatelessWidget {

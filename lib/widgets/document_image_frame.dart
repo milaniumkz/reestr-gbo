@@ -6,7 +6,9 @@ class DocumentImageFrame extends StatefulWidget {
     super.key,
     required this.image,
     required this.child,
+    this.evictOnDispose = false,
   });
+  final bool evictOnDispose;
   final ImageProvider image;
   final Widget child;
   @override
@@ -26,7 +28,10 @@ class _DocumentImageFrameState extends State<DocumentImageFrame> {
   @override
   void didUpdateWidget(covariant DocumentImageFrame oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.image != widget.image) _resolve();
+    if (oldWidget.image != widget.image) {
+      if (oldWidget.evictOnDispose) oldWidget.image.evict();
+      _resolve();
+    }
   }
 
   void _resolve() {
@@ -34,6 +39,8 @@ class _DocumentImageFrameState extends State<DocumentImageFrame> {
     _stream = widget.image.resolve(createLocalImageConfiguration(context));
     _listener = ImageStreamListener((info, synchronousCall) {
       final ratio = info.image.width / info.image.height;
+      // This listener needs only dimensions, not its cloned decoded image handle.
+      info.dispose();
       if (mounted && ratio != _ratio) {
         if (synchronousCall) {
           _ratio = ratio;
@@ -48,6 +55,7 @@ class _DocumentImageFrameState extends State<DocumentImageFrame> {
   @override
   void dispose() {
     if (_listener != null) _stream?.removeListener(_listener!);
+    if (widget.evictOnDispose) widget.image.evict();
     super.dispose();
   }
 

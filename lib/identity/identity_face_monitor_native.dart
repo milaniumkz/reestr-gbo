@@ -6,7 +6,12 @@ import 'identity_face_guide_model.dart';
 const identityCameraFormat = ImageFormatGroup.unknown;
 
 class IdentityFaceMonitor {
+  Future<void> waitForCamera(CameraController camera) async {
+    if (!camera.value.isInitialized) throw StateError('Камера не готова');
+  }
+
   bool get usesCameraStream => false;
+  bool isCameraLive(CameraController camera) => camera.value.isInitialized;
   Future<void> start(
     CameraController camera,
     void Function(IdentityFaceSample) report,
