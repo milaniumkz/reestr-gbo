@@ -1,4 +1,5 @@
 import 'client_telemetry.dart';
+import '../platform/session_refresh_lock.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'dart:typed_data';
@@ -205,8 +206,18 @@ class ApiClient {
     });
   }
 
-  Future<bool> _performRefresh() async {
+  Future<bool> _performRefresh() =>
+      withSessionRefreshLock(_performLockedRefresh);
+
+  Future<bool> _performLockedRefresh() async {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
+    final latestAccess = prefs.getString('accessToken');
+    if (_differentSession(_accessToken, latestAccess)) return false;
+    if (_canUseRotatedAccessToken(_accessToken, latestAccess)) {
+      _accessToken = latestAccess;
+      return true;
+    }
     final refreshToken = prefs.getString('refreshToken');
     if (refreshToken == null || refreshToken.isEmpty) {
       if (_accessToken != null) await invalidateSession();
@@ -221,8 +232,17 @@ class ApiClient {
         },
         body: jsonEncode({'refreshToken': refreshToken}),
       );
-      // An older request must never clear a newly established session.
-      if (prefs.getString('refreshToken') != refreshToken) return false;
+      // Observe other tabs before accepting/refusing a rotated token. Cached
+      // SharedPreferences must never revoke a newer browser session.
+      await prefs.reload();
+      if (prefs.getString('refreshToken') != refreshToken) {
+        final latest = prefs.getString('accessToken');
+        if (_canUseRotatedAccessToken(_accessToken, latest)) {
+          _accessToken = latest;
+          return true;
+        }
+        return false;
+      }
       if (response.statusCode < 200 || response.statusCode >= 300) {
         if (response.statusCode == 401 || response.statusCode == 403) {
           await invalidateSession();
@@ -243,6 +263,50 @@ class ApiClient {
         await prefs.setString('sessionExpiresAt', sessionExpiresAt);
       }
       return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  bool _differentSession(String? current, String? latest) {
+    if (current == null || latest == null || current == latest) return false;
+    try {
+      Map<String, dynamic> payload(String token) =>
+          jsonDecode(
+                utf8.decode(
+                  base64Url.decode(base64Url.normalize(token.split('.')[1])),
+                ),
+              )
+              as Map<String, dynamic>;
+      final a = payload(current), b = payload(latest);
+      return a['sub'] is String &&
+          a['sid'] is String &&
+          b['sub'] is String &&
+          b['sid'] is String &&
+          (a['sub'] != b['sub'] || a['sid'] != b['sid'] || a['pv'] != b['pv']);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  bool _canUseRotatedAccessToken(String? current, String? latest) {
+    if (current == null || latest == null || current == latest) return false;
+    try {
+      Map<String, dynamic> payload(String token) =>
+          jsonDecode(
+                utf8.decode(
+                  base64Url.decode(base64Url.normalize(token.split('.')[1])),
+                ),
+              )
+              as Map<String, dynamic>;
+      final a = payload(current), b = payload(latest);
+      return a['sub'] is String &&
+          a['sid'] is String &&
+          a['sub'] == b['sub'] &&
+          a['sid'] == b['sid'] &&
+          a['pv'] == b['pv'] &&
+          b['exp'] is num &&
+          (b['exp'] as num) > DateTime.now().millisecondsSinceEpoch / 1000 + 5;
     } catch (_) {
       return false;
     }
