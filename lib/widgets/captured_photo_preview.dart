@@ -51,7 +51,7 @@ class _CapturedPhotoPreview extends StatefulWidget {
 }
 
 class _CapturedPhotoPreviewState extends State<_CapturedPhotoPreview> {
-  late final MemoryImage _image;
+  late final ImageProvider _image;
   bool _checking = false;
   String? _error;
   Future<void> _accept() async {
@@ -79,8 +79,12 @@ class _CapturedPhotoPreviewState extends State<_CapturedPhotoPreview> {
   void initState() {
     super.initState();
     final bytes = widget.file.bytes;
-    _image = MemoryImage(
-      bytes is Uint8List ? bytes : Uint8List.fromList(bytes),
+    _image = ResizeImage(
+      MemoryImage(bytes is Uint8List ? bytes : Uint8List.fromList(bytes)),
+      width: 1800,
+      height: 1800,
+      policy: ResizeImagePolicy.fit,
+      allowUpscaling: false,
     );
   }
 

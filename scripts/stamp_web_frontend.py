@@ -18,5 +18,5 @@ s = s.replace("mainJsPath === 'main.dart.js'", f"mainJsPath === '{name}'")
 s = s.replace("main.dart.js?v=' + buildVersion", f"{name}?v=' + buildVersion")
 p.write_text(s)
 p = root / 'index.html'
-p.write_text(p.read_text().replace('install.js?v=1', f'install.js?v={commit}').replace('auto-update.js?v=1', f'auto-update.js?v={commit}').replace('face-guide/guide.js?v=1', f'face-guide/guide.js?v={commit}').replace('__ERSI_RELEASE__', commit))
+p.write_text(p.read_text().replace('install.js?v=1', f'install.js?v={commit}').replace('auto-update.js?v=1', f'auto-update.js?v={commit}').replace('face-guide/guide.js?v=1', f'face-guide/guide.js?v={commit}').replace('inspection-recovery.js?v=1', f'inspection-recovery.js?v={commit}').replace('__ERSI_RELEASE__', commit))
 (root / 'release.json').write_text(json.dumps({'version': commit, 'bundle': name}) + '\n')

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'api_client.dart';
+import '../platform/session_refresh_lock.dart';
 import 'public_offer.dart';
 import 'app_environment.dart';
 import 'models.dart';
@@ -19,6 +20,15 @@ class AuthRepository {
   final ApiClient _api;
 
   Future<PasswordLoginResult> login(
+    String phone,
+    String password,
+    String role, {
+    String? bin,
+  }) => withSessionRefreshLock(
+    () => _loginLocked(phone, password, role, bin: bin),
+  );
+
+  Future<PasswordLoginResult> _loginLocked(
     String phone,
     String password,
     String role, {
@@ -49,6 +59,22 @@ class AuthRepository {
   }
 
   Future<AppUser> changeInitialPassword(
+    String token,
+    String password,
+    String confirmation,
+    String role, {
+    String? bin,
+  }) => withSessionRefreshLock(
+    () => _changeInitialPasswordLocked(
+      token,
+      password,
+      confirmation,
+      role,
+      bin: bin,
+    ),
+  );
+
+  Future<AppUser> _changeInitialPasswordLocked(
     String token,
     String password,
     String confirmation,
@@ -127,9 +153,13 @@ class AuthRepository {
     }
   }
 
-  Future<AppUser?> restoreSession() async {
+  Future<AppUser?> restoreSession() =>
+      withSessionRefreshLock(_restoreSessionLocked);
+
+  Future<AppUser?> _restoreSessionLocked() async {
     if (AppEnvironment.isDemo) return null;
     final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
     final sessionExpiresAt = prefs.getString('sessionExpiresAt');
     if (sessionExpiresAt != null) {
       final expiresAt = DateTime.tryParse(sessionExpiresAt);
@@ -147,9 +177,11 @@ class AuthRepository {
       final response = await _api.postJson('/auth/refresh', {
         'refreshToken': refreshToken,
       });
+      await prefs.reload();
       if (prefs.getString('refreshToken') != refreshToken) return null;
       return _storeAuthResponse(response);
     } on ApiException catch (error) {
+      await prefs.reload();
       if (prefs.getString('refreshToken') != refreshToken) return null;
       if (error.statusCode == 401 || error.statusCode == 403) {
         await _api.invalidateSession();
