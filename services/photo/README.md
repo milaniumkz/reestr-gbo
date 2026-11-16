@@ -1,4 +1,4 @@
-# Local photo device evidence — candidate, not deployed
+# Local photo device evidence
 
 This prototype adds semantic object evidence to the existing local cylinder-label
 checks. It returns only phone, screen, laptop and book/page candidates, plus an
@@ -46,9 +46,9 @@ Public evaluation sources, kept outside the repository:
 - Wikimedia Commons: IPhone 6s, iPhone 8 plus and iPhone X.jpg (CC0).
 - Wikimedia Commons: IPhone X with packaging and accessories.jpg (CC BY-SA 4.0).
 
-Observed peak RSS was about 325 MiB. Proposed production isolation is a separate
+Observed peak RSS was about 325 MiB. Production isolation is a separate
 private, read-only, non-root worker limited to 512 MiB RAM and 0.75 CPU, without
 published ports or outbound networking; loopback proxy 127.0.0.1:8093. The video
-identity worker must remain unchanged. Preparing the Docker/NGINX production
-rollout was blocked by automatic approval review pending explicit owner approval.
-No production photo service or new blocking policy has been deployed.
+identity worker must remain unchanged. The owner authorized publication of the isolated worker. Deploy the worker first,
+verify health and local calibration, then publish the backend patch separately.
+Do not expose the inference endpoint or mount customer uploads into the worker.
