@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const index = readFileSync(new URL('../web/index.html', `file://${__filename}`), 'utf8');
 const inline = index.match(/<script>([\s\S]*?)<\/script>/)[1];
 
-function harness({storageHangs = false, workers} = {}) {
+function harness({storageHangs = false, workers, recover = false} = {}) {
   const listeners = {}, timers = new Map(), scripts = [], removed = [], deleted = [];
   const nodes = Object.fromEntries(['startup', 'startup-message', 'startup-retry'].map(id => [id, {
     hidden: id === 'startup-retry', textContent: '',
@@ -16,7 +16,7 @@ function harness({storageHangs = false, workers} = {}) {
     navigator: workers ? {serviceWorker:workers} : {}, document: {getElementById: id => nodes[id], createElement: () => ({}), body: {appendChild: s => scripts.push(s)}},
     setTimeout: (fn, ms) => { timers.set(ms, fn); return ms; }, clearTimeout: ms => timers.delete(ms),
   };
-  context.window = {location: {reload: () => removed.push('reload')},
+  context.window = {location: {search: recover ? '?recover=1' : '', reload: () => removed.push('reload')},
     addEventListener: (name, fn) => {listeners[name] = fn;},
     caches: {keys: () => storageHangs ? new Promise(() => {}) : Promise.resolve(['flutter-app-cache', 'technical-push']),
       delete: key => {deleted.push(key); return Promise.resolve(true);}},
@@ -82,19 +82,43 @@ test('Flutter loads its renderer from the current server and reports bootstrap r
   assert.equal(event, 'ersi-bootstrap-error');
 });
 
-test('install worker does not cache API data and gives a clear offline navigation response', async () => {
+test('install worker leaves navigation, API, uploads and static files to the browser', () => {
   const handlers = {};
   vm.runInNewContext(readFileSync(new URL('../web/ersi-pwa-sw.js', `file://${__filename}`), 'utf8'), {
-    self:{location:{origin:'https://example.org'},addEventListener:(name,fn)=>handlers[name]=fn},
-    URL,Response,Request:class {constructor(request,options){Object.assign(this,request,options);}},fetch:async()=>{throw new Error('offline');},
+    self:{addEventListener:(name,fn)=>handlers[name]=fn},
+    fetch:()=>{throw new Error('The install worker must never proxy the network');},
   });
-  let response;
-  handlers.fetch({request:{method:'GET',mode:'cors',url:'https://example.org/api/v1/me'},respondWith:()=>{throw new Error('API must not be intercepted');}});
-  handlers.fetch({request:{method:'GET',mode:'navigate',url:'https://example.org/'},respondWith:r=>{response=r;}});
-  const offline = await response;
-  assert.equal(offline.status,503);
-  assert.equal(offline.headers.get('Cache-Control'),'no-store');
-  assert.match(await offline.text(),/Нет подключения/);
+  for(const [method,mode,path] of [['GET','navigate','/'],['GET','cors','/api/v1/me'],['POST','cors','/api/v1/inspections/1/photos'],['GET','cors','/main.version.dart.js']]) {
+    handlers.fetch({request:{method,mode,url:'https://example.org'+path},respondWith:()=>{throw new Error('Request must not be intercepted');}});
+  }
+});
+
+test('explicit recovery removes only app workers and preserves push/session storage', async () => {
+  const removed = [];
+  const workers={getRegistrations:async()=>[
+    {active:{scriptURL:'https://example.org/ersi-pwa-sw.js'},unregister:async()=>removed.push('install')},
+    {active:{scriptURL:'https://example.org/flutter_service_worker.js'},unregister:async()=>removed.push('flutter')},
+    {active:{scriptURL:'https://example.org/push-sw.js'},unregister:async()=>removed.push('push')},
+  ]};
+  const h=harness({workers,recover:true});await settle();
+  assert.deepEqual(removed,['install','flutter']);
+  assert.equal(h.scripts.length,1);
+  assert.deepEqual(h.deleted,['flutter-app-cache']);
+});
+
+test('installed app checks worker updates on return, reconnection and its timer', async () => {
+  const events={},intervals=[],storage=new Map([['flutter.accessToken','unchanged']]);let updates=0,registers=0;
+  const document={visibilityState:'visible',createElement:()=>({}),head:{appendChild(){}},addEventListener:(name,fn)=>events[name]=fn};
+  vm.runInNewContext(readFileSync(new URL('../web/install.js',`file://${__filename}`),'utf8'),{
+    window:{ersiFlutterReady:true,isSecureContext:true,matchMedia:()=>({matches:true}),addEventListener:(name,fn)=>events[name]=fn},
+    navigator:{serviceWorker:{register:async()=>{registers++;return {update:async()=>updates++};}}},document,
+    localStorage:{getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value)},setTimeout(){},clearTimeout(){},setInterval:fn=>intervals.push(fn),Date,Promise,
+  });
+  await settle();assert.equal(updates,1);
+  for(const name of ['pageshow','online','visibilitychange']){await events[name]();}
+  await intervals[0]();assert.equal(updates,5);assert.equal(registers,1);
+  document.visibilityState='hidden';await events.visibilitychange();assert.equal(updates,5);
+  assert.equal(storage.get('flutter.accessToken'),'unchanged');
 });
 
 test('frontend publisher stamps a versioned bundle and install script', () => {

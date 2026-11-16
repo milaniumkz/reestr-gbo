@@ -24,7 +24,7 @@
   }
   const blocked = () => appBusy || dirty || document.querySelector('dialog[open],[role="dialog"]') || /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '');
   function apply(force=false) {
-    if (!pending || reloading || navigator.onLine===false) return;
+    if (!pending || reloading) return;
     if (!force && (document.visibilityState!=='visible' || blocked() || Date.now()-lastInput<3000)) return;
     if (force && blocked() && !window.confirm(words[lang()].confirm)) return;
     try {if (!force && sessionStorage.getItem('ersi-update-attempt')===pending) return;sessionStorage.setItem('ersi-update-attempt',pending);}catch{}
@@ -33,7 +33,7 @@
     location.replace(url.toString());
   }
   async function check() {
-    if (checking || reloading || navigator.onLine===false) return;
+    if (checking || reloading) return;
     checking=true;
     const controller=new AbortController(), timeout=setTimeout(()=>controller.abort(),7000);
     try {

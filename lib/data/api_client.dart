@@ -1,5 +1,6 @@
 import 'client_telemetry.dart';
 import 'dart:convert';
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
@@ -42,15 +43,31 @@ class ApiClient {
     String path,
     Map<String, dynamic> body,
   ) async {
-    final response = await _http.post(
-      _uri(path),
-      headers: {
-        ..._headers,
-        ...await ClientTelemetry.headers(),
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode(body),
-    );
+    late final http.Response response;
+    try {
+      final pending = _http.post(
+        _uri(path),
+        headers: {
+          ..._headers,
+          ...await ClientTelemetry.headers(),
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(body),
+      );
+      response = await (path == '/auth/login'
+          ? pending.timeout(const Duration(seconds: 25))
+          : pending);
+    } on http.ClientException {
+      throw const ApiException(
+        0,
+        'Не удалось связаться с сервером. Повторите действие.',
+      );
+    } on TimeoutException {
+      throw const ApiException(
+        0,
+        'Сервер не ответил вовремя. Повторите действие.',
+      );
+    }
     if (response.statusCode == 401 &&
         (!path.startsWith('/auth/') ||
             path.startsWith('/auth/recovery/requests') ||
