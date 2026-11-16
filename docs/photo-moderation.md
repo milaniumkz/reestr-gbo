@@ -68,3 +68,12 @@
 Keep one current photo per cylinder label slot. The client shows a generic example: the complete label takes about half the frame, with the cylinder surface and attachment visible around it and legible identifying text. Label previews require the user to confirm those details; retaking resets confirmation. This checkbox is a user check, not machine evidence of authenticity or a server approval. Camera and gallery paths for both labels use that review. Mobile capture keeps the original camera file; framed web capture saves the entire sensor image for labels instead of cropping away peripheral evidence.
 
 All new label photos still require quality review. The immediate same-organization notification now explicitly asks staff to examine the surrounding cylinder, attachment, paper edges and phone/monitor housing. Existing combined-screen and unusable-image rejection remains; no unvalidated paper detector, optical authenticity guarantee or external image service is added. Clean printed reproductions cannot be reliably distinguished by this local filter and therefore are not automatically approved. Accepted replacement uploads replace only the current label attachment in that cylinder slot; stored originals and upload audit history remain, and rejected replacements leave the previous attachment intact. Existing inspections are not bulk rewritten.
+
+
+### Проверка при выборе файла
+
+Авторизованный POST `/inspections/photo-moderation/check` проверяет выбранный файл до создания черновика и не сохраняет его. На предпросмотре «Использовать фото» ожидает ответа: отказ оставляет предпросмотр с конкретным названием документа и причиной; снимок не попадает в форму. Загрузки файлов, включая вторую бирку и документы, проходят тот же предварительный анализ. Переходы между страницами и отправка заблокированы на время проверки. При окончательной загрузке сервер повторяет проверку, предварительный ответ не является разрешением обхода.
+
+Это перенос существующего локального анализа на момент выбора, а не новая модель распознавания подделок. PDF без рендера страниц и сомнительные снимки остаются для контроля качества; автоматическое подтверждение подлинности отсутствует.
+
+При предварительном `manual_review` форма показывает предупреждение «Контроль качества» с причиной, а не сообщение об успешном подтверждении подлинности. Уведомление сотрудникам создаётся после фактического прикрепления файла к инспекции. Неполный ответ или отключённая проверка не считаются успешным предварительным результатом.

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reestr_ts_demo/platform/local_file.dart';
@@ -15,7 +16,13 @@ Future<void> _decodePhoto(WidgetTester tester) async {
 }
 
 class _Host extends StatelessWidget {
-  const _Host(this.capture, this.done, {this.labelContext = false});
+  const _Host(
+    this.capture,
+    this.done, {
+    this.labelContext = false,
+    this.validate,
+  });
+  final Future<void> Function(PickedLocalFile)? validate;
   final bool labelContext;
   final Future<PickedLocalFile?> Function() capture;
   final void Function(PickedLocalFile?) done;
@@ -28,6 +35,7 @@ class _Host extends StatelessWidget {
             context,
             title: 'Фото техпаспорта',
             capture: capture,
+            validate: validate,
             requireLabelContext: labelContext,
           ),
         ),
@@ -50,6 +58,44 @@ void main() {
     bytes: base64Decode(
       'iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAAD0lEQVR4nGNgYPiPhHBxAN1JC/U39qNPAAAAAElFTkSuQmCC',
     ),
+  );
+
+  testWidgets(
+    'server rejection stays in preview and pending check disables acceptance',
+    (tester) async {
+      PickedLocalFile? accepted;
+      final pending = Completer<void>();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: _Host(
+            () async => first,
+            (file) => accepted = file,
+            validate: (_) => pending.future,
+          ),
+        ),
+      );
+      await tester.tap(find.text('Camera'));
+      await tester.pumpAndSettle();
+      await _decodePhoto(tester);
+      await tester.tap(find.text('Использовать фото'));
+      await tester.pump();
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(
+        tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+        isNull,
+      );
+      expect(accepted, isNull);
+      pending.completeError(
+        StateError(
+          'Ошибка: Техпаспорт — детали почти неразличимы. Переснимите оригинал',
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Ошибка: Техпаспорт'), findsOneWidget);
+      expect(find.text('Предпросмотр фото'), findsOneWidget);
+      expect(accepted, isNull);
+      expect(find.text('Переснять'), findsOneWidget);
+    },
   );
 
   testWidgets(

@@ -265,6 +265,17 @@ describe('Inspection quality control workflow', () => {
     const user=(id:string)=>({sub:id,phone:'test',roles:['inspection_org']});
     return {state,prisma,storage,certificates,service,user,moderation,passport};
   }
+  it('checks selected files before a draft exists and names the rejected document without storing it', async () => {
+    const f=fixture();
+    f.moderation.check.mockRejectedValueOnce(new BadRequestException('Детали почти неразличимы. Переснимите оригинал'));
+    await expect(f.service.checkPhoto('cylinder_work_record_2',{originalname:'blur.jpg',buffer:Buffer.from('photo')})).rejects.toThrow('Ошибка: Рабочая запись второго баллона — Детали почти неразличимы');
+    expect(f.storage.putObject).not.toHaveBeenCalled();
+    expect(f.prisma.inspectionPhoto.create).not.toHaveBeenCalled();
+    await expect(f.service.checkPhoto('unknown',{originalname:'x.jpg',buffer:Buffer.from('photo')})).rejects.toThrow('Неизвестный тип');
+    expect(f.moderation.check).toHaveBeenCalledTimes(1);
+    await expect(f.service.checkPhoto('vehicle_photo',{originalname:'ok.jpg',buffer:Buffer.from('photo')})).resolves.toMatchObject({moderationStatus:'approved'});
+  });
+
   it('stores passport verification and blocks submission after vehicle identifiers change', async () => {
     const f=fixture();
     await f.service.uploadPhoto('inspection_1','tech_passport',{originalname:'passport.pdf',buffer:Buffer.from('%PDF-valid-fixture')},f.user('inspector'));

@@ -618,6 +618,8 @@ class _ErsiDemoState extends State<ErsiDemo> {
   bool qualityConfirmed = false;
   bool qualityBusy = false;
   bool _inspectionSubmitting = false;
+  bool _checkingSelectedFile = false;
+  final Map<String, String> _photoReviewNotices = {};
   Map<String, String> packageDocumentNames = const {};
   Map<String, List<int>> packageDocumentBytes = const {};
   Map<String, Position> packageDocumentPositions = const {};
@@ -1645,12 +1647,14 @@ class _ErsiDemoState extends State<ErsiDemo> {
     required double frameAspectRatio,
     required bool requireDocumentBounds,
     bool labelContext = false,
+    required String photoType,
   }) {
     final languageCode = Localizations.localeOf(context).languageCode;
     return capturePhotoWithPreview(
       context,
       title: title,
       requireLabelContext: labelContext,
+      validate: (file) => _validateSelectedFile(photoType, title, file),
       capture: () async {
         if (kIsWeb) {
           return pickLocalFile(
@@ -1687,6 +1691,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         frameAspectRatio: 1.6,
         requireDocumentBounds: kind == 'tech_passport',
         labelContext: kind == 'cylinder',
+        photoType: _inspectionPhotoType(kind),
       );
       if (file == null) return;
       final filename = file.name;
@@ -1715,7 +1720,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         }
         apiState = position == null
             ? 'Фото выбрано. Геолокация недоступна. Включите её и разрешите доступ к местоположению перед отправкой инспекции.'
-            : 'Фото выбрано';
+            : _photoReviewNotices[_inspectionPhotoType(kind)] ?? 'Фото выбрано';
       });
     } catch (error) {
       final message = error is StateError
@@ -1752,6 +1757,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
               String.fromCharCodes(file.bytes.take(5)) != '%PDF-')) {
         throw StateError('Выберите настоящий PDF-файл техпаспорта');
       }
+      await _validateSelectedFile('tech_passport', 'Техпаспорт', file);
       final position = await _tryCurrentPosition();
       if (!mounted) return;
       setState(() {
@@ -1770,6 +1776,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
             ..remove('tech_passport_back');
         }
         apiState =
+            _photoReviewNotices['tech_passport'] ??
             'Техпаспорт выбран. PDF проверяется по содержимому и данным автомобиля; фотография — только по качеству снимка';
       });
     } catch (error) {
@@ -1783,7 +1790,51 @@ class _ErsiDemoState extends State<ErsiDemo> {
     }
   }
 
+  Future<void> _validateSelectedFile(
+    String type,
+    String label,
+    PickedLocalFile file,
+  ) async {
+    if (_checkingSelectedFile) {
+      throw StateError('Дождитесь завершения проверки файла');
+    }
+    setState(() {
+      _checkingSelectedFile = true;
+      apiState = 'Проверка файла: $label';
+    });
+    try {
+      final checked = await repositories.inspections.checkPhoto(
+        type: type,
+        filename: file.name,
+        bytes: file.bytes,
+      );
+      if (![
+        'manual_review',
+        'local_checked',
+      ].contains(checked['moderationStatus'])) {
+        throw StateError(
+          'Сервер не подтвердил проверку файла. Повторите загрузку.',
+        );
+      }
+      _photoReviewNotices.remove(type);
+      if (checked['moderationStatus'] == 'manual_review') {
+        _photoReviewNotices[type] =
+            'Контроль качества: $label — ${checked['moderationReason'] ?? 'Требуется ручная проверка'}';
+      }
+    } catch (error) {
+      final message = _uploadErrorText(error);
+      final detail = message.startsWith('Ошибка:')
+          ? message
+          : 'Ошибка: $label — $message';
+      if (mounted) setState(() => apiState = detail);
+      throw StateError(detail);
+    } finally {
+      if (mounted) setState(() => _checkingSelectedFile = false);
+    }
+  }
+
   String _uploadErrorText(Object error) {
+    if (error is StateError) return error.message.toString();
     if (error is ApiException && [400, 413, 503].contains(error.statusCode)) {
       return error.message;
     }
@@ -1812,6 +1863,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
       if (camera) {
         file = await _captureReviewedPhoto(
           title: label,
+          photoType: type,
           labelContext: type == 'cylinder_label' || type == 'cylinder_label_2',
           requireDocumentBounds: type != 'cylinder_label_2',
           frameAspectRatio:
@@ -1832,6 +1884,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
             title: label,
             capture: pick,
             requireLabelContext: true,
+            validate: (file) => _validateSelectedFile(type, label, file),
           );
         } else {
           file = await pick();
@@ -1840,6 +1893,9 @@ class _ErsiDemoState extends State<ErsiDemo> {
       if (file == null) {
         if (mounted) setState(() => apiState = 'Документ не выбран');
         return;
+      }
+      if (!camera && type != 'cylinder_label' && type != 'cylinder_label_2') {
+        await _validateSelectedFile(type, label, file);
       }
       final selectedFile = file;
       final bytes = selectedFile.bytes;
@@ -1863,7 +1919,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
           documentFileName = selectedFile.name;
           apiState = position == null
               ? 'Документ выбран. Геолокация недоступна. Включите её и разрешите доступ к местоположению перед отправкой инспекции.'
-              : 'Документ выбран: $label';
+              : _photoReviewNotices[type] ?? 'Документ выбран: $label';
         });
       }
     } catch (error) {
@@ -2043,7 +2099,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
   }
 
   Future<void> _submitInspection() async {
-    if (_inspectionSubmitting) return;
+    if (_inspectionSubmitting || _checkingSelectedFile) return;
     setState(() => _inspectionSubmitting = true);
     try {
       if (_editingQualityInspection) {
@@ -2139,7 +2195,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
         .replaceFirst('Exception: ', '')
         .trim();
     if (clean.isEmpty) return 'Ошибка отправки инспекции';
-    return clean;
+    return clean.startsWith('Ошибка:') ? clean : 'Ошибка: $clean';
   }
 
   void _goToMissingInspectionStep(String message) {
@@ -2474,6 +2530,7 @@ class _ErsiDemoState extends State<ErsiDemo> {
   }
 
   void go(int index) {
+    if (_checkingSelectedFile) return;
     final requested = index.clamp(0, 40);
     final target = passwordChangeToken != null && requested >= 4
         ? 3
@@ -3088,6 +3145,10 @@ class _ErsiDemoState extends State<ErsiDemo> {
         locked: protectedInspectionPhotosLocked && cylinderPhotoUploaded,
         onCamera: () => _captureInspectionPhoto('cylinder'),
         onNext: () {
+          if (!cylinderPhotoUploaded && cylinderPhotoBytes == null) {
+            setState(() => apiState = 'Ошибка: Добавьте фото бирки баллона');
+            return;
+          }
           if (usesTwoCylinders &&
               packageDocumentUploaded['cylinder_label_2'] != true &&
               !packageDocumentBytes.containsKey('cylinder_label_2')) {
@@ -3106,7 +3167,13 @@ class _ErsiDemoState extends State<ErsiDemo> {
         uploaded: vehiclePhotoUploaded,
         locked: protectedInspectionPhotosLocked && vehiclePhotoUploaded,
         onCamera: () => _captureInspectionPhoto('vehicle'),
-        onNext: () => go(20),
+        onNext: () {
+          if (!vehiclePhotoUploaded && vehiclePhotoBytes == null) {
+            setState(() => apiState = 'Ошибка: Добавьте фото автомобиля');
+            return;
+          }
+          go(20);
+        },
       ),
       20 => _PhotoStep(
         step: 6,
@@ -3178,7 +3245,13 @@ class _ErsiDemoState extends State<ErsiDemo> {
       21 => _ValidityStep(
         issuedAt: inspectionIssuedAt,
         validUntil: _plusYearsIso(inspectionIssuedAt, 2),
-        onNext: () => go(22),
+        onNext: () {
+          if (!techPassportPhotoUploaded && techPassportPhotoBytes == null) {
+            setState(() => apiState = 'Ошибка: Добавьте техпаспорт');
+            return;
+          }
+          go(22);
+        },
       ),
       22 => _DocumentScanStep(
         usesTwoCylinders: usesTwoCylinders,
@@ -3584,10 +3657,14 @@ class _AppAlertBanner extends StatelessWidget {
                   const SizedBox(height: 3),
                   Text(
                     body,
-                    maxLines: text.toLowerCase().contains('геолокац')
+                    maxLines:
+                        tone == _AlertTone.error ||
+                            text.toLowerCase().contains('геолокац')
                         ? null
                         : 4,
-                    overflow: text.toLowerCase().contains('геолокац')
+                    overflow:
+                        tone == _AlertTone.error ||
+                            text.toLowerCase().contains('геолокац')
                         ? TextOverflow.visible
                         : TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -3617,18 +3694,22 @@ class _AppAlertBanner extends StatelessWidget {
 
   _AlertTone _toneFor(String value) {
     final lower = value.toLowerCase();
+    if (lower.startsWith('контроль качества:')) return _AlertTone.warning;
+    if (lower.startsWith('ошибка:')) return _AlertTone.error;
+    if (lower.contains('ошибка') ||
+        lower.contains('error') ||
+        lower.contains('offline') ||
+        lower.contains('недоступ') ||
+        lower.contains('не удалось') ||
+        lower.contains('не различим') ||
+        lower.contains('переснимите')) {
+      return _AlertTone.error;
+    }
     if (lower.contains('загрузка') ||
         lower.contains('поиск') ||
         lower.contains('проверка') ||
         lower.contains('loading')) {
       return _AlertTone.loading;
-    }
-    if (lower.contains('ошибка') ||
-        lower.contains('error') ||
-        lower.contains('offline') ||
-        lower.contains('недоступ') ||
-        lower.contains('не удалось')) {
-      return _AlertTone.error;
     }
     if (lower.contains('выберите') ||
         lower.contains('введите') ||
