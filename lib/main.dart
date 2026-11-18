@@ -990,8 +990,9 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
               _remoteFilesComplete(
                 fields,
                 Map<String, dynamic>.from(row['files'] as Map? ?? {}),
-              ))
+              )) {
             _fullySyncedDraftIds.add(id);
+          }
           if (local == null ||
               DateTime.tryParse(
                     local.savedAt,
@@ -1081,8 +1082,9 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
       ('primary_tech', 'techPassportPhotoName'),
     ]) {
       if ((fields[pair.$2] as String?)?.isNotEmpty == true &&
-          !files.containsKey(pair.$1))
+          !files.containsKey(pair.$1)) {
         return false;
+      }
     }
     for (final type in (fields['packageDocumentNames'] as Map? ?? {}).keys) {
       if (!files.containsKey(type)) return false;

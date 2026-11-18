@@ -1,7 +1,7 @@
 // Local outbox isolation/atomicity, synthetic bytes only. No Flutter/API required.
 const {chromium}=require('playwright'),fs=require('node:fs'),assert=require('node:assert/strict');
 (async()=>{const b=await chromium.launch({executablePath:'/usr/bin/chromium',args:['--no-sandbox']});try{
- const p=await b.newPage();await p.goto((process.env.INSPECTION_TEST_ORIGIN||'http://127.0.0.1:8797')+'/not-found.html');
+ const context=await b.newContext();const p=await context.newPage();await p.goto((process.env.INSPECTION_TEST_ORIGIN||'http://127.0.0.1:8797')+'/not-found.html');
  const code=fs.readFileSync('web/inspection-recovery.js','utf8');await p.addScriptTag({content:code});
  await p.evaluate(async()=>{const s=window.ersiInspectionRecovery;
   await s.save('a',JSON.stringify({localDraftId:'first',ownerName:'FIRST'}),[{type:'primary_tech',bytes:new Uint8Array([1,2,3]),version:1}]);
