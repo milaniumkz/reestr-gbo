@@ -3398,6 +3398,8 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
     bool forceDataStep = false,
     bool lockProtectedPhotos = false,
   }) async {
+    if (_openingDraft) return;
+    final owner = currentUser?.id;
     if (_localDraftId != null && !_recoveryCompleted) {
       await _persistInspectionRecovery();
     }
@@ -3413,7 +3415,7 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
     setState(() => apiState = 'Загрузка черновика');
     try {
       final detail = await repositories.inspections.detail(inspection.id);
-      if (!mounted) return;
+      if (!mounted || currentUser?.id != owner) return;
       final fileTypes = detail.files.map((file) => file.type).toSet();
       final packageUploaded = <String, bool>{
         for (final type in [
@@ -3485,6 +3487,7 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
         protectedInspectionPhotosLocked = lockProtectedPhotos;
         apiState = 'Черновик открыт';
       });
+      _openingDraft = false;
       if (forceDataStep) {
         go(15);
       } else if (!cylinderPhotoUploaded ||
@@ -3501,7 +3504,11 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
         go(23);
       }
     } catch (_) {
-      if (mounted) setState(() => apiState = 'Ошибка открытия черновика');
+      if (mounted && currentUser?.id == owner) {
+        setState(() => apiState = 'Ошибка открытия черновика');
+      }
+    } finally {
+      _openingDraft = false;
     }
   }
 
