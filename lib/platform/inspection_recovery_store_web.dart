@@ -5,21 +5,54 @@ import 'dart:typed_data';
 import '../data/inspection_recovery.dart';
 
 @JS('ersiInspectionRecovery.read')
-external JSPromise<JSAny?> _read(JSString owner);
+external JSPromise<JSAny?> _read(JSString owner, [JSString? id]);
+@JS('ersiInspectionRecovery.list')
+external JSPromise<JSArray<JSObject>> _list(JSString owner);
 @JS('ersiInspectionRecovery.save')
 external JSPromise<JSAny?> _save(
   JSString owner,
   JSString fields,
   JSArray<JSObject> files,
 );
+@JS('ersiInspectionRecovery.markVersion')
+external JSPromise<JSAny?> _markVersion(
+  JSString owner,
+  JSString id,
+  JSNumber version,
+);
 @JS('ersiInspectionRecovery.clear')
-external JSPromise<JSAny?> _clear(JSString owner);
+external JSPromise<JSAny?> _clear(JSString owner, [JSString? id]);
 
 class InspectionRecoveryStore {
   final _versions = Expando<int>();
   int _nextVersion = 0;
-  Future<InspectionRecoverySnapshot?> read(String owner) async {
-    final raw = await _read(owner.toJS).toDart;
+  Future<void> markVersion(String owner, String id, int version) async {
+    await _markVersion(owner.toJS, id.toJS, version.toJS).toDart;
+  }
+
+  Future<List<InspectionRecoveryDraft>> list(String owner) async => [
+    for (final item in (await _list(owner.toJS).toDart).toDart)
+      InspectionRecoveryDraft(
+        id: item.getProperty<JSString>('id'.toJS).toDart,
+        fields:
+            jsonDecode(item.getProperty<JSString>('fields'.toJS).toDart)
+                as Map<String, dynamic>,
+        savedAt: item.getProperty<JSString>('savedAt'.toJS).toDart,
+      ),
+  ];
+  Future<InspectionRecoverySnapshot?> readDraft(String owner, String id) =>
+      _readSnapshot(owner, id);
+  Future<void> clearDraft(String owner, String id) async {
+    await _clear(owner.toJS, id.toJS).toDart;
+  }
+
+  Future<InspectionRecoverySnapshot?> read(String owner) =>
+      _readSnapshot(owner, null);
+  Future<InspectionRecoverySnapshot?> _readSnapshot(
+    String owner,
+    String? id,
+  ) async {
+    final raw = await _read(owner.toJS, id?.toJS).toDart;
     if (raw == null) return null;
     final result = raw as JSObject;
     final fields =

@@ -1,3 +1,5 @@
+import { InspectionDraftsService } from './inspection-drafts.service';
+import { InspectionDraftsController } from './inspection-drafts.controller';
 import { LocalPhotoDeviceService } from '../photo-moderation/local-photo-device.service';
 import { TechPassportService } from '../tech-passport/tech-passport.service';
 import { PhotoModerationService } from '../photo-moderation/photo-moderation.service';
@@ -9,8 +11,8 @@ import { InspectionsService } from './inspections.service';
 
 @Module({
   imports: [CertificatesModule, StorageModule],
-  controllers: [InspectionsController],
-  providers: [InspectionsService, PhotoModerationService,TechPassportService,LocalPhotoDeviceService],
+  controllers: [InspectionsController,InspectionDraftsController],
+  providers: [InspectionDraftsService,InspectionsService, PhotoModerationService,TechPassportService,LocalPhotoDeviceService],
   exports: [PhotoModerationService],
 })
 export class InspectionsModule {}

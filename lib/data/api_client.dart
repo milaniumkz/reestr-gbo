@@ -104,6 +104,41 @@ class ApiClient {
     return _decode(response);
   }
 
+  Future<Map<String, dynamic>> putJson(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
+    final response = await _http.put(
+      _uri(path),
+      headers: {
+        ..._headers,
+        ...await ClientTelemetry.headers(),
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(body),
+    );
+    if (response.statusCode == 401 &&
+        (!path.startsWith('/auth/') ||
+            path.startsWith('/auth/recovery/requests') ||
+            path.startsWith('/auth/identity/') ||
+            path == '/auth/password/update') &&
+        await _refreshAccessToken()) {
+      return putJson(path, body);
+    }
+    return _decode(response);
+  }
+
+  Future<Map<String, dynamic>> deleteJson(String path) async {
+    final response = await _http.delete(
+      _uri(path),
+      headers: {..._headers, ...await ClientTelemetry.headers()},
+    );
+    if (response.statusCode == 401 && await _refreshAccessToken()) {
+      return deleteJson(path);
+    }
+    return _decode(response);
+  }
+
   Future<Map<String, dynamic>> postMultipart(
     String path, {
     required String fieldName,
