@@ -61,11 +61,11 @@ describe("local photo screening", () => {
     await expect(service.check(original,'passport.jpg','tech_passport')).resolves.toHaveProperty('moderationStatus');
     expect(detector.analyze).toHaveBeenCalledTimes(2);
   });
-  it('adds unavailable-detector and paper evidence to human review without automatic approval',async()=>{
+  it('keeps unavailable screen detection explicit and ignores paper-only evidence',async()=>{
     const analyze=jest.fn(async()=>undefined as any);const service=new PhotoModerationService({model:DEVICE_MODEL,analyze});
     expect((await service.check(await image(),'label.jpg','cylinder_label')).moderationReason).toContain('недоступна');
     analyze.mockResolvedValueOnce({model:DEVICE_MODEL,authenticityGuaranteed:false,pageLikeBorder:true,detections:[]});
-    expect(await service.check(await image(),'label.jpg','cylinder_label')).toMatchObject({moderationStatus:'manual_review',moderationReason:expect.stringContaining('лист бумаги')});
+    expect(await service.check(await image(),'label.jpg','cylinder_label')).toMatchObject({moderationStatus:'local_checked'});
   });
 
   it("runs without a key or network even when legacy AI settings exist", async () => {
@@ -82,19 +82,19 @@ describe("local photo screening", () => {
       "screenshot.png",
       "tech_passport",
     );
-    expect(result.moderationModel).toBe("local-screening-v3.5");
+    expect(result.moderationModel).toBe("local-screening-v3.6");
     expect(result.moderationStatus).toBe("local_checked");
     expect(fetch).not.toHaveBeenCalled();
   });
-  it.each(['cylinder_label','cylinder_label_2'])('never treats a clean %s as proof of an original label', async(type)=>{
+  it.each(['cylinder_label','cylinder_label_2'])('limits a clean %s to blur/screen screening', async(type)=>{
     const network=jest.spyOn(globalThis,'fetch');
     const result=await new PhotoModerationService().check(await image(),'original-label.jpg',type);
-    expect(result).toMatchObject({moderationStatus:'manual_review',moderationReason:expect.stringContaining('оригинальная бирка непосредственно на баллоне')});
+    expect(result).toMatchObject({moderationStatus:'local_checked',moderationReason:expect.stringContaining('экрана')});
     expect(network).not.toHaveBeenCalled();
   });
-  it('still requests quality review for labels when local image checks are disabled',async()=>{
+  it('still screens cylinder labels when optional screening is disabled',async()=>{
     process.env.PHOTO_MODERATION_MODE='off';
-    expect(await new PhotoModerationService().check(await image(),'label.jpg','cylinder_label')).toMatchObject({moderationStatus:'manual_review',moderationReason:expect.stringContaining('оригинальная бирка')});
+    expect(await new PhotoModerationService().check(await image(),'label.jpg','cylinder_label')).toMatchObject({moderationStatus:'local_checked',moderationReason:expect.stringContaining('экрана')});
   });
   it("does not equate periodic printed text and table rules with screen bands", () => {
     const width = 320,
@@ -105,7 +105,7 @@ describe("local photo screening", () => {
     expect(analyzePixels(data, width, height).periodicRows).toBe(false);
   });
   it.each(["horizontal", "vertical"])(
-    "flags synthetic %s screen bands for human review, without rejecting upload",
+    "does not penalize isolated %s bands on a detailed photo",
     async (axis) => {
       const width = 1200,
         height = 800,
@@ -122,6 +122,7 @@ describe("local photo screening", () => {
                     (axis === "horizontal" ? y / height : x / width),
                 ),
           );
+      for(let y=35;y<height-20;y+=45)for(let x=35;x<width-20;x+=55)for(let dy=0;dy<5;dy++)for(let dx=0;dx<20;dx++)data[(y+dy)*width+x+dx]=30;
       const png = await sharp(data, { raw: { width, height, channels: 1 } })
         .png()
         .toBuffer();
@@ -130,11 +131,11 @@ describe("local photo screening", () => {
         "document.jpg",
         "vehicle_photo",
       );
-      expect(result.moderationStatus).toBe("manual_review");
-      expect(result.moderationReason).toContain("полосы");
+      expect(result.moderationStatus).toBe("local_checked");
+      expect(result.moderationReason).not.toContain("полосы");
     },
   );
-  it("flags a dark enclosing frame without claiming it is definitely a phone", async () => {
+  it("does not penalize a frame alone", async () => {
     const png = await sharp(
       Buffer.from(
         '<svg width="640" height="480" xmlns="http://www.w3.org/2000/svg"><rect width="640" height="480" fill="black"/><rect x="45" y="45" width="550" height="390" fill="#ddd"/></svg>',
@@ -145,9 +146,15 @@ describe("local photo screening", () => {
     expect(
       await new PhotoModerationService().check(png, "doc.png", "vehicle_photo"),
     ).toMatchObject({
-      moderationStatus: "manual_review",
-      moderationReason: expect.stringContaining("рамка"),
+      moderationStatus: "local_checked",
     });
+  });
+  it('accepts mild softness and darker readable documents without extra quality flags',async()=>{
+    for(const original of [await sharp(documentSvg()).blur(.6).jpeg().toBuffer(),await sharp(documentSvg()).linear(.15,0).jpeg().toBuffer()]){
+      const copy=Buffer.from(original);
+      expect(await new PhotoModerationService().check(original,'application.jpg','applicant_application')).toMatchObject({moderationStatus:'local_checked'});
+      expect(original.equals(copy)).toBe(true);
+    }
   });
   it("does not pretend that PDF pages were checked", async () => {
     expect(
@@ -161,7 +168,7 @@ describe("local photo screening", () => {
       moderationReason: expect.stringContaining("всех страниц"),
     });
   });
-  it("rejects uniform unusable frames and low resolution", async () => {
+  it("rejects unusable frames but allows clear smaller photos", async () => {
     const blank = await sharp({
       create: { width: 1200, height: 800, channels: 3, background: "white" },
     })
@@ -173,7 +180,7 @@ describe("local photo screening", () => {
     const tiny = await sharp(documentSvg()).resize(100, 100).png().toBuffer();
     await expect(
       new PhotoModerationService().check(tiny, "photo.jpg", "tech_passport"),
-    ).rejects.toThrow("маленькое");
+    ).resolves.toMatchObject({moderationStatus:"local_checked"});
   });
   it("rejects corrupt payloads and oversized files before storage", async () => {
     await expect(
@@ -236,8 +243,7 @@ describe("local photo screening", () => {
         type,
       );
       expect(result).toMatchObject({
-        moderationStatus: "manual_review",
-        moderationReason: expect.stringContaining("Невысокое разрешение"),
+        moderationStatus: "local_checked",
       });
     },
   );
@@ -252,7 +258,7 @@ describe("local photo screening", () => {
         "record.jpg",
         "cylinder_work_record",
       ),
-    ).resolves.toMatchObject({ moderationStatus: "manual_review" });
+    ).resolves.toMatchObject({ moderationStatus: "local_checked" });
   });
   it("rejects high-resolution blurred text instead of treating table edges as legibility", async () => {
     const blurred = await sharp(documentSvg())

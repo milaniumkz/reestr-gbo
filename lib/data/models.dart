@@ -777,6 +777,7 @@ class InspectionSummary {
       approvedAt: json['approvedAt']?.toString() ?? '',
       files: photos
           .whereType<Map<String, dynamic>>()
+          .where((file) => file['type'] != 'applicant_questionnaire')
           .map(InspectionFileInfo.fromJson)
           .toList(),
     );

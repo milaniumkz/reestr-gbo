@@ -523,7 +523,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       ...(inspection.usesTwoCylinders ? secondCylinderDocuments : []),
       "vehicle_photo",
       "tech_passport",
-      ...(["draft", "rejected"].includes(inspection.status) || inspection.requireApplicantPhotos ? ["applicant_application", "applicant_questionnaire"] : []),
+      ...(["draft", "rejected"].includes(inspection.status) || inspection.requireApplicantPhotos ? ["applicant_application"] : []),
       "gas_work_record",
       "cylinder_work_record",
       "gas_inspection_report",
