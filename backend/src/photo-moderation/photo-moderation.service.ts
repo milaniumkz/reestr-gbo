@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, Optional } from "@nestjs/common";
 import sharp from "sharp";
+import {createHash} from "node:crypto";
 import { PhotoAnalysisLimiter } from "./photo-analysis-limiter";
 import { screenEvidence, shouldReshoot } from "./screen-evidence";
 import { analyzePixels, reviewReasons } from "./local-photo-analysis";
@@ -16,6 +17,28 @@ const MODEL = "local-screening-v3.5";
 export class PhotoModerationService {
   constructor(@Optional() private readonly devices?:LocalPhotoDeviceService) {}
   private readonly limiter = new PhotoAnalysisLimiter();
+  // Metadata only: never retain photos. Exact original bytes + field + policy.
+  private readonly completed = new Map<string,{until:number;value:PhotoCheck}>();
+  private readonly pending = new Map<string,Promise<PhotoCheck>>();
+  async check(buffer:Buffer,fileName:string,type:string):Promise<PhotoCheck> {
+    if(buffer.length>12*1024*1024)return this.analyze(buffer,fileName,type);
+    const now=Date.now();
+    for(const [key,entry] of this.completed)if(entry.until<=now)this.completed.delete(key);
+    const key=type+':'+(process.env.PHOTO_MODERATION_MODE??'auto')+':'+createHash('sha256').update(buffer).digest('hex');
+    const hit=this.completed.get(key);
+    if(hit)return {...hit.value};
+    const running=this.pending.get(key);if(running)return {...await running};
+    const task=this.analyze(buffer,fileName,type);
+    this.pending.set(key,task);
+    try {
+      const result=await task;
+      if(!result.moderationReason?.includes('временно недоступна')){
+        if(this.completed.size>=64)this.completed.delete(this.completed.keys().next().value!);
+        this.completed.set(key,{until:Date.now()+5*60_000,value:{...result}});
+      }
+      return {...result};
+    } finally {this.pending.delete(key);}
+  }
   status() {
     return {
       enabled: process.env.PHOTO_MODERATION_MODE !== "off",
@@ -30,7 +53,7 @@ export class PhotoModerationService {
       load: this.limiter.status(),
     };
   }
-  async check(
+  private async analyze(
     buffer: Buffer,
     _fileName: string,
     _type: string,

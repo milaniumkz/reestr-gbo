@@ -26,7 +26,7 @@ const assert=require('node:assert/strict');
     let json={items:[]};
     if(path.endsWith('/auth/refresh'))json={accessToken:'identity-test',refreshToken:'identity-test',sessionExpiresAt:new Date(Date.now()+3600000).toISOString(),user:{sub:'inspector-fixture',phone:'+77000000000',roles:['inspection_org']}};
     else if(path.endsWith('/auth/identity/status'))json={required:fixture.role==='inspector',verified:fixture.role!=='inspector'||verified,enrolled:!!fixture.enrolled,engineReady:true};
-    else if(path.endsWith('/auth/identity/challenge')){challenge={challengeId:'11111111-1111-4111-8111-111111111111',challengeToken:'synthetic-camera-only',actions:fixture.enrolled?['OPEN_MOUTH','BLINK','TURN_LEFT']:['OPEN_MOUTH','BLINK'],expiresAt:new Date(Date.now()+300000).toISOString()};json=challenge;}
+    else if(path.endsWith('/auth/identity/challenge')){challenge={challengeId:'11111111-1111-4111-8111-111111111111',challengeToken:'synthetic-camera-only',actions:fixture.enrolled?['TURN_RIGHT','BLINK','TURN_LEFT']:['TURN_LEFT','BLINK'],expiresAt:new Date(Date.now()+300000).toISOString()};json=challenge;}
     else if(path.endsWith('/video')){const body=request.postDataBuffer();assert(body&&body.length>10000,'actual MediaRecorder bytes must be uploaded');assert(body.includes(Buffer.from('synthetic-camera-only')),'challenge secret must bind upload');uploads++;verified=!fixture.rejected;json=fixture.rejected?{status:'REJECTED',message:'В кадре должно быть только одно лицо'}:{status:'VERIFIED'};}
     else if(path.endsWith('/organizations')){protectedCalls++;json={items:[{id:'test-org',bin:'123456789012',type:'inspection_org',name:'Учебный орган',status:'active',members:[{id:'member',userId:'inspector-fixture',role:fixture.role,user:{id:'inspector-fixture',fullName:'Учебный сотрудник'}}]}]};}
     return route.fulfill({json});
@@ -37,7 +37,7 @@ const assert=require('node:assert/strict');
     const semantics=page.locator('flt-semantics-placeholder');if(await semantics.count())await semantics.evaluate(e=>e.click());
     if(fixture.role==='inspector'){
      const consent=page.getByRole('checkbox');await consent.waitFor();
-     await consent.check();
+     await page.waitForTimeout(700);await consent.check();
      const open=page.getByRole('button',{name:'ОТКРЫТЬ КАМЕРУ',exact:true});
      const openBox=await open.boundingBox();assert(openBox&&openBox.y+openBox.height<=page.viewportSize().height,'camera button must be visible without scrolling');
      if(fixture.deniedOnce)await page.evaluate(()=>{const original=navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);let denied=false;navigator.mediaDevices.getUserMedia=constraints=>{if(!denied){denied=true;return Promise.reject(new DOMException('Permission denied','NotAllowedError'));}return original(constraints);};});
