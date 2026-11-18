@@ -1115,9 +1115,10 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
                 : 'Новая инспекция',
             subtitle: [
               draft.fields['inspectionCertificateNumber'] ?? '',
+              _shortDateTime(draft.savedAt),
               tr(
                 context,
-                _remoteDraftIds.contains(draft.id)
+                _fullySyncedDraftIds.contains(draft.id)
                     ? 'Сохранено на сервере'
                     : 'Сохраняется на сервере',
               ),
