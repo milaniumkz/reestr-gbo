@@ -14,6 +14,17 @@ function fixture(purpose='ENROLL'){
  return {service,db,engine,row,session,secret};
 }
 describe('Session-bound video proof',()=>{
+ it.each([false,true])('creates only supported simple gestures (enrolled=%s)',async enrolled=>{
+  const f=fixture();
+  jest.spyOn(f.service,'status').mockResolvedValue({required:true,verified:false,enrolled,engineReady:true,consentVersion:'ersi-gbo-inspector-face-2026-11-v1'});
+  f.db.inspectorIdentityChallenge.create=jest.fn(async({data}:any)=>({id:'new',expiresAt:new Date(),...data}));
+  for(let n=0;n<30;n++){
+   const challenge=await f.service.challenge(actor,'ersi-gbo-inspector-face-2026-11-v1');
+   expect(challenge.actions).toHaveLength(enrolled?3:2);
+   expect(new Set(challenge.actions).size).toBe(challenge.actions.length);
+   expect(challenge.actions.every(a=>['TURN_LEFT','TURN_RIGHT','BLINK'].includes(a))).toBe(true);
+  }
+ });
  it('enrolls once and verifies only the current session',async()=>{const f=fixture();await expect(f.service.submit(actor,f.row.id,f.secret,Buffer.alloc(10001))).resolves.toMatchObject({status:'VERIFIED'});expect(f.db.inspectorIdentityProfile.create).toHaveBeenCalledTimes(1);expect(f.db.session.update).toHaveBeenCalledWith({where:{id:'s'},data:{identityVerifiedAt:expect.any(Date)}});});
  it('compares a new login without replacing the template',async()=>{const f=fixture('LOGIN');await expect(f.service.submit(actor,f.row.id,f.secret,Buffer.alloc(10001))).resolves.toMatchObject({status:'VERIFIED'});expect(f.db.inspectorIdentityProfile.create).not.toHaveBeenCalled();});
  it('rejects a different face',async()=>{const f=fixture('LOGIN');f.engine.verify.mockResolvedValue({verdict:'PASS',model:'model',embedding:[0,1,...Array(126).fill(0)],videoSignature:Array(40).fill('0123456789abcdef')});await expect(f.service.submit(actor,f.row.id,f.secret,Buffer.alloc(10001))).resolves.toMatchObject({status:'REJECTED'});expect(f.db.session.update).not.toHaveBeenCalled();});

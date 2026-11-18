@@ -32,7 +32,7 @@ export class InspectorIdentityService implements OnModuleInit,OnModuleDestroy {
   if(!status.required||status.verified)throw new ConflictException('Видеопроверка для этого сеанса не требуется');
   if(!status.engineReady)throw new ConflictException('Видеопроверка временно недоступна. Повторите позже.');
   await enforceRateLimit(this.prisma,'identity-challenge:'+actor.sub,20,600);
-  const pool=['TURN_LEFT','TURN_RIGHT','LOOK_UP','OPEN_MOUTH','BLINK'];
+  const pool=['TURN_LEFT','TURN_RIGHT','BLINK'];
   for(let i=pool.length-1;i>0;i--){const j=randomInt(i+1);[pool[i],pool[j]]=[pool[j],pool[i]];}
   const actions=pool.slice(0,status.enrolled?3:2),secret=randomBytes(32).toString('base64url');
   const row=await this.prisma.inspectorIdentityChallenge.create({data:{userId:actor.sub,sessionId:actor.sid!,passwordVersion:actor.pv!,secretHash:hash(secret),purpose:status.enrolled?'LOGIN':'ENROLL',actions,consentVersion,expiresAt:new Date(Date.now()+5*60_000)}});

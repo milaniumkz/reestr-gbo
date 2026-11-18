@@ -15,8 +15,6 @@ const inspectorIdentityConsent = 'ersi-gbo-inspector-face-2026-11-v1';
 const _actions = {
   'TURN_LEFT': 'Слегка поверните голову налево',
   'TURN_RIGHT': 'Слегка поверните голову направо',
-  'LOOK_UP': 'Посмотрите вверх, слегка подняв голову',
-  'OPEN_MOUTH': 'Откройте рот',
   'BLINK': 'Моргните один раз',
 };
 

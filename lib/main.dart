@@ -1981,8 +1981,7 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
       if (file == null) return;
       final filename = file.name;
       final bytes = file.bytes;
-      if (!mounted) return;
-      final position = await _tryCurrentPosition();
+      const Position? position = null;
       if (!mounted) return;
       setState(() {
         if (kind == 'cylinder') {
@@ -2003,10 +2002,10 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
           techPassportPhotoPosition = position;
           techPassportPhotoUploaded = false;
         }
-        apiState = position == null
-            ? 'Фото выбрано. Геолокация недоступна. Включите её и разрешите доступ к местоположению перед отправкой инспекции.'
-            : _photoReviewNotices[_inspectionPhotoType(kind)] ?? 'Фото выбрано';
+        apiState =
+            _photoReviewNotices[_inspectionPhotoType(kind)] ?? 'Фото выбрано';
       });
+      _finishPhotoLocation(_inspectionPhotoType(kind), bytes);
     } catch (error) {
       final message = error is StateError
           ? error.message
@@ -2044,7 +2043,7 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
         throw StateError('Выберите настоящий PDF-файл техпаспорта');
       }
       await _validateSelectedFile('tech_passport', 'Техпаспорт', file);
-      final position = await _tryCurrentPosition();
+      const Position? position = null;
       if (!mounted) return;
       setState(() {
         techPassportPhotoName = file.name;
@@ -2065,6 +2064,7 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
             _photoReviewNotices['tech_passport'] ??
             'Техпаспорт выбран. PDF проверяется по содержимому и данным автомобиля; фотография — только по качеству снимка';
       });
+      _finishPhotoLocation('tech_passport', file.bytes);
     } catch (error) {
       if (mounted) {
         setState(
@@ -2074,6 +2074,48 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
         );
       }
     }
+  }
+
+  final _photoLocations = Expando<Future<Position?>>();
+
+  void _finishPhotoLocation(String type, List<int> bytes) {
+    final owner = currentUser?.id;
+    final draft = draftInspectionId;
+    final pending = _photoLocations[bytes] ??= _tryCurrentPosition();
+    unawaited(
+      pending.then((position) {
+        if (!mounted ||
+            currentUser?.id != owner ||
+            draftInspectionId != draft) {
+          return;
+        }
+        final same = switch (type) {
+          'cylinder_label' => identical(cylinderPhotoBytes, bytes),
+          'vehicle_photo' => identical(vehiclePhotoBytes, bytes),
+          'tech_passport' => identical(techPassportPhotoBytes, bytes),
+          _ => identical(packageDocumentBytes[type], bytes),
+        };
+        if (!same) return;
+        setState(() {
+          if (type == 'cylinder_label') {
+            cylinderPhotoPosition = position;
+          } else if (type == 'vehicle_photo') {
+            vehiclePhotoPosition = position;
+          } else if (type == 'tech_passport') {
+            techPassportPhotoPosition = position;
+          } else if (position != null) {
+            packageDocumentPositions = {
+              ...packageDocumentPositions,
+              type: position,
+            };
+          }
+          if (position == null) {
+            apiState =
+                'Фото выбрано. Геолокация недоступна. Включите её и разрешите доступ к местоположению перед отправкой инспекции.';
+          }
+        });
+      }),
+    );
   }
 
   Future<void> _validateSelectedFile(
@@ -2088,6 +2130,7 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
       _checkingSelectedFile = true;
       apiState = 'Проверка файла: $label';
     });
+    _photoLocations[file.bytes] ??= _tryCurrentPosition();
     try {
       final checked = await repositories.inspections.checkPhoto(
         type: type,
@@ -2191,10 +2234,8 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
         return;
       }
       if (mounted) {
-        final position = await _tryCurrentPosition();
-        if (!mounted) return;
-        final nextDocumentPositions = {...packageDocumentPositions};
-        if (position != null) nextDocumentPositions[type] = position;
+        final nextDocumentPositions = {...packageDocumentPositions}
+          ..remove(type);
         setState(() {
           packageDocumentNames = {
             ...packageDocumentNames,
@@ -2204,10 +2245,9 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
           packageDocumentPositions = nextDocumentPositions;
           packageDocumentUploaded = {...packageDocumentUploaded, type: false};
           documentFileName = selectedFile.name;
-          apiState = position == null
-              ? 'Документ выбран. Геолокация недоступна. Включите её и разрешите доступ к местоположению перед отправкой инспекции.'
-              : _photoReviewNotices[type] ?? 'Документ выбран: $label';
+          apiState = _photoReviewNotices[type] ?? 'Документ выбран: $label';
         });
+        _finishPhotoLocation(type, bytes);
       }
     } catch (error) {
       final message = error is StateError
@@ -2541,13 +2581,14 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
               'Проверка техпаспорта: распознавание документа и данных автомобиля',
         );
       }
+      final resolvedPosition = position ?? await _photoLocations[bytes];
       await repositories.inspections.uploadPhoto(
         inspectionId: inspectionId,
         type: _inspectionPhotoType(kind),
         filename: filename,
         bytes: bytes,
-        lat: position?.latitude,
-        lng: position?.longitude,
+        lat: resolvedPosition?.latitude,
+        lng: resolvedPosition?.longitude,
       );
       if (!mounted) return;
       setState(() {
@@ -2585,13 +2626,16 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
         continue;
       }
       if (packageDocumentUploaded[entry.key] == true) continue;
+      final position =
+          packageDocumentPositions[entry.key] ??
+          await _photoLocations[entry.value];
       await repositories.inspections.uploadPhoto(
         inspectionId: inspectionId,
         type: entry.key,
         filename: packageDocumentNames[entry.key] ?? entry.key,
         bytes: entry.value,
-        lat: packageDocumentPositions[entry.key]?.latitude,
-        lng: packageDocumentPositions[entry.key]?.longitude,
+        lat: position?.latitude,
+        lng: position?.longitude,
       );
       if (!mounted) return;
       setState(() {

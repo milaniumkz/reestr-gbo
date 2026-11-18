@@ -28,6 +28,30 @@ async function image() {
   return sharp(documentSvg()).jpeg().toBuffer();
 }
 describe("local photo screening", () => {
+  it('reuses only exact successful checks and shares concurrent analysis',async()=>{
+    const service=new PhotoModerationService();
+    const analyze=jest.spyOn(service as any,'analyze');
+    const bytes=await image();
+    const [a,b]=await Promise.all([service.check(bytes,'a.jpg','cylinder_label'),service.check(Buffer.from(bytes),'b.jpg','cylinder_label')]);
+    expect(a).toEqual(b);expect(analyze).toHaveBeenCalledTimes(1);
+    a.moderationReason='client mutation';
+    expect((await service.check(bytes,'a.jpg','cylinder_label')).moderationReason).not.toBe('client mutation');
+    await service.check(bytes,'a.jpg','vehicle_photo');expect(analyze).toHaveBeenCalledTimes(2);
+    await service.check(await sharp(documentSvg()).jpeg({quality:70}).toBuffer(),'a.jpg','cylinder_label');expect(analyze).toHaveBeenCalledTimes(3);
+    const now=Date.now();jest.spyOn(Date,'now').mockReturnValue(now+6*60000);
+    await service.check(bytes,'a.jpg','cylinder_label');expect(analyze).toHaveBeenCalledTimes(4);
+  });
+  it('does not retain failed checks and bounds cached metadata without retaining images',async()=>{
+    const service=new PhotoModerationService();
+    const analyze=jest.spyOn(service as any,'analyze').mockResolvedValue({moderationStatus:'local_checked'});
+    for(let n=0;n<80;n++)await service.check(Buffer.from('original-'+n),'a.jpg','vehicle_photo');
+    expect((service as any).completed.size).toBe(64);expect((service as any).pending.size).toBe(0);
+    const state=JSON.stringify([...(service as any).completed.values()]);expect(state).not.toContain('original-');
+    analyze.mockRejectedValue(new Error('busy'));
+    await expect(service.check(Buffer.from('retry'),'a.jpg','vehicle_photo')).rejects.toThrow('busy');
+    analyze.mockResolvedValue({moderationStatus:'local_checked'});
+    await expect(service.check(Buffer.from('retry'),'a.jpg','vehicle_photo')).resolves.toHaveProperty('moderationStatus','local_checked');
+  });
   it('checks both label slots against local device evidence without modifying original bytes',async()=>{
     const original=await image();const saved=Buffer.from(original);
     const detector={model:DEVICE_MODEL,analyze:jest.fn(async()=>({model:DEVICE_MODEL,authenticityGuaranteed:false as const,pageLikeBorder:false,detections:[{kind:'phone' as const,confidence:.95,agreement:.9,box:[.1,.1,.8,.8] as [number,number,number,number]}]}))};

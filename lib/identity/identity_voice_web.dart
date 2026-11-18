@@ -13,8 +13,6 @@ class IdentityVoice {
       'done',
       'TURN_LEFT',
       'TURN_RIGHT',
-      'LOOK_UP',
-      'OPEN_MOUTH',
       'BLINK',
     ]) {
       final bytes = await rootBundle.load('assets/sounds/identity/$cue.wav');
