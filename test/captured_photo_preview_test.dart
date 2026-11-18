@@ -255,7 +255,7 @@ void main() {
     },
   );
   testWidgets(
-    'one contextual label photo must be checked before confirmation, and retaking resets that check',
+    'one contextual label photo keeps preview and retake without an extra checkbox',
     (tester) async {
       tester.view.physicalSize = const Size(360, 640);
       tester.view.devicePixelRatio = 1;
@@ -279,9 +279,7 @@ void main() {
       await _decodePhoto(tester);
       final use = find.widgetWithText(FilledButton, 'Использовать фото');
       expect(find.text(labelPhotoInstructions), findsOneWidget);
-      expect(tester.widget<FilledButton>(use).onPressed, isNull);
-      await tester.tap(find.byType(Checkbox));
-      await tester.pumpAndSettle();
+      expect(find.byType(Checkbox), findsNothing);
       expect(tester.widget<FilledButton>(use).onPressed, isNotNull);
       expect(tester.getRect(use).bottom, lessThanOrEqualTo(640));
       await tester.tap(find.widgetWithText(OutlinedButton, 'Переснять'));
@@ -289,9 +287,7 @@ void main() {
       await _decodePhoto(tester);
       expect(captures, 2);
       expect(completed, 0);
-      expect(tester.widget<FilledButton>(use).onPressed, isNull);
-      await tester.tap(find.byType(Checkbox));
-      await tester.pumpAndSettle();
+      expect(find.byType(Checkbox), findsNothing);
       await tester.tap(use);
       await tester.pumpAndSettle();
       expect(completed, 1);

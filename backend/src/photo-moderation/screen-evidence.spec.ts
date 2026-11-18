@@ -93,7 +93,7 @@ describe("combined screen evidence", () => {
         "car.jpg",
         "vehicle_photo",
       ),
-    ).toMatchObject({ moderationStatus: "manual_review" });
+    ).toMatchObject({ moderationStatus: "local_checked" });
   });
   it("does not classify filename or missing EXIF as proof of a screenshot", async () => {
     const f = fixture({ bezel: false, bands: false });

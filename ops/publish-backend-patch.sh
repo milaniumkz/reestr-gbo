@@ -45,7 +45,7 @@ done
 [[ "$healthy" == true ]]
 sha256sum -c "$staged/preserved.sha256"
 cd "$app/backend"
-node -e 'const {PhotoModerationService}=require("./dist/src/photo-moderation/photo-moderation.service");const s=new PhotoModerationService().status();if(s.model!=="local-screening-v3.5"||s.cylinderLabelOriginality!=="quality-review-required")process.exit(1);console.log(JSON.stringify(s))'
+node -e 'const {PhotoModerationService}=require("./dist/src/photo-moderation/photo-moderation.service");const s=new PhotoModerationService().status();if(s.model!=="local-screening-v3.6"||s.cylinderLabelOriginality!=="screen-and-blur-only")process.exit(1);console.log(JSON.stringify(s))'
 trap - EXIT
 REMOTE
 curl --fail --silent --show-error --retry 3 https://ersigbo.kz/api/v1/health >/dev/null

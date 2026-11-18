@@ -11,9 +11,9 @@ describe('local photo device decisions',()=>{
   expect(deviceDecision(evidence(.92,.9,[0,0,.2,.2])).rejectReason).toBeUndefined();
   expect(deviceDecision(evidence(.92,.9,[0,0,.3,.9])).rejectReason).toBeUndefined();
  });
- it('page borders and books alone only warn quality staff',()=>{
+ it('ignores page borders and books under the relaxed screen-only policy',()=>{
   const e=evidence();e.pageLikeBorder=true;e.detections=[{kind:'book',confidence:.99,agreement:.99,box:[.1,.1,.8,.8]}];
-  const result=deviceDecision(e);expect(result.rejectReason).toBeUndefined();expect(result.reasons.join(' ')).toContain('лист бумаги');
+  const result=deviceDecision(e);expect(result.rejectReason).toBeUndefined();expect(result.reasons).toEqual([]);
  });
  it('no objects does not certify originality and unavailable inference requires manual review',()=>{
   expect(deviceDecision({...evidence(),detections:[]}).rejectReason).toBeUndefined();

@@ -180,6 +180,52 @@ void main() {
       await t.pumpWidget(const SizedBox());
     },
   );
+  testWidgets(
+    'retired questionnaire is absent from package UI and legacy drafts while application stays',
+    (t) async {
+      final bytes = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAAEElEQVR4nGP4z8AARww4OQD1MQv1NXv7ggAAAABJRU5ErkJggg==',
+      );
+      final seed = snapshot(screen: 22);
+      final store = MemoryRecovery()
+        ..entries['inspector'] = InspectionRecoverySnapshot(
+          fields: {
+            ...seed.fields,
+            'packageDocumentNames': {
+              'applicant_questionnaire': 'old.png',
+              'applicant_application': 'application.png',
+            },
+            'packageDocumentUploaded': {
+              'applicant_questionnaire': false,
+              'applicant_application': false,
+            },
+          },
+          files: {
+            'applicant_questionnaire': bytes,
+            'applicant_application': bytes,
+          },
+        );
+      await open(t, store);
+      expect(find.text('Заявка заявителя'), findsOneWidget);
+      expect(find.text('Анкета оценки заявителя'), findsNothing);
+      expect(find.text('5 обязательных файлов'), findsOneWidget);
+      await t.pump(const Duration(milliseconds: 450));
+      expect(
+        store.entries['inspector']!.files.keys,
+        contains('applicant_application'),
+      );
+      expect(
+        store.entries['inspector']!.files.keys,
+        isNot(contains('applicant_questionnaire')),
+      );
+      expect(
+        (store.entries['inspector']!.fields['packageDocumentNames'] as Map)
+            .keys,
+        isNot(contains('applicant_questionnaire')),
+      );
+      await t.pumpWidget(const SizedBox());
+    },
+  );
   testWidgets('restores accepted original photo bytes on the photo step', (
     t,
   ) async {

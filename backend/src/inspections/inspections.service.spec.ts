@@ -218,7 +218,7 @@ describe('Inspection quality control workflow', () => {
       qualityReviewStartedAt: null as Date | null,
       qualityReviewer: null as {id:string;fullName:string}|null,
       vehicleId:'vehicle_1',
-      photos: ['applicant_application','applicant_questionnaire','cylinder_label','vehicle_photo','tech_passport','gas_work_record','cylinder_work_record','gas_inspection_report','cylinder_inspection_report'].map(type => ({ id:type, type, objectKey:type, checksum: undefined as string | undefined })) as Array<{id:string;type:string;objectKey:string;checksum?:string;cylinderSerial?:string|null;documentVerification?:unknown}>,
+      photos: ['applicant_application','cylinder_label','vehicle_photo','tech_passport','gas_work_record','cylinder_work_record','gas_inspection_report','cylinder_inspection_report'].map(type => ({ id:type, type, objectKey:type, checksum: undefined as string | undefined })) as Array<{id:string;type:string;objectKey:string;checksum?:string;cylinderSerial?:string|null;documentVerification?:unknown}>,
       requireApplicantPhotos: false,
       vehicle: {vin:'TESTVIN0000000001',plateNumber:'777AAA02', cylinders:[{id:'cylinder_1',shape:'Тороидальный',fuelType:'СНГ',producedAt:new Date('2024-07-15') as Date|null}], owners:[{id:'owner_1',userId:'owner_user',user:{phone:'+77001234567'}}] },
     };
@@ -448,13 +448,15 @@ describe('Inspection quality control workflow', () => {
     await expect(f.service.updateQualityData(f.user('qc'),'inspection_1',corrected)).rejects.toThrow();
     expect(f.prisma.vehicle.update).not.toHaveBeenCalled();
   });
-  it('requires the two applicant photos for submission but preserves existing quality tasks',async()=>{
+  it('requires only the application photo while preserving legacy quality tasks',async()=>{
     const f=fixture();f.state.photos=f.state.photos.filter(p=>!p.type.startsWith('applicant_'));
-    expect((await f.service.readiness('inspection_1',f.user('inspector'))).missing).toEqual(['applicant_application','applicant_questionnaire']);
+    expect((await f.service.readiness('inspection_1',f.user('inspector'))).missing).toEqual(['applicant_application']);
     f.state.status='submitted';f.state.photos.push({id:'cert',type:'certificate_document',objectKey:'cert'});
     expect((await f.service.readiness('inspection_1',f.user('qc'))).ready).toBe(true);
     f.state.requireApplicantPhotos=true;
     expect((await f.service.readiness('inspection_1',f.user('qc'))).ready).toBe(false);
+    f.state.photos.push({id:'application',type:'applicant_application',objectKey:'application'});
+    expect((await f.service.readiness('inspection_1',f.user('qc'))).ready).toBe(true);
   });
   it('returns a quality task to inspector editing without losing documents or reserving its own number',async()=>{
     const f=fixture();f.state.status='submitted';

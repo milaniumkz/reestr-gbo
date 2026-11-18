@@ -51,6 +51,7 @@ export function activeCylinderPhotos<T extends { type: string; cylinderSerial?: 
   const key = (photo: T) => photo.checksum
     ? JSON.stringify([photo.type, photo.cylinderSerial ?? null, photo.checksum])
     : undefined;
+  photos=photos.filter(photo=>photo.type!=='applicant_questionnaire');
   for (const photo of photos) {
     const identity = key(photo);
     if (!identity) continue;

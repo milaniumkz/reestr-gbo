@@ -12,7 +12,7 @@ export function validDeviceEvidence(value:unknown):value is DeviceEvidence {
 }
 const names:Record<DeviceKind,string>={screen:'монитор или телевизор',laptop:'ноутбук',phone:'телефон',book:'книга или страница'};
 export function deviceDecision(e:DeviceEvidence|undefined):{rejectReason?:string;reasons:string[]} {
-  if(!e)return {reasons:['Локальная проверка устройств временно недоступна. Контроль качества должен вручную исключить экран и распечатку']};
+  if(!e)return {reasons:['Локальная проверка устройств временно недоступна. Контроль качества должен вручную исключить пересъёмку с экрана']};
   const reasons:string[]=[];
   for(const d of e.detections){
     const [x,y,w,h]=d.box;
@@ -20,9 +20,8 @@ export function deviceDecision(e:DeviceEvidence|undefined):{rejectReason?:string
     if(d.kind!=='book'&&d.confidence>=.85&&d.agreement>=.75&&w*h>=.18&&x<=.5&&x+w>=.5&&y<=.5&&y+h>=.5){
       return {rejectReason:`В центре снимка распознан ${names[d.kind]}. Сфотографируйте оригинальную бирку непосредственно на баллоне, оставив видимой поверхность баллона вокруг неё. Переснимите без экрана другого устройства`,reasons:[]};
     }
-    if(d.kind!=='book')reasons.push(`В кадре возможно присутствует ${names[d.kind]}. Контроль качества: проверьте, не переснята ли бирка с экрана`);
-    else if(d.confidence>=.5)reasons.push('В кадре объект, похожий на книгу или страницу. Контроль качества: исключите распечатку бирки');
+    if(d.kind!=='book' && d.confidence>=.7 && w*h>=.1)reasons.push(`В кадре возможно присутствует ${names[d.kind]}. Контроль качества: проверьте, не переснята ли бирка с экрана`);
+
   }
-  if(e.pageLikeBorder)reasons.push('Вокруг изображения светлая прямоугольная рамка, похожая на лист бумаги. Это не доказывает подмену: контроль качества должен проверить оригинал бирки');
   return {reasons:[...new Set(reasons)]};
 }

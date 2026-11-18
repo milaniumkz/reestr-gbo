@@ -74,7 +74,6 @@ class _CapturedPhotoPreviewState extends State<_CapturedPhotoPreview> {
   }
 
   bool _readable = false;
-  bool _contextConfirmed = false;
   @override
   void initState() {
     super.initState();
@@ -162,15 +161,6 @@ class _CapturedPhotoPreviewState extends State<_CapturedPhotoPreview> {
                           : 'Увеличьте фото и проверьте резкость. Если текст размыт — переснимите.',
                       textAlign: TextAlign.center,
                     ),
-                    if (widget.requireLabelContext)
-                      CheckboxListTile(
-                        contentPadding: EdgeInsets.zero,
-                        value: _contextConfirmed,
-                        onChanged: (value) =>
-                            setState(() => _contextConfirmed = value == true),
-                        controlAffinity: ListTileControlAffinity.leading,
-                        title: const Text(labelPhotoConfirmation),
-                      ),
                     if (_error != null)
                       Text(
                         _error!,
@@ -195,13 +185,7 @@ class _CapturedPhotoPreviewState extends State<_CapturedPhotoPreview> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: FilledButton(
-                            onPressed:
-                                !_checking &&
-                                    _readable &&
-                                    (!widget.requireLabelContext ||
-                                        _contextConfirmed)
-                                ? _accept
-                                : null,
+                            onPressed: !_checking && _readable ? _accept : null,
                             style: FilledButton.styleFrom(
                               backgroundColor: const Color(0xFF007A4D),
                             ),

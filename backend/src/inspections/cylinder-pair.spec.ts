@@ -14,7 +14,7 @@ describe('Two cylinders', () => {
     expect(()=>cylinderPair({usesTwoCylinders:'true' as unknown as boolean,secondCylinderSerial:'B'},'A')).toThrow('отметка');
   });
   it('blocks a pair without its own documents and rejects stale documents after changing the serial', async () => {
-    const photos: Array<{type:string;cylinderSerial?:string}> = ['cylinder_label','vehicle_photo','tech_passport','applicant_application','applicant_questionnaire','gas_work_record','cylinder_work_record','gas_inspection_report','cylinder_inspection_report'].map(type=>({type}));
+    const photos: Array<{type:string;cylinderSerial?:string}> = ['cylinder_label','vehicle_photo','tech_passport','applicant_application','gas_work_record','cylinder_work_record','gas_inspection_report','cylinder_inspection_report'].map(type=>({type}));
     const state={organizationId:'org',status:'draft',usesTwoCylinders:false,secondCylinderShape:'Цилиндрический',secondCylinderSerial:'B',photos,vehicle:{owners:[{}],cylinders:[{shape:'Тороидальный',fuelType:'СНГ',producedAt:new Date('2025-01-01')}]}};
     const prisma={inspection:{findUnique:jest.fn(async()=>state)}};
     const svc=new InspectionsService(prisma as never,{} as never,{} as never);
@@ -83,4 +83,10 @@ it('creates a new two-cylinder inspection using the shared gas data from the veh
  jest.spyOn(service as any,"reverseGeocode").mockResolvedValue("Өскемен, улица Тестовая");
  const result=await service.create({sub:'admin',phone:'test',roles:['super_admin']},{organizationId:'ORG',vehicleId:'VEHICLE',certificateNumber:'NEW-2',lat:49.95,lng:82.61,usesTwoCylinders:true,secondCylinderSerial:'B',secondCylinder:{manufacturer:'SECOND',volumeLiters:80,shape:'Цилиндрический',producedAt:'2025-01-01'}});
  expect(result).toMatchObject({secondCylinderManufacturer:'SECOND',secondCylinderVolumeLiters:80,secondCylinderShape:'Цилиндрический',secondCylinderValidUntil:new Date('2028-11-02')});
+});
+
+it('hides retired questionnaire photos while retaining application photos and stored records',()=>{
+ const photos=[{type:'applicant_questionnaire'},{type:'applicant_application'},{type:'cylinder_label'}];
+ expect(activeCylinderPhotos({usesTwoCylinders:false},photos).map(p=>p.type)).toEqual(['applicant_application','cylinder_label']);
+ expect(photos).toHaveLength(3);
 });

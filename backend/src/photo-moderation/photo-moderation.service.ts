@@ -3,7 +3,7 @@ import sharp from "sharp";
 import {createHash} from "node:crypto";
 import { PhotoAnalysisLimiter } from "./photo-analysis-limiter";
 import { screenEvidence, shouldReshoot } from "./screen-evidence";
-import { analyzePixels, reviewReasons } from "./local-photo-analysis";
+import { focusMetrics } from "./fast-focus";
 import { LocalPhotoDeviceService } from './local-photo-device.service';
 import { deviceDecision } from './local-device-evidence';
 export type PhotoCheck = {
@@ -12,7 +12,7 @@ export type PhotoCheck = {
   moderationCheckedAt?: Date;
   moderationReason?: string;
 };
-const MODEL = "local-screening-v3.5";
+const MODEL = "local-screening-v3.6";
 @Injectable()
 export class PhotoModerationService {
   constructor(@Optional() private readonly devices?:LocalPhotoDeviceService) {}
@@ -47,9 +47,10 @@ export class PhotoModerationService {
       provider: "local",
       model: MODEL,
       authenticityGuaranteed: false,
-      analysisRevision: "v3.5-local-device-and-page-context",
+      analysisRevision: "v3.6-fast-blur-and-screen-only",
       deviceDetection: this.devices?.model ?? 'not-configured',
-      cylinderLabelOriginality: "quality-review-required",
+      cylinderLabelOriginality: "screen-and-blur-only",
+      checks:["blur","screen"],
       load: this.limiter.status(),
     };
   }
@@ -98,116 +99,30 @@ export class PhotoModerationService {
         throw new BadRequestException(
           "Загрузите отдельные фотографии вместо анимированного изображения",
         );
-      const width = meta.width ?? 0,
-        height = meta.height ?? 0;
-      if (Math.min(width, height) < 240 || Math.max(width, height) < 480)
-        throw new BadRequestException(
-          "Слишком маленькое фото. Короткая сторона должна быть от 240, длинная от 480 пикселей",
-        );
-      const document = !["vehicle_photo", "cylinder_label", "photo"].includes(
-        _type,
-      );
-
-      const { data, info } = await input
-        .clone()
-        .rotate()
-        .flatten({ background: "#ffffff" })
-        .resize({
-          width: 640,
-          height: 640,
-          fit: "inside",
-          withoutEnlargement: true,
-        })
-        .greyscale()
-        .raw()
-        .toBuffer({ resolveWithObject: true });
-      const metrics = analyzePixels(data, info.width, info.height);
-      // Isolated heuristic signals remain advisory; only combined enclosure + banding requires reshooting.
-      if (metrics.contrast < 2 && metrics.edgeFraction < 0.001)
-        throw new BadRequestException(
-          "На фото почти нет различимых деталей. Сфотографируйте документ заново",
-        );
-      const rgb = await input
-        .clone()
-        .rotate()
-        .flatten({ background: "#ffffff" })
-        .resize({
-          width: 480,
-          height: 480,
-          fit: "inside",
-          withoutEnlargement: true,
-        })
-        .toColourspace("srgb")
-        .removeAlpha()
-        .raw()
-        .toBuffer({ resolveWithObject: true });
-      const evidence = screenEvidence(
-        rgb.data,
-        rgb.info.width,
-        rgb.info.height,
-      );
-      const reasons = reviewReasons(metrics);
-      if (shouldReshoot(evidence, _type))
-        throw new BadRequestException(
-          "Обнаружены совместные признаки экрана: тёмная рамка и повторяющиеся полосы. Сфотографируйте оригинал документа вне экрана другого устройства",
-        );
-      if (document || _type === "cylinder_label") {
-        const native = await input
-          .clone()
-          .rotate()
-          .flatten({ background: "#ffffff" })
-          .resize({
-            width: 1500,
-            height: 1500,
-            fit: "inside",
-            withoutEnlargement: true,
-          })
-          .greyscale()
-          .raw()
-          .toBuffer({ resolveWithObject: true });
-        const focus = analyzePixels(
-          native.data,
-          native.info.width,
-          native.info.height,
-        );
-        if (focus.laplacianVariance < 8 && focus.edgeFraction < 0.003)
-          throw new BadRequestException(
-            `На ${document ? "документе" : "бирке баллона"} почти не различимы детали. Наведите резкость и переснимите оригинал`,
-          );
-        if (focus.laplacianVariance < 28 && focus.edgeFraction < 0.025)
-          reasons.push(
-            "Возможное размытие: контроль качества должен проверить читаемость",
-          );
-        if (Math.min(width, height) < 720 || Math.max(width, height) < 1000)
-          reasons.push(
-            "Невысокое разрешение: контроль качества должен проверить читаемость",
-          );
-      }
-      if (evidence.enclosedDisplay)
-        reasons.push(
-          "Внутренняя рамка вокруг светлой области: возможен экран устройства",
-        );
-      if (evidence.coherentBands)
-        reasons.push("Повторяющиеся полосы в нескольких участках изображения");
-      if (evidence.colorBands)
-        reasons.push("Цветные периодические полосы: возможен муар экрана");
-      if (_type === "cylinder_label")
-        reasons.unshift(
-          "Подлинность бирки автоматически не подтверждена. Контроль качества: проверьте, что снята оригинальная бирка непосредственно на баллоне. На одном общем снимке должны быть видны вся бирка или выбитая маркировка и баллон по краям, а номер и даты должны читаться. Исключите края листа A4, корпус телефона или монитора, распечатку и изображение другого объекта",
-        );
-      if (_type === "cylinder_label" && this.devices) {
-        // Analysis derivative only. Original upload bytes and stored file remain untouched.
-        const analysis = await input.clone().rotate().flatten({background:'#ffffff'})
-          .resize({width:1280,height:1280,fit:'inside',withoutEnlargement:true}).jpeg({quality:90}).toBuffer();
+      // Decode the original once. Subsequent checks use bounded, in-memory derivatives.
+      const rgb=await input.rotate().flatten({background:'#ffffff'})
+        .resize({width:1280,height:1280,fit:'inside',withoutEnlargement:true})
+        .toColourspace('srgb').removeAlpha().raw().toBuffer({resolveWithObject:true});
+      const sample=()=>sharp(rgb.data,{raw:{width:rgb.info.width,height:rgb.info.height,channels:3}});
+      const gray=await sample().greyscale().raw().toBuffer();
+      const focus=focusMetrics(gray,rgb.info.width,rgb.info.height);
+      if(focus.laplacianVariance<8 && focus.edgeFraction<.003)
+        throw new BadRequestException('На фото почти нет различимых деталей. Наведите резкость и переснимите оригинал');
+      const screen=await sample().resize({width:360,height:360,fit:'inside',withoutEnlargement:true}).raw().toBuffer({resolveWithObject:true});
+      const evidence=screenEvidence(screen.data,screen.info.width,screen.info.height);
+      if(shouldReshoot(evidence,_type))throw new BadRequestException('Обнаружены совместные признаки экрана: тёмная рамка и повторяющиеся полосы. Сфотографируйте оригинал вне экрана другого устройства');
+      const reasons:string[]=[];
+      if(this.devices && (_type==='cylinder_label'||(evidence.enclosedDisplay&&_type!=='vehicle_photo'))){
+        const analysis=await sample().resize({width:640,height:640,fit:'inside',withoutEnlargement:true}).jpeg({quality:90}).toBuffer();
         const decision=deviceDecision(await this.devices.analyze(analysis));
         if(decision.rejectReason)throw new BadRequestException(decision.rejectReason);
-        reasons.unshift(...decision.reasons);
+        reasons.push(...decision.reasons);
       }
       return reasons.length
         ? result("manual_review", reasons.join("; "))
         : result(
             "local_checked",
-            "Явные признаки экрана и дефекты не выявлены. Подлинность оригинала проверяется сотрудником",
+            "Сильное размытие и явные признаки экрана не выявлены",
           );
     } catch (error) {
       if (error instanceof BadRequestException) throw error;

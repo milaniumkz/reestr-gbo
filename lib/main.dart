@@ -80,7 +80,6 @@ const protectedInspectionDocuments = <String>{
 };
 const inspectionPackageDocuments = <String, String>{
   'applicant_application': 'Заявка заявителя',
-  'applicant_questionnaire': 'Анкета оценки заявителя',
   'gas_work_record': 'Рабочая запись ГБО (подписи)',
   'cylinder_work_record': 'Рабочая запись баллона (подписи)',
   'gas_inspection_report': 'Отчет инспекции ГБО (подпись и печать)',
@@ -918,6 +917,7 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
           );
         }
         for (final file in snapshot.files.entries) {
+          if (file.key == 'applicant_questionnaire') continue;
           if (!mounted || currentUser?.id != owner) return;
           final checksum = _draftHashes[file.value] ??= sha256
               .convert(file.value)
@@ -1038,6 +1038,7 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
             ..['remoteVersion'] = version;
           final files = <String, List<int>>{};
           for (final type in (record['files'] as Map? ?? {}).keys) {
+            if (type == 'applicant_questionnaire') continue;
             files[type as String] = await repositories.inspections.draftFile(
               draft.id,
               type,
@@ -1087,6 +1088,7 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
       }
     }
     for (final type in (fields['packageDocumentNames'] as Map? ?? {}).keys) {
+      if (type == 'applicant_questionnaire') continue;
       if (!files.containsKey(type)) return false;
     }
     return true;
@@ -1259,14 +1261,15 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
         );
         packageDocumentNames = Map<String, String>.from(
           f['packageDocumentNames'] as Map? ?? {},
-        );
+        )..remove('applicant_questionnaire');
         packageDocumentUploaded = Map<String, bool>.from(
           f['packageDocumentUploaded'] as Map? ?? {},
-        );
+        )..remove('applicant_questionnaire');
         _photoReviewNotices
           ..clear()
           ..addAll(
-            Map<String, String>.from(f['photoReviewNotices'] as Map? ?? {}),
+            Map<String, String>.from(f['photoReviewNotices'] as Map? ?? {})
+              ..remove('applicant_questionnaire'),
           );
         cylinderPhotoPosition = position(f['cylinderPhotoPosition']);
         vehiclePhotoPosition = position(f['vehiclePhotoPosition']);
@@ -1275,11 +1278,16 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
           for (final e in (f['packageDocumentPositions'] as Map? ?? {}).entries)
             e.key as String: Position.fromMap(e.value),
         };
+        packageDocumentPositions.remove('applicant_questionnaire');
+        _photoReviewNotices.remove('applicant_questionnaire');
         cylinderPhotoBytes = restoredFiles['primary_cylinder'];
         vehiclePhotoBytes = restoredFiles['primary_vehicle'];
         techPassportPhotoBytes = restoredFiles['primary_tech'];
         packageDocumentBytes = {...restoredFiles}
-          ..removeWhere((key, _) => key.startsWith('primary_'));
+          ..removeWhere(
+            (key, _) =>
+                key.startsWith('primary_') || key == 'applicant_questionnaire',
+          );
         selectedInspection = detail;
         if (detail != null) {
           final types = detail.files.map((file) => file.type).toSet();
@@ -3000,6 +3008,7 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
     );
 
     for (final entry in packageDocumentBytes.entries) {
+      if (entry.key == 'applicant_questionnaire') continue;
       if (!usesTwoCylinders &&
           secondCylinderDocumentTypes.contains(entry.key)) {
         continue;
@@ -8080,8 +8089,8 @@ class _DocumentScanStep extends StatelessWidget {
       title: 'Пакет документов',
       subtitle: requireApplicantPhotos
           ? (usesTwoCylinders
-                ? '8 обязательных файлов'
-                : '6 обязательных файлов')
+                ? '7 обязательных файлов'
+                : '5 обязательных файлов')
           : 'Документы инспекции',
       activeNav: 1,
       leadingBack: true,
