@@ -8,6 +8,7 @@ datasource db {
 }
 
 model User {
+  inspectionDrafts InspectionDraft[]
   identityProfile InspectorIdentityProfile?
   identityChallenges InspectorIdentityChallenge[]
   id          String    @id @default(uuid())
@@ -78,6 +79,7 @@ model OtpChallenge {
 }
 
 model Organization {
+  inspectionDrafts InspectionDraft[]
   id        String   @id @default(uuid())
   type      String
   name      String
@@ -736,4 +738,19 @@ model InspectorIdentityChallenge {
  @@unique([userId,videoDigest])
  @@index([userId,createdAt])
  @@index([expiresAt,status])
+}
+
+// Private partial forms; never part of the submitted inspection/quality workflow.
+model InspectionDraft {
+  id String @id @default(uuid())
+  userId String
+  organizationId String
+  fields Json
+  files Json @default("{}")
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  organization Organization @relation(fields:[organizationId],references:[id],onDelete:Cascade)
+  @@index([userId,updatedAt])
 }

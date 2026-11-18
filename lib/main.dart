@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'identity/inspector_identity_page.dart';
 import 'widgets/inspection_address_gate.dart';
 import 'widgets/quality_certificate_uploads.dart';
@@ -523,12 +525,24 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
   bool _restoringRecovery = false;
   bool _recoveryWarningShown = false;
   bool _recoveryCompleted = false;
+  String? _localDraftId;
+  int _lastDraftStep = 15;
+  List<InspectionRecoveryDraft> _savedDrafts = [];
+  final _draftVersions = <String, int>{};
+  final _draftFiles = <String, Map<String, dynamic>>{};
+  Timer? _remoteDraftTimer;
+  Future<void> _remoteDraftQueue = Future.value();
+  bool _draftConflict = false;
+  bool _openingDraft = false;
+  bool _lastDraftLocalSaveOk = true;
+
   bool get _canRecover =>
       !_recoveryCompleted &&
       (kIsWeb || widget.recoveryStore != null) &&
       currentUser != null &&
       _roleCode == 'inspection_org' &&
       !_isQualityControl &&
+      !_isInspectionManager &&
       !_editingQualityInspection;
   @override
   void setState(VoidCallback fn) {
@@ -713,9 +727,24 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _recoveryTimer?.cancel();
+    _remoteDraftTimer?.cancel();
     _qualityQueueTimer?.cancel();
     repositories.onSessionInvalidated = null;
     super.dispose();
+  }
+
+  void _forgetDraftAccount() {
+    _remoteDraftTimer?.cancel();
+    _recoveryTimer?.cancel();
+    _localDraftId = null;
+    _savedDrafts = [];
+    _draftVersions.clear();
+    _draftFiles.clear();
+    _draftFieldJson.clear();
+    _remoteDraftIds.clear();
+    _fullySyncedDraftIds.clear();
+    _draftConflict = false;
+    _openingDraft = false;
   }
 
   void _onSessionInvalidated() {
@@ -723,6 +752,7 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
     unawaited(_persistInspectionRecovery());
     setState(() {
       authPhone = currentUser?.phone ?? authPhone;
+      _forgetDraftAccount();
       currentUser = null;
       authPassword = '';
       passwordChangeToken = null;
@@ -745,7 +775,11 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
   InspectionRecoverySnapshot _inspectionRecoverySnapshot() =>
       InspectionRecoverySnapshot(
         fields: {
-          'screen': screen,
+          'screen': screen >= 15 && screen <= 23 ? screen : _lastDraftStep,
+          'localDraftId': _localDraftId,
+          'remoteVersion': _localDraftId == null
+              ? 0
+              : _draftVersions[_localDraftId] ?? 0,
           'organizationId': _currentInspectionOrganization?.id,
           'inspectionCertificateNumber': inspectionCertificateNumber,
           'ownerId': ownerId,
@@ -800,15 +834,39 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
       );
 
   Future<void> _persistInspectionRecovery() async {
-    if (!_canRecover || _restoringRecovery || screen < 15 || screen > 23) {
+    if (!_canRecover ||
+        _restoringRecovery ||
+        (_localDraftId == null && (screen < 15 || screen > 23))) {
       return;
     }
     _recoveryTimer?.cancel();
+    _localDraftId ??= newInspectionDraftId();
+    if (screen >= 15 && screen <= 23) _lastDraftStep = screen;
     final owner = currentUser!.id;
     final snapshot = _inspectionRecoverySnapshot();
+    final id = _localDraftId!;
+    _snapshotGenerations[snapshot] = _draftGenerations[id] =
+        (_draftGenerations[id] ?? 0) + 1;
+    _fullySyncedDraftIds.remove(id);
+    _lastDraftLocalSaveOk = false;
     try {
       await _recovery.save(owner, snapshot);
+      _lastDraftLocalSaveOk = true;
+      if (!mounted || currentUser?.id != owner) return;
+      _remoteDraftTimer?.cancel();
+      if (kIsWeb) {
+        if (screen < 15 || screen > 23) {
+          _queueDraftSync(owner, snapshot);
+        } else {
+          _remoteDraftTimer = Timer(
+            const Duration(seconds: 2),
+            () => _queueDraftSync(owner, snapshot),
+          );
+        }
+      }
+      if (screen < 15 || screen > 23) unawaited(_loadSavedDrafts());
     } catch (_) {
+      if (kIsWeb) _queueDraftSync(owner, snapshot);
       if (mounted && !_recoveryWarningShown) {
         _recoveryWarningShown = true;
         setState(
@@ -819,13 +877,279 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
     }
   }
 
-  Future<bool> _restoreInspectionRecovery() async {
+  final _draftHashes = Expando<String>();
+  final _draftFieldJson = <String, String>{};
+  final _remoteDraftIds = <String>{};
+  final _finishedDraftIds = <String>{};
+  final _fullySyncedDraftIds = <String>{};
+  final _draftGenerations = <String, int>{};
+  final _snapshotGenerations = Expando<int>();
+
+  void _queueDraftSync(String owner, InspectionRecoverySnapshot snapshot) {
+    if (!kIsWeb || _draftConflict) return;
+    _remoteDraftQueue = _remoteDraftQueue.then((_) async {
+      if (!mounted || currentUser?.id != owner) return;
+      final f = {...snapshot.fields}..remove('remoteVersion');
+      final id = f['localDraftId'] as String?;
+      final org = f['organizationId'] as String?;
+      if (id == null || org == null || _finishedDraftIds.contains(id)) return;
+      _snapshotGenerations[snapshot] ??= _draftGenerations[id] ?? 0;
+      try {
+        var version =
+            _draftVersions[id] ??
+            (snapshot.fields['remoteVersion'] as num?)?.toInt() ??
+            0;
+        final encoded = jsonEncode(f);
+        Map<String, dynamic>? record;
+        if (_draftFieldJson[id] != encoded || version == 0) {
+          record = await repositories.inspections.saveDraft(
+            id,
+            org,
+            version,
+            f,
+          );
+          if (!mounted || currentUser?.id != owner) return;
+          version = (record['version'] as num).toInt();
+          _draftVersions[id] = version;
+          _draftFieldJson[id] = encoded;
+          _remoteDraftIds.add(id);
+          _draftFiles[id] = Map<String, dynamic>.from(
+            record['files'] as Map? ?? {},
+          );
+        }
+        for (final file in snapshot.files.entries) {
+          if (!mounted || currentUser?.id != owner) return;
+          final checksum = _draftHashes[file.value] ??= sha256
+              .convert(file.value)
+              .toString();
+          if ((_draftFiles[id]?[file.key] as Map?)?['checksum'] == checksum) {
+            continue;
+          }
+          final name = switch (file.key) {
+            'primary_cylinder' => f['cylinderPhotoName'],
+            'primary_vehicle' => f['vehiclePhotoName'],
+            'primary_tech' => f['techPassportPhotoName'],
+            _ => (f['packageDocumentNames'] as Map?)?[file.key],
+          };
+          record = await repositories.inspections.saveDraftFile(
+            id,
+            file.key,
+            version,
+            name as String? ?? file.key,
+            file.value,
+          );
+          if (!mounted || currentUser?.id != owner) return;
+          version = (record['version'] as num).toInt();
+          _draftVersions[id] = version;
+          _draftFiles[id] = Map<String, dynamic>.from(
+            record['files'] as Map? ?? {},
+          );
+        }
+        if (mounted && currentUser?.id == owner) {
+          await _recovery.markVersion(owner, id, version);
+          if (_snapshotGenerations[snapshot] == _draftGenerations[id]) {
+            _fullySyncedDraftIds.add(id);
+          }
+          if (screen < 15 || screen > 23) await _loadSavedDrafts();
+        }
+      } catch (error) {
+        if (mounted && currentUser?.id == owner && _localDraftId == id) {
+          setState(
+            () => apiState = error is ApiException && error.statusCode == 409
+                ? 'Черновик изменён на другом устройстве. Откройте его заново из списка черновиков.'
+                : 'Черновик сохранён на телефоне. Пока не удалось сохранить его на сервере.',
+          );
+          if (error is ApiException && error.statusCode == 409) {
+            _draftConflict = true;
+          }
+        }
+      }
+    });
+  }
+
+  Future<void> _loadSavedDrafts() async {
+    if (!_canRecover) return;
+    final owner = currentUser!.id, org = _currentInspectionOrganization?.id;
+    final merged = <String, InspectionRecoveryDraft>{};
+    try {
+      for (final d in await _recovery.list(owner)) {
+        if (d.fields['organizationId'] == org) merged[d.id] = d;
+      }
+    } catch (_) {}
+    if (kIsWeb) {
+      try {
+        for (final row in await repositories.inspections.listDrafts()) {
+          if (row['organizationId'] != org) continue;
+          final id = row['id'] as String;
+          _remoteDraftIds.add(id);
+          final fields = Map<String, dynamic>.from(row['fields'] as Map)
+            ..['remoteVersion'] = row['version'];
+          // Keep a newer, unsynced local copy visible instead of overwriting it.
+          final local = merged[id];
+          if (local == null &&
+              _remoteFilesComplete(
+                fields,
+                Map<String, dynamic>.from(row['files'] as Map? ?? {}),
+              ))
+            _fullySyncedDraftIds.add(id);
+          if (local == null ||
+              DateTime.tryParse(
+                    local.savedAt,
+                  )?.isAfter(DateTime.parse(row['updatedAt'] as String)) !=
+                  true) {
+            merged[id] = InspectionRecoveryDraft(
+              id: id,
+              fields: fields,
+              savedAt: row['updatedAt'] as String,
+            );
+          }
+        }
+      } catch (_) {}
+    }
+    if (!mounted || currentUser?.id != owner) return;
+    setState(
+      () =>
+          _savedDrafts = merged.values.toList()
+            ..sort((a, b) => b.savedAt.compareTo(a.savedAt)),
+    );
+  }
+
+  Future<void> _resumeSavedDraft(InspectionRecoveryDraft draft) async {
+    if (!_canRecover || _openingDraft) return;
+    final owner = currentUser!.id;
+    if (_localDraftId != null && !_recoveryCompleted) {
+      await _persistInspectionRecovery();
+    }
+    _remoteDraftTimer?.cancel();
+    await _remoteDraftQueue;
+    if (!mounted || currentUser?.id != owner) return;
+    _openingDraft = true;
+    setState(() => apiState = 'Загрузка черновика');
+    try {
+      final local = await _recovery.readDraft(owner, draft.id);
+      if (kIsWeb && _remoteDraftIds.contains(draft.id)) {
+        final record = await repositories.inspections.draft(draft.id);
+        final version = (record['version'] as num).toInt();
+        final localVersion =
+            (local?.fields['remoteVersion'] as num?)?.toInt() ?? 0;
+        if (local == null || version > localVersion) {
+          final fields = Map<String, dynamic>.from(record['fields'] as Map)
+            ..['remoteVersion'] = version;
+          final files = <String, List<int>>{};
+          for (final type in (record['files'] as Map? ?? {}).keys) {
+            files[type as String] = await repositories.inspections.draftFile(
+              draft.id,
+              type,
+            );
+          }
+          if (!mounted || currentUser?.id != owner) return;
+          await _recovery.save(
+            owner,
+            InspectionRecoverySnapshot(fields: fields, files: files),
+          );
+          _draftVersions[draft.id] = version;
+          _draftFiles[draft.id] = Map<String, dynamic>.from(
+            record['files'] as Map? ?? {},
+          );
+          _draftFieldJson[draft.id] = jsonEncode(
+            {...fields}..remove('remoteVersion'),
+          );
+        }
+      }
+      _recoveryCompleted = false;
+      if (!await _restoreInspectionRecovery(draftId: draft.id)) {
+        throw StateError('Черновик недоступен');
+      }
+    } catch (_) {
+      if (mounted && currentUser?.id == owner) {
+        setState(
+          () => apiState = 'Не удалось открыть черновик. Повторите попытку.',
+        );
+      }
+    } finally {
+      _openingDraft = false;
+    }
+  }
+
+  bool _remoteFilesComplete(
+    Map<String, dynamic> fields,
+    Map<String, dynamic> files,
+  ) {
+    for (final pair in [
+      ('primary_cylinder', 'cylinderPhotoName'),
+      ('primary_vehicle', 'vehiclePhotoName'),
+      ('primary_tech', 'techPassportPhotoName'),
+    ]) {
+      if ((fields[pair.$2] as String?)?.isNotEmpty == true &&
+          !files.containsKey(pair.$1))
+        return false;
+    }
+    for (final type in (fields['packageDocumentNames'] as Map? ?? {}).keys) {
+      if (!files.containsKey(type)) return false;
+    }
+    return true;
+  }
+
+  bool _hasSyncedDraftFile(String type, List<int> bytes) {
+    final checksum = _draftHashes[bytes] ??= sha256.convert(bytes).toString();
+    return (_draftFiles[_localDraftId]?[type] as Map?)?['checksum'] == checksum;
+  }
+
+  Widget? _draftCards() {
+    if (_isInspectionManager || _isQualityControl || _savedDrafts.isEmpty) {
+      return null;
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Черновики', style: _section),
+        for (final draft in _savedDrafts)
+          _ListTileCard(
+            icon: Icons.edit_note_rounded,
+            title: (draft.fields['vehiclePlate'] as String?)?.isNotEmpty == true
+                ? draft.fields['vehiclePlate'] as String
+                : (draft.fields['ownerName'] as String?)?.isNotEmpty == true
+                ? draft.fields['ownerName'] as String
+                : 'Новая инспекция',
+            subtitle: [
+              draft.fields['inspectionCertificateNumber'] ?? '',
+              tr(
+                context,
+                _remoteDraftIds.contains(draft.id)
+                    ? 'Сохранено на сервере'
+                    : 'Сохраняется на сервере',
+              ),
+            ].where((v) => v.toString().isNotEmpty).join(' · '),
+            status: 'Продолжить',
+            onTap: () => _resumeSavedDraft(draft),
+          ),
+      ],
+    );
+  }
+
+  Future<bool> _restoreInspectionRecovery({String? draftId}) async {
     if (!_canRecover) return false;
     _restoringRecovery = true;
     try {
       final owner = currentUser!.id;
-      final saved = await _recovery.read(owner);
+      var saved = draftId == null
+          ? await _recovery.read(owner)
+          : await _recovery.readDraft(owner, draftId);
       if (!mounted || saved == null || currentUser?.id != owner) return false;
+      final storedId =
+          saved.fields['localDraftId'] as String? ?? draftId ?? 'legacy';
+      if (kIsWeb &&
+          saved.fields['organizationId'] ==
+              _currentInspectionOrganization?.id &&
+          !RegExp(r'^[a-f0-9]{8}-[a-f0-9-]{27}$').hasMatch(storedId)) {
+        final id = newInspectionDraftId();
+        saved = InspectionRecoverySnapshot(
+          fields: {...saved.fields, 'localDraftId': id},
+          files: saved.files,
+        );
+        await _recovery.save(owner, saved);
+        await _recovery.clearDraft(owner, storedId);
+      }
       final f = saved.fields;
       final target = f['screen'];
       if (target is! int ||
@@ -840,15 +1164,27 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
       if (id is String && id.isNotEmpty) {
         detail = await repositories.inspections.detail(id);
         if (!['draft', 'rejected'].contains(detail.status)) {
-          await _recovery.clear(owner);
+          await _recovery.clearDraft(
+            owner,
+            f['localDraftId'] as String? ?? 'legacy',
+          );
           return false;
         }
       }
       if (!mounted || currentUser?.id != owner) return false;
       Position? position(dynamic data) =>
           data is Map ? Position.fromMap(data) : null;
+      final restoredFiles = saved.files;
       setWebUpdateBusy('screen', true);
       setState(() {
+        _localDraftId = f['localDraftId'] as String?;
+        _lastDraftStep = target;
+        _recoveryCompleted = false;
+        _draftConflict = false;
+        if (_localDraftId != null) {
+          _draftVersions[_localDraftId!] =
+              (f['remoteVersion'] as num?)?.toInt() ?? 0;
+        }
         if (f['inspectionCertificateNumber'] is String) {
           inspectionCertificateNumber =
               f['inspectionCertificateNumber'] as String;
@@ -936,10 +1272,10 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
           for (final e in (f['packageDocumentPositions'] as Map? ?? {}).entries)
             e.key as String: Position.fromMap(e.value),
         };
-        cylinderPhotoBytes = saved.files['primary_cylinder'];
-        vehiclePhotoBytes = saved.files['primary_vehicle'];
-        techPassportPhotoBytes = saved.files['primary_tech'];
-        packageDocumentBytes = {...saved.files}
+        cylinderPhotoBytes = restoredFiles['primary_cylinder'];
+        vehiclePhotoBytes = restoredFiles['primary_vehicle'];
+        techPassportPhotoBytes = restoredFiles['primary_tech'];
+        packageDocumentBytes = {...restoredFiles}
           ..removeWhere((key, _) => key.startsWith('primary_'));
         selectedInspection = detail;
         if (detail != null) {
@@ -1030,6 +1366,7 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
           viewHistory = await repositories.audit.myViews();
         }
       }
+      await _loadSavedDrafts();
       final recovered = await _restoreInspectionRecovery();
       if (mounted) {
         setState(() {
@@ -1534,6 +1871,7 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
       setState(() => authPassword = '');
       if (result.passwordChangeToken != null) {
         setState(() {
+          _forgetDraftAccount();
           currentUser = null;
           passwordChangeToken = result.passwordChangeToken;
           sessionNotice = '';
@@ -1641,6 +1979,7 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
   Future<void> _enterAuthenticated(AppUser user) async {
     _recoveryCompleted = false;
     if (!mounted) return;
+    if (currentUser?.id != user.id) _forgetDraftAccount();
     setState(() {
       currentUser = user;
       sessionNotice = '';
@@ -1664,6 +2003,7 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
       await _loadNotifications();
       await _loadViewHistory();
     }
+    await _loadSavedDrafts();
     final recovered = await _restoreInspectionRecovery();
     if (mounted) {
       if (!recovered) go(_homeScreenForRoleCode(_roleCode));
@@ -2481,10 +2821,20 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
       }
       await repositories.inspections.setStatus(inspectionId, 'submitted');
       _recoveryCompleted = true;
+      if (_localDraftId != null) _finishedDraftIds.add(_localDraftId!);
+      _remoteDraftTimer?.cancel();
+      await _remoteDraftQueue;
       _recoveryTimer?.cancel();
       if (currentUser != null) {
         try {
-          await _recovery.clear(currentUser!.id);
+          if (_localDraftId != null) {
+            await _recovery.clearDraft(currentUser!.id, _localDraftId!);
+            if (kIsWeb) {
+              await repositories.inspections.removeDraft(_localDraftId!);
+            }
+          } else {
+            await _recovery.clear(currentUser!.id);
+          }
         } catch (_) {}
       }
       await _loadMyInspections();
@@ -2565,6 +2915,17 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
   }
 
   Future<void> _uploadPendingInspectionFiles(String inspectionId) async {
+    if (kIsWeb && _localDraftId != null) {
+      _remoteDraftTimer?.cancel();
+      final snapshot = _inspectionRecoverySnapshot();
+      _queueDraftSync(currentUser!.id, snapshot);
+      await _remoteDraftQueue;
+      if (_draftConflict) {
+        throw StateError(
+          'Черновик изменён на другом устройстве. Откройте его заново из списка черновиков.',
+        );
+      }
+    }
     Future<void> uploadPhotoIfNeeded({
       required String kind,
       required String? filename,
@@ -2582,14 +2943,29 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
         );
       }
       final resolvedPosition = position ?? await _photoLocations[bytes];
-      await repositories.inspections.uploadPhoto(
-        inspectionId: inspectionId,
-        type: _inspectionPhotoType(kind),
-        filename: filename,
-        bytes: bytes,
-        lat: resolvedPosition?.latitude,
-        lng: resolvedPosition?.longitude,
-      );
+      final draftType = kind == 'cylinder'
+          ? 'primary_cylinder'
+          : kind == 'vehicle'
+          ? 'primary_vehicle'
+          : 'primary_tech';
+      if (_localDraftId != null && _hasSyncedDraftFile(draftType, bytes)) {
+        await repositories.inspections.attachDraftFile(
+          _localDraftId!,
+          inspectionId,
+          draftType,
+          lat: resolvedPosition?.latitude,
+          lng: resolvedPosition?.longitude,
+        );
+      } else {
+        await repositories.inspections.uploadPhoto(
+          inspectionId: inspectionId,
+          type: _inspectionPhotoType(kind),
+          filename: filename,
+          bytes: bytes,
+          lat: resolvedPosition?.latitude,
+          lng: resolvedPosition?.longitude,
+        );
+      }
       if (!mounted) return;
       setState(() {
         if (kind == 'cylinder') cylinderPhotoUploaded = true;
@@ -2629,14 +3005,25 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
       final position =
           packageDocumentPositions[entry.key] ??
           await _photoLocations[entry.value];
-      await repositories.inspections.uploadPhoto(
-        inspectionId: inspectionId,
-        type: entry.key,
-        filename: packageDocumentNames[entry.key] ?? entry.key,
-        bytes: entry.value,
-        lat: position?.latitude,
-        lng: position?.longitude,
-      );
+      if (_localDraftId != null &&
+          _hasSyncedDraftFile(entry.key, entry.value)) {
+        await repositories.inspections.attachDraftFile(
+          _localDraftId!,
+          inspectionId,
+          entry.key,
+          lat: position?.latitude,
+          lng: position?.longitude,
+        );
+      } else {
+        await repositories.inspections.uploadPhoto(
+          inspectionId: inspectionId,
+          type: entry.key,
+          filename: packageDocumentNames[entry.key] ?? entry.key,
+          bytes: entry.value,
+          lat: position?.latitude,
+          lng: position?.longitude,
+        );
+      }
       if (!mounted) return;
       setState(() {
         packageDocumentUploaded = {...packageDocumentUploaded, entry.key: true};
@@ -2812,7 +3199,24 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
     go(18);
   }
 
-  void _startNewInspection() {
+  Future<void> _startNewInspection() async {
+    if (_openingDraft) return;
+    if (_localDraftId != null && !_recoveryCompleted) {
+      await _persistInspectionRecovery();
+    }
+    _remoteDraftTimer?.cancel();
+    if (kIsWeb && _localDraftId != null && !_recoveryCompleted) {
+      _queueDraftSync(currentUser!.id, _inspectionRecoverySnapshot());
+    }
+    if (!_lastDraftLocalSaveOk) {
+      await _remoteDraftQueue;
+      if (_localDraftId == null || !_remoteDraftIds.contains(_localDraftId)) {
+        return;
+      }
+    }
+    _localDraftId = newInspectionDraftId();
+    _lastDraftStep = 15;
+    _draftConflict = false;
     _recoveryCompleted = false;
     setState(() {
       draftVehicleId = null;
@@ -2873,7 +3277,7 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
   }
 
   void go(int index) {
-    if (_checkingSelectedFile) return;
+    if (_checkingSelectedFile || _openingDraft) return;
     final requested = index.clamp(0, 40);
     final target = passwordChangeToken != null && requested >= 4
         ? 3
@@ -2884,6 +3288,14 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
         ? 2
         : requested;
     if (target == screen) return;
+    if (screen >= 15 && screen <= 23) {
+      _lastDraftStep = screen;
+      unawaited(_persistInspectionRecovery());
+    }
+    if (target < 15 || target > 23) {
+      _webInspectionInProgress = false;
+      unawaited(_loadSavedDrafts());
+    }
     if (target >= 15 && target <= 23) {
       _webInspectionInProgress = true;
       setWebUpdateBusy('screen', true);
@@ -2911,6 +3323,10 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
   }
 
   void back() {
+    if (screen >= 15 && screen <= 23) {
+      _lastDraftStep = screen;
+      unawaited(_persistInspectionRecovery());
+    }
     if (screen == 3 && passwordChangeToken != null) {
       setState(() {
         passwordChangeToken = null;
@@ -2979,6 +3395,18 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
     bool forceDataStep = false,
     bool lockProtectedPhotos = false,
   }) async {
+    if (_localDraftId != null && !_recoveryCompleted) {
+      await _persistInspectionRecovery();
+    }
+    _remoteDraftTimer?.cancel();
+    if (kIsWeb && _localDraftId != null && !_recoveryCompleted) {
+      _queueDraftSync(currentUser!.id, _inspectionRecoverySnapshot());
+    }
+    _localDraftId = newInspectionDraftId();
+    _lastDraftStep = 15;
+    _draftConflict = false;
+    _recoveryCompleted = false;
+    _openingDraft = true;
     setState(() => apiState = 'Загрузка черновика');
     try {
       final detail = await repositories.inspections.detail(inspection.id);
@@ -3075,10 +3503,21 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
   }
 
   Future<void> _logout() async {
-    unawaited(_persistInspectionRecovery());
+    await _persistInspectionRecovery();
+    _remoteDraftTimer?.cancel();
+    if (kIsWeb &&
+        currentUser != null &&
+        _localDraftId != null &&
+        !_recoveryCompleted) {
+      _queueDraftSync(currentUser!.id, _inspectionRecoverySnapshot());
+      try {
+        await _remoteDraftQueue.timeout(const Duration(seconds: 20));
+      } catch (_) {}
+    }
     await repositories.auth.logout();
     if (!mounted) return;
     setState(() {
+      _forgetDraftAccount();
       currentUser = null;
       role = 'Проверка свидетельства';
       authPhone = '+7';
@@ -3311,6 +3750,7 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
       12 => _InspectionOrgCard(go: go),
       13 => _InstallerCard(go: go),
       14 => _InspectorHome(
+        localDrafts: _draftCards(),
         go: go,
         inspections: myInspections,
         organization: _currentInspectionOrganization,
@@ -3621,6 +4061,7 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
         editingQuality: _editingQualityInspection,
       ),
       24 => _InspectorHome(
+        localDrafts: _draftCards(),
         go: go,
         inspections: myInspections,
         organization: _currentInspectionOrganization,
@@ -6803,6 +7244,7 @@ class _InstallerCard extends StatelessWidget {
 
 class _InspectorHome extends StatelessWidget {
   const _InspectorHome({
+    this.localDrafts,
     required this.go,
     required this.inspections,
     required this.organization,
@@ -6817,6 +7259,7 @@ class _InspectorHome extends StatelessWidget {
   });
   final void Function(int) go;
   final List<InspectionSummary> inspections;
+  final Widget? localDrafts;
   final OrganizationSummary? organization;
   final bool isManager;
   final VoidCallback? onTopUp;
@@ -6976,6 +7419,8 @@ class _InspectorHome extends StatelessWidget {
               onTap: onImportXlsx,
             ),
           ],
+          if (localDrafts != null && !isQualityControl && !isManager)
+            localDrafts!,
           if (isQualityControl && mine.isNotEmpty) ...[
             const Text('Мои проверки', style: _section),
             for (final item in mine)

@@ -38,6 +38,7 @@ on:
           - photo-engine-diagnostics
           - deploy-photo-engine
           - photo-moderation-status
+          - publish-inspection-drafts
           - publish-backend-patch
           - resume-checked-release
           - status
@@ -208,7 +209,7 @@ jobs:
           printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
       - uses: actions/setup-node@v4
-        if: github.event.inputs.operation == 'publish-backend-patch'
+        if: contains(fromJSON('["publish-backend-patch","publish-inspection-drafts"]'), github.event.inputs.operation)
         with:
           node-version: '22'
           cache: npm
@@ -235,6 +236,7 @@ jobs:
             photo-engine-diagnostics) bash ops/diagnose-photo-engine.sh ;;
             deploy-photo-engine) bash ops/deploy-photo-engine.sh ;;
             photo-moderation-status) bash ops/photo-moderation-status.sh ;;
+            publish-inspection-drafts) bash ops/publish-inspection-drafts.sh ;;
             publish-backend-patch) bash ops/publish-backend-patch.sh ;;
             deploy-admin) DEPLOY_COMPONENTS=admin bash ops/deploy-production.sh "$(git rev-parse HEAD)" ;;
             deploy-services) DEPLOY_COMPONENTS=services bash ops/deploy-production.sh "$(git rev-parse HEAD)" ;;

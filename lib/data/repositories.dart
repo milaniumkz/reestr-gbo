@@ -726,6 +726,60 @@ class InspectionRepository {
     return InspectionFileInfo.fromJson(response);
   }
 
+  Future<List<Map<String, dynamic>>> listDrafts() async {
+    final response = await _api.getJson('/inspection-drafts');
+    return [
+      for (final item in response['items'] as List? ?? [])
+        Map<String, dynamic>.from(item),
+    ];
+  }
+
+  Future<Map<String, dynamic>> draft(String id) =>
+      _api.getJson('/inspection-drafts/$id');
+  Future<Map<String, dynamic>> saveDraft(
+    String id,
+    String organization,
+    int version,
+    Map<String, dynamic> fields,
+  ) => _api.putJson('/inspection-drafts/$id', {
+    'organizationId': organization,
+    'version': version,
+    'fields': fields,
+  });
+  Future<Map<String, dynamic>> saveDraftFile(
+    String id,
+    String type,
+    int version,
+    String name,
+    List<int> bytes,
+  ) => _api.postMultipart(
+    '/inspection-drafts/$id/files/$type',
+    fieldName: 'file',
+    filename: name,
+    bytes: bytes,
+    contentType: _contentTypeFor(name),
+    fields: {'version': '$version'},
+  );
+  Future<Uint8List> draftFile(String id, String type) =>
+      _api.getBytes('/inspection-drafts/$id/files/$type');
+  Future<void> removeDraft(String id) async {
+    await _api.deleteJson('/inspection-drafts/$id');
+  }
+
+  Future<void> attachDraftFile(
+    String id,
+    String inspectionId,
+    String type, {
+    double? lat,
+    double? lng,
+  }) async {
+    await _api.postJson('/inspection-drafts/$id/attach/$inspectionId', {
+      'type': type,
+      'lat': ?lat,
+      'lng': ?lng,
+    });
+  }
+
   Future<Map<String, dynamic>> checkPhoto({
     required String type,
     required String filename,
