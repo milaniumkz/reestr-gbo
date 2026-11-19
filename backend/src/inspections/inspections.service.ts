@@ -2,7 +2,7 @@ import { assertCylinderAvailable } from './cylinder-uniqueness';
 import { requiredCylinderShape } from './cylinder-pair';
 import { certificateNumberConflict } from '../common/certificate-number-conflict';
 import { reverseGeocodeInspection, inspectionAddressUnavailable } from './inspection-address';
-import { Prisma } from '@prisma/client';
+import { Prisma, type Inspection } from '@prisma/client';
 import { TechPassportService } from '../tech-passport/tech-passport.service';
 import { passportProofMatches } from '../tech-passport/passport-content';
 import { assertSecondCylinderUnique } from './second-cylinder-uniqueness';
@@ -189,7 +189,17 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
     const existingDraft = await this.prisma.inspection.findUnique({
       where: { organizationId_certificateNumber: { organizationId, certificateNumber } },
     });
+    // A successful create response may be lost before the browser stores its ID.
+    // Resume only this inspector's unsent draft for the very same vehicle.
+    const resume = async (draft: typeof existingDraft, certificate: typeof existingCertificate) => {
+      if (certificate || !draft || !user?.sub || draft.createdById !== user.sub ||
+          draft.status !== "draft" || draft.vehicleId !== vehicleId) return null;
+      await this.requireStoredAddress(draft);
+      return this.updateData(user, draft.id, {...input, vehicleId, certificateNumber});
+    };
     if (existingCertificate || existingDraft) {
+      const resumed = await resume(existingDraft, existingCertificate);
+      if (resumed) return resumed;
       throw new BadRequestException(
         "Свидетельство с таким номером уже есть в этом инспекционном органе",
       );
@@ -212,19 +222,32 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       pair = cylinderPair(input, "");
     }
     await assertSecondCylinderUnique(this.prisma,pair,vehicleId);
-    const inspection = await this.prisma.inspection.create({
-      data: {
-        organizationId,
-        vehicleId,
-        certificateNumber,
-        lat,
-        lng,
-        address,
-        createdById: user?.sub,
-        requireApplicantPhotos: true,
-        ...pair,
-      },
-    }).catch(certificateNumberConflict);
+    let inspection: Inspection;
+    try {
+      inspection = await this.prisma.inspection.create({
+        data: {
+          organizationId,
+          vehicleId,
+          certificateNumber,
+          lat,
+          lng,
+          address,
+          createdById: user?.sub,
+          requireApplicantPhotos: true,
+          ...pair,
+        },
+      });
+    } catch (error) {
+      if ((error as {code?: string})?.code === "P2002") {
+        const [draft, certificate] = await Promise.all([
+          this.prisma.inspection.findUnique({where:{organizationId_certificateNumber:{organizationId,certificateNumber}}}),
+          this.prisma.certificate.findUnique({where:{organizationId_number:{organizationId,number:certificateNumber}}}),
+        ]);
+        const resumed = await resume(draft, certificate);
+        if (resumed) return resumed;
+      }
+      certificateNumberConflict(error);
+    }
     await this.prisma.auditLog.create({
       data: {
         actorId: user?.sub,
