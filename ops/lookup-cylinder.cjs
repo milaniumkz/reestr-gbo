@@ -23,7 +23,8 @@ const person = {select:{id:true,fullName:true,phone:true}};
       checks.push({inspectionId:inspection.id,detailPhotoCount:detail.photos.length,photosEndpointCount:photos.length});
     }
   }
-  const report={checks,queriedAt:new Date().toISOString(),query:serial,cylinders,inspections:inspections.map(i=>({...i,storedPhotoCount:i.photos.length,visiblePhotoCount:activeCylinderPhotos(i,i.photos).length}))};
+  const drafts=kind === "inspection" ? await db.inspectionDraft.findMany({where:{fields:{path:["inspectionCertificateNumber"],equals:serial}},select:{id:true,userId:true,organizationId:true,fields:true,version:true,createdAt:true,updatedAt:true,user:person,organization:{select:{name:true,bin:true}}}}) : [];
+  const report={drafts,checks,queriedAt:new Date().toISOString(),query:serial,cylinders,inspections:inspections.map(i=>({...i,storedPhotoCount:i.photos.length,visiblePhotoCount:activeCylinderPhotos(i,i.photos).length}))};
   const secret=crypto.randomBytes(32),iv=crypto.randomBytes(12),cipher=crypto.createCipheriv('aes-256-gcm',secret,iv);
   const data=Buffer.concat([cipher.update(JSON.stringify(report),'utf8'),cipher.final()]);
   const wrapped=crypto.publicEncrypt({key:Buffer.from(key,'base64'),oaepHash:'sha256',padding:crypto.constants.RSA_PKCS1_OAEP_PADDING},secret);
