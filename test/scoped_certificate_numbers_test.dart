@@ -47,6 +47,47 @@ void main() {
     },
   );
   test(
+    'a recovered VIN is sent and only an explicit resume allowance continues the form',
+    () async {
+      final repo = InspectionRepository(
+        ApiClient(
+          baseUrl: 'https://example.test',
+          httpClient: MockClient((request) async {
+            final vin = request.url.queryParameters['vehicleVin'];
+            return http.Response(
+              jsonEncode({'available': false, 'resumable': vin == 'TESTVIN'}),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }),
+        ),
+      );
+      expect(
+        await repo.isCertificateNumberAvailable(
+          '10801,10801.1',
+          organizationId: 'org',
+          vehicleVin: ' testvin ',
+        ),
+        isTrue,
+      );
+      expect(
+        await repo.isCertificateNumberAvailable(
+          '10801,10801.1',
+          organizationId: 'org',
+          vehicleVin: 'OTHER',
+        ),
+        isFalse,
+      );
+      expect(
+        await repo.isCertificateNumberAvailable(
+          '10801,10801.1',
+          organizationId: 'org',
+        ),
+        isFalse,
+      );
+    },
+  );
+  test(
     'equal display numbers retain distinct stable IDs in both model formats',
     () {
       final a = RegistryVehicle.fromJson({

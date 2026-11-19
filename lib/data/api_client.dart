@@ -158,7 +158,7 @@ class ApiClient {
         contentType: contentType == null ? null : _mediaType(contentType),
       ),
     );
-    final streamed = await request.send();
+    final streamed = await _http.send(request);
     final response = await http.Response.fromStream(streamed);
     if (response.statusCode == 401 &&
         (!path.startsWith('/auth/') ||

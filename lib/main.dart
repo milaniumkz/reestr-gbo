@@ -2772,6 +2772,8 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
     );
     draftVehicleId = vehicleId;
     draftInspectionId = inspectionId;
+    // Persist the server ID before uploading files or refreshing other screens.
+    await _persistInspectionRecovery();
     await _loadMyInspections();
     return inspectionId;
   }
@@ -2871,7 +2873,8 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
           : 'Ошибка отправки инспекции: ${error.toString()}';
       if (mounted) {
         setState(() => apiState = message);
-        _goToMissingInspectionStep(message);
+        await _persistInspectionRecovery();
+        if (mounted) _goToMissingInspectionStep(message);
       }
     } finally {
       if (mounted) setState(() => _inspectionSubmitting = false);
@@ -2898,6 +2901,8 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
   }
 
   void _goToMissingInspectionStep(String message) {
+    // A conflicting number is not a missing form field. Keep the filled review.
+    if (message.toLowerCase().contains('с таким номером')) return;
     if (message.toLowerCase().contains('техпаспорт')) {
       go(20);
       return;
@@ -3132,6 +3137,7 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
           .isCertificateNumberAvailable(
             number,
             inspectionId: draftInspectionId,
+            vehicleVin: vehicleVin,
             organizationId: await _inspectionOrganizationId(),
           );
       if (!available) {
