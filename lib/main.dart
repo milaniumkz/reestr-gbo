@@ -3137,6 +3137,7 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
           .isCertificateNumberAvailable(
             number,
             inspectionId: draftInspectionId,
+            vehicleVin: vehicleVin,
             organizationId: await _inspectionOrganizationId(),
           );
       if (!available) {

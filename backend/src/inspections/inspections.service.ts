@@ -571,7 +571,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  async certificateNumberAvailability(number: string, inspectionId?: string, user?: RequestUser, requestedOrganizationId?: string) {
+  async certificateNumberAvailability(number: string, inspectionId?: string, user?: RequestUser, requestedOrganizationId?: string, vehicleVin?: string) {
     let organizationId = requestedOrganizationId?.trim();
     if (inspectionId) {
       const current = await this.assertInspectionAccess(inspectionId, user);
@@ -590,7 +590,15 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       this.prisma.certificate.findUnique({ where: { organizationId_number: { organizationId, number: certificateNumber } } }),
       this.prisma.inspection.findUnique({ where: { organizationId_certificateNumber: { organizationId, certificateNumber } } }),
     ]);
-    return { available: !certificate && (!inspection || inspection.id === inspectionId) };
+    const available = !certificate && (!inspection || inspection.id === inspectionId);
+    if (!available && !inspectionId && !certificate && inspection?.status === "draft" &&
+        user?.sub && inspection.createdById === user.sub && vehicleVin?.trim()) {
+      const vehicle = await this.prisma.vehicle.findUnique({where:{id:inspection.vehicleId},select:{vin:true}});
+      if (vehicle?.vin.trim().toUpperCase() === vehicleVin.trim().toUpperCase()) {
+        return {available:false,resumable:true};
+      }
+    }
+    return { available };
   }
 
   async detail(id: string, user?: RequestUser) {

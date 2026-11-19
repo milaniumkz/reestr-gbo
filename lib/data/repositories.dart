@@ -631,13 +631,14 @@ class InspectionRepository {
   Future<bool> isCertificateNumberAvailable(
     String number, {
     String? inspectionId,
+    String? vehicleVin,
     required String organizationId,
   }) async {
     if (AppEnvironment.isDemo) return true;
     final response = await _api.getJson(
-      '/inspections/certificate-number/${Uri.encodeComponent(number)}/availability?organizationId=${Uri.encodeQueryComponent(organizationId)}${inspectionId == null ? '' : '&inspectionId=${Uri.encodeQueryComponent(inspectionId)}'}',
+      '/inspections/certificate-number/${Uri.encodeComponent(number)}/availability?organizationId=${Uri.encodeQueryComponent(organizationId)}${inspectionId == null ? '' : '&inspectionId=${Uri.encodeQueryComponent(inspectionId)}'}${vehicleVin == null || vehicleVin.trim().isEmpty ? '' : '&vehicleVin=${Uri.encodeQueryComponent(vehicleVin.trim().toUpperCase())}'}',
     );
-    return response['available'] == true;
+    return response['available'] == true || response['resumable'] == true;
   }
 
   Future<List<InspectionSummary>> list({int limit = 20}) async {

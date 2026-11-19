@@ -6,7 +6,7 @@ const actor={sub:'inspector',phone:'test',roles:['inspection_org']};
 const input={organizationId:'org',vehicleId:'vehicle',certificateNumber:'10801,10801.1',lat:43.2,lng:76.9};
 function fixture(overrides:Record<string,unknown>={}){
  const draft={id:'existing',organizationId:'org',vehicleId:'vehicle',createdById:'inspector',certificateNumber:input.certificateNumber,status:'draft',lat:43.2,lng:76.9,address:'Алматы, место инспекции',...overrides};
- const db={organizationMember:{findMany:jest.fn(async()=>[{organizationId:'org'}])},
+ const db={vehicle:{findUnique:jest.fn(async()=>({vin:'TESTVIN'}))},organizationMember:{findMany:jest.fn(async()=>[{organizationId:'org'}])},
   certificate:{findUnique:jest.fn(async()=>null as unknown)},
   inspection:{findUnique:jest.fn(async()=>draft as unknown),create:jest.fn(async()=>({...draft,id:'new'}))},
   auditLog:{create:jest.fn(async()=>({}))}};
@@ -28,6 +28,19 @@ describe('retry inspection creation after a lost response',()=>{
   const f=fixture(overrides);
   await expect(f.service.create(actor,input)).rejects.toBeInstanceOf(BadRequestException);
   expect(f.update).not.toHaveBeenCalled();expect(f.db.inspection.create).not.toHaveBeenCalled();
+ });
+ it('allows a recovered form with the same VIN through the owner step without declaring the number unused',async()=>{
+  const f=fixture();
+  expect(await f.service.certificateNumberAvailability(input.certificateNumber,undefined,actor,'org',' testvin ')).toEqual({available:false,resumable:true});
+  expect(f.update).not.toHaveBeenCalled();
+ });
+ it.each([{createdById:'another-inspector'},{status:'submitted'},{status:'approved'}])('keeps the number blocked on the owner step for %j',async(overrides)=>{
+  const f=fixture(overrides);
+  expect(await f.service.certificateNumberAvailability(input.certificateNumber,undefined,actor,'org','TESTVIN')).toEqual({available:false});
+ });
+ it('keeps the number blocked when VIN is different or absent',async()=>{
+  const f=fixture();
+  for(const vin of ['OTHER',undefined])expect(await f.service.certificateNumberAvailability(input.certificateNumber,undefined,actor,'org',vin)).toEqual({available:false});
  });
  it('never resumes a draft with an issued certificate',async()=>{
   const f=fixture();f.db.certificate.findUnique.mockResolvedValue({id:'issued'});
