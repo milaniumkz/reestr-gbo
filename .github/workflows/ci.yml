@@ -160,6 +160,14 @@ jobs:
       - run: python -m unittest discover -s services/photo -p 'test_*.py'
       - run: bash -n ops/deploy-photo-engine.sh
 
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash -n ops/backup-reestr.sh ops/publish-web-only.sh
+      - run: python3 scripts/backup_live_storage_test.py
+
   schema-migrations:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
