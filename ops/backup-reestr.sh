@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 umask 077
-exec 9>/run/lock/reestr-backup.lock
+exec 9>"${BACKUP_LOCK_FILE:-/run/lock/reestr-backup.lock}"
 flock -n 9 || { echo "Backup already in progress" >&2; exit 1; }
 
 APP_DIR="${APP_DIR:-/opt/reestr/app}"
@@ -32,7 +32,16 @@ storage_root="${LOCAL_STORAGE_PATH:-/opt/reestr/storage}"
 if [[ "$BACKUP_SCOPE" == database ]]; then
   : # Policy/session operations change PostgreSQL only; existing full backups remain intact.
 elif [[ -d "$storage_root" ]]; then
-  tar -C "$storage_root" -czf "$target/storage.tar.gz" .
+  # Freeze the entry list after pg_dump. New uploads are not referenced by that
+  # database snapshot. Avoid recursive directory reads while uploads add files,
+  # but still fail if a listed object disappears, cannot be read or changes.
+  file_list="$(mktemp "$target/.storage-files.XXXXXX")"
+  trap 'rm -f "$file_list"' EXIT
+  (cd "$storage_root" && find . -print0) > "$file_list"
+  tar -C "$storage_root" --no-recursion --null --verbatim-files-from \
+    --files-from "$file_list" -czf "$target/storage.tar.gz"
+  rm -f "$file_list"
+  trap - EXIT
 else
   tar -czf "$target/storage.tar.gz" --files-from /dev/null
 fi

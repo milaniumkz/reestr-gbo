@@ -8,10 +8,12 @@ printf '%s\n' "${KNOWN_HOSTS:?Known host required}" > ~/.ssh/known_hosts
 chmod 600 ~/.ssh/known_hosts
 remote="$(ssh "$server" 'mktemp -d /tmp/reestr-web.XXXXXX')"
 trap 'ssh "$server" "rm -rf -- \"$remote\""' EXIT
-rsync -az build/web/ "$server:$remote/"
+rsync -az build/web/ "$server:$remote/web/"
+scp ops/backup-reestr.sh "$server:$remote/backup.sh"
 ssh "$server" "bash -s -- '$remote' '$commit'" <<'REMOTE'
 set -euo pipefail
-staged="$1"
+staged="$1/web"
+backup_script="$1/backup.sh"
 commit="$2"
 web=/opt/reestr/app/build/web
 # A frontend-only update does not modify DB/storage. Reuse a recent complete
@@ -33,7 +35,7 @@ PYBACKUP
 if [[ -n "$recent_backup" ]] && pg_restore --list "$recent_backup/postgres.dump" >/dev/null && gzip -t "$recent_backup/storage.tar.gz"; then
   echo "Reusing verified recent full backup for frontend-only publication: $recent_backup"
 else
-  if [ -x /usr/local/bin/backup-reestr.sh ]; then /usr/local/bin/backup-reestr.sh; else /opt/reestr/app/ops/backup-reestr.sh; fi
+  APP_DIR=/opt/reestr/app bash "$backup_script"
 fi
 # Keep an exact frontend rollback snapshot and the existing APK checksum.
 archive="/opt/reestr/backups/web-$(date -u +%Y%m%dT%H%M%SZ)-${commit:0:12}.tar.gz"
