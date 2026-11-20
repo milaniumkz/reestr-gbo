@@ -216,7 +216,8 @@ class _InspectorIdentityPageState extends State<InspectorIdentityPage>
       autoStart = true;
     } catch (error) {
       // Keep an initialized preview so Safari can retry play from a real tap.
-      if (_camera?.value.isInitialized != true) {
+      if (_camera?.value.isInitialized != true ||
+          !_browserPreview.needsGesture) {
         await _closeCamera().catchError((_) {});
       }
       _error(error);

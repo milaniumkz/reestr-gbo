@@ -5,6 +5,8 @@ import 'dart:js_interop';
 external bool _enabled();
 @JS('ersiIdentityPreview.show')
 external void _show(JSString state, JSFunction onStart, JSFunction onCancel);
+@JS('ersiIdentityPreview.needsGesture')
+external bool get _needsGesture;
 @JS('ersiIdentityPreview.hide')
 external void _hide();
 
@@ -18,6 +20,14 @@ class IdentityBrowserPreview {
   bool get enabled {
     try {
       return _enabled();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  bool get needsGesture {
+    try {
+      return enabled && _needsGesture;
     } catch (_) {
       return false;
     }
