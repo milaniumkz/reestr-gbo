@@ -2802,23 +2802,24 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
       }
 
       final missingLocal = <String>[
-        if (usesTwoCylinders &&
-            packageDocumentUploaded['cylinder_label_2'] != true &&
-            !packageDocumentBytes.containsKey('cylinder_label_2'))
+        if (usesTwoCylinders && !_hasPackagePhoto('cylinder_label_2'))
           'Фото бирки второго баллона',
-        if (!cylinderPhotoUploaded && cylinderPhotoBytes == null)
+        if (!_hasInspectionPhoto(cylinderPhotoUploaded, cylinderPhotoBytes))
           'фото бирки баллона',
-        if (!vehiclePhotoUploaded && vehiclePhotoBytes == null)
+        if (!_hasInspectionPhoto(vehiclePhotoUploaded, vehiclePhotoBytes))
           'фото автомобиля',
-        if (!techPassportPhotoUploaded && techPassportPhotoBytes == null)
+        if (!_hasInspectionPhoto(
+          techPassportPhotoUploaded,
+          techPassportPhotoBytes,
+        ))
           'фото техпаспорта',
         for (final entry in _inspectionPackageDocuments.entries)
-          if (packageDocumentUploaded[entry.key] != true &&
-              !packageDocumentBytes.containsKey(entry.key))
-            entry.value,
+          if (!_hasPackagePhoto(entry.key)) entry.value,
       ];
       if (missingLocal.isNotEmpty) {
-        setState(() => apiState = 'Не хватает: ${missingLocal.join(', ')}');
+        final message = 'Не хватает: ${missingLocal.join(', ')}';
+        setState(() => apiState = message);
+        _goToMissingInspectionStep(message);
         return;
       }
       final inspectionId = await _ensureInspectionDraft();
@@ -2829,7 +2830,9 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
         final missing = readiness.missing
             .map((item) => inspectionRequiredLabels[item] ?? item)
             .join(', ');
-        setState(() => apiState = 'Не хватает: $missing');
+        final message = 'Не хватает: $missing';
+        setState(() => apiState = message);
+        _goToMissingInspectionStep(message);
         return;
       }
       await repositories.inspections.setStatus(inspectionId, 'submitted');
@@ -2903,6 +2906,21 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
   void _goToMissingInspectionStep(String message) {
     // A conflicting number is not a missing form field. Keep the filled review.
     if (message.toLowerCase().contains('с таким номером')) return;
+    final lower = message.toLowerCase();
+    if (lower.contains('бирк')) {
+      go(18);
+      return;
+    }
+    if (lower.contains('фото автомобиля')) {
+      go(19);
+      return;
+    }
+    if (_inspectionPackageDocuments.values.any(
+      (label) => lower.contains(label.toLowerCase()),
+    )) {
+      go(22);
+      return;
+    }
     if (message.toLowerCase().contains('техпаспорт')) {
       go(20);
       return;
@@ -2925,8 +2943,6 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
       go(17);
       return;
     }
-    if (message.contains('фото бирки')) go(18);
-    if (message.contains('фото автомобиля')) go(19);
     if (message.contains('техпаспорта')) go(20);
   }
 
@@ -2942,6 +2958,21 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
         );
       }
     }
+    String uploadFilename(String kind, String? name, List<int> bytes) {
+      if (name?.trim().isNotEmpty == true) return name!;
+      final signature = String.fromCharCodes(bytes.take(12));
+      final extension = signature.startsWith('%PDF-')
+          ? 'pdf'
+          : bytes.length >= 4 &&
+                bytes[0] == 137 &&
+                signature.substring(1, 4) == 'PNG'
+          ? 'png'
+          : signature.startsWith('RIFF') && signature.endsWith('WEBP')
+          ? 'webp'
+          : 'jpg';
+      return '$kind.$extension';
+    }
+
     Future<void> uploadPhotoIfNeeded({
       required String kind,
       required String? filename,
@@ -2949,9 +2980,10 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
       required Position? position,
       required bool uploaded,
     }) async {
-      if (uploaded || filename == null || bytes == null) return;
+      if (uploaded || bytes == null || bytes.isEmpty) return;
+      final effectiveName = uploadFilename(kind, filename, bytes);
       if (kind == 'tech_passport' &&
-          filename.toLowerCase().endsWith('.pdf') &&
+          effectiveName.toLowerCase().endsWith('.pdf') &&
           mounted) {
         setState(
           () => apiState =
@@ -2976,7 +3008,7 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
         await repositories.inspections.uploadPhoto(
           inspectionId: inspectionId,
           type: _inspectionPhotoType(kind),
-          filename: filename,
+          filename: effectiveName,
           bytes: bytes,
           lat: resolvedPosition?.latitude,
           lng: resolvedPosition?.longitude,
@@ -3035,7 +3067,11 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
         await repositories.inspections.uploadPhoto(
           inspectionId: inspectionId,
           type: entry.key,
-          filename: packageDocumentNames[entry.key] ?? entry.key,
+          filename: uploadFilename(
+            entry.key,
+            packageDocumentNames[entry.key],
+            entry.value,
+          ),
           bytes: entry.value,
           lat: position?.latitude,
           lng: position?.longitude,
@@ -3294,6 +3330,57 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
     return 'public_check';
   }
 
+  bool _hasInspectionPhoto(bool uploaded, List<int>? bytes) =>
+      uploaded || bytes?.isNotEmpty == true;
+
+  bool _hasPackagePhoto(String type) => _hasInspectionPhoto(
+    packageDocumentUploaded[type] == true,
+    packageDocumentBytes[type],
+  );
+
+  bool get _requiresApplicantPhotos =>
+      !_editingQualityInspection ||
+      selectedInspection?.requireApplicantPhotos == true;
+
+  ({int step, String message})? _missingPhotoBefore(int target) {
+    if (target > 18 &&
+        !_hasInspectionPhoto(cylinderPhotoUploaded, cylinderPhotoBytes)) {
+      return (step: 18, message: 'Ошибка: Добавьте фото бирки баллона');
+    }
+    if (target > 18 &&
+        usesTwoCylinders &&
+        !_hasPackagePhoto('cylinder_label_2')) {
+      return (step: 18, message: 'Добавьте фото бирки второго баллона');
+    }
+    if (target > 19 &&
+        !_hasInspectionPhoto(vehiclePhotoUploaded, vehiclePhotoBytes)) {
+      return (step: 19, message: 'Ошибка: Добавьте фото автомобиля');
+    }
+    if (target > 20 &&
+        !_hasInspectionPhoto(
+          techPassportPhotoUploaded,
+          techPassportPhotoBytes,
+        )) {
+      return (step: 20, message: 'Ошибка: Добавьте техпаспорт');
+    }
+    if (target > 22) {
+      final missing = _inspectionPackageDocuments.entries.where(
+        (entry) =>
+            (_requiresApplicantPhotos ||
+                protectedInspectionDocuments.contains(entry.key)) &&
+            !_hasPackagePhoto(entry.key),
+      );
+      if (missing.isNotEmpty) {
+        return (
+          step: 22,
+          message:
+              'Не хватает: ${missing.map((entry) => entry.value).join(', ')}',
+        );
+      }
+    }
+    return null;
+  }
+
   void go(int index) {
     if (_checkingSelectedFile || _openingDraft) return;
     final requested = index.clamp(0, 40);
@@ -3306,6 +3393,14 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
         ? 2
         : requested;
     if (target == screen) return;
+    if (target >= 15 && target <= 23 && target > screen) {
+      final missing = _missingPhotoBefore(target);
+      if (missing != null) {
+        setState(() => apiState = missing.message);
+        if (missing.step != screen) go(missing.step);
+        return;
+      }
+    }
     if (screen >= 15 && screen <= 23) {
       _lastDraftStep = screen;
       unawaited(_persistInspectionRecovery());
@@ -3335,6 +3430,12 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
   }
 
   bool get _canGoBackNow {
+    if (screen >= 15 &&
+        screen <= 23 &&
+        (_checkingSelectedFile || _openingDraft || _inspectionSubmitting)) {
+      return false;
+    }
+    if (screen > 15 && screen <= 23) return true;
     final home = _homeScreenForRoleCode(_roleCode);
     return _history.any(_canReturnTo) ||
         (_hasEnteredMainFlow && screen != home && !_isAuthScreen(screen));
@@ -3342,8 +3443,20 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
 
   void back() {
     if (screen >= 15 && screen <= 23) {
+      if (_checkingSelectedFile || _openingDraft || _inspectionSubmitting) {
+        return;
+      }
+      // Inspection steps have a fixed order, independent of how the draft opened.
+      _history.removeWhere((step) => step >= 15 && step <= 23);
+      if (screen > 15) {
+        setState(() => screen -= 1);
+        _lastDraftStep = screen;
+        unawaited(_persistInspectionRecovery());
+        return;
+      }
       _lastDraftStep = screen;
       unawaited(_persistInspectionRecovery());
+      _webInspectionInProgress = false;
     }
     if (screen == 3 && passwordChangeToken != null) {
       setState(() {
@@ -3958,19 +4071,7 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
         uploaded: cylinderPhotoUploaded,
         locked: protectedInspectionPhotosLocked && cylinderPhotoUploaded,
         onCamera: () => _captureInspectionPhoto('cylinder'),
-        onNext: () {
-          if (!cylinderPhotoUploaded && cylinderPhotoBytes == null) {
-            setState(() => apiState = 'Ошибка: Добавьте фото бирки баллона');
-            return;
-          }
-          if (usesTwoCylinders &&
-              packageDocumentUploaded['cylinder_label_2'] != true &&
-              !packageDocumentBytes.containsKey('cylinder_label_2')) {
-            setState(() => apiState = 'Добавьте фото бирки второго баллона');
-            return;
-          }
-          go(19);
-        },
+        onNext: () => go(19),
       ),
       19 => _PhotoStep(
         step: 5,
@@ -3981,13 +4082,7 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
         uploaded: vehiclePhotoUploaded,
         locked: protectedInspectionPhotosLocked && vehiclePhotoUploaded,
         onCamera: () => _captureInspectionPhoto('vehicle'),
-        onNext: () {
-          if (!vehiclePhotoUploaded && vehiclePhotoBytes == null) {
-            setState(() => apiState = 'Ошибка: Добавьте фото автомобиля');
-            return;
-          }
-          go(20);
-        },
+        onNext: () => go(20),
       ),
       20 => _PhotoStep(
         step: 6,
@@ -4059,22 +4154,18 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
       21 => _ValidityStep(
         issuedAt: inspectionIssuedAt,
         validUntil: _plusYearsIso(inspectionIssuedAt, 2),
-        onNext: () {
-          if (!techPassportPhotoUploaded && techPassportPhotoBytes == null) {
-            setState(() => apiState = 'Ошибка: Добавьте техпаспорт');
-            return;
-          }
-          go(22);
-        },
+        onNext: () => go(22),
       ),
       22 => _DocumentScanStep(
         usesTwoCylinders: usesTwoCylinders,
         names: packageDocumentNames,
         uploaded: packageDocumentUploaded,
+        selected: packageDocumentBytes.entries
+            .where((entry) => entry.value.isNotEmpty)
+            .map((entry) => entry.key)
+            .toSet(),
         readOnly: _isQualityControl,
-        requireApplicantPhotos:
-            !_editingQualityInspection ||
-            selectedInspection?.requireApplicantPhotos == true,
+        requireApplicantPhotos: _requiresApplicantPhotos,
         onCamera: (type, label) =>
             _pickInspectionDocument(type, label, camera: true),
         onUpload: _pickInspectionDocument,
@@ -8047,7 +8138,7 @@ class _PhotoStep extends StatelessWidget {
               onTap: locked ? null : onCamera,
             ),
           ?secondary,
-          if (photoName != null || uploaded) ...[
+          if (uploaded || photoBytes?.isNotEmpty == true) ...[
             const SizedBox(height: 12),
             _PrimaryButton(
               text: 'Далее',
@@ -8066,6 +8157,7 @@ class _DocumentScanStep extends StatelessWidget {
     this.usesTwoCylinders = false,
     required this.names,
     required this.uploaded,
+    this.selected = const {},
     required this.onUpload,
     required this.onCamera,
     this.readOnly = false,
@@ -8075,6 +8167,7 @@ class _DocumentScanStep extends StatelessWidget {
   final bool usesTwoCylinders;
   final Map<String, String> names;
   final Map<String, bool> uploaded;
+  final Set<String> selected;
   final void Function(String type, String label) onUpload;
   final void Function(String type, String label) onCamera;
   final bool readOnly;
@@ -8090,7 +8183,7 @@ class _DocumentScanStep extends StatelessWidget {
               requireApplicantPhotos ||
               protectedInspectionDocuments.contains(type),
         )
-        .every(names.containsKey);
+        .every((type) => uploaded[type] == true || selected.contains(type));
     return _AppScreen(
       title: 'Пакет документов',
       subtitle: requireApplicantPhotos
