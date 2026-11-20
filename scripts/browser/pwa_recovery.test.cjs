@@ -36,8 +36,11 @@ const fs=require('node:fs');
   assert.equal(await page.locator('meta[name="ersi-release"]').getAttribute('content'),'a'.repeat(40));
   console.log('PASS automatic update waits for an active inspection despite a new release');
   await page.evaluate(()=>window.dispatchEvent(new CustomEvent('ersi-update-state',{detail:{busy:false}})));
+  await page.waitForTimeout(3500);
+  assert.equal(await page.locator('meta[name="ersi-release"]').getAttribute('content'),'a'.repeat(40));
+  await page.getByRole('button',{name:'Обновить страницу',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('meta[name="ersi-release"]')?.content==='b'.repeat(40));
   assert.equal(await page.evaluate(()=>localStorage.getItem('flutter.accessToken')),'synthetic-preserved-session');
-  console.log('PASS automatic release update resumes after work completes even with a false offline hint');
+  console.log('PASS explicit update reloads after work completes even with a false offline hint');
  }finally{await browser.close();await new Promise(resolve=>server.close(resolve));}
 })().catch(e=>{console.error(e);process.exit(1)});

@@ -8,6 +8,7 @@ datasource db {
 }
 
 model User {
+  webPushSubscriptions WebPushSubscription[]
   inspectionDrafts InspectionDraft[]
   identityProfile InspectorIdentityProfile?
   identityChallenges InspectorIdentityChallenge[]
@@ -753,4 +754,23 @@ model InspectionDraft {
   user User @relation(fields:[userId],references:[id],onDelete:Cascade)
   organization Organization @relation(fields:[organizationId],references:[id],onDelete:Cascade)
   @@index([userId,updatedAt])
+}
+
+model WebPushSubscription {
+  id String @id @default(uuid())
+  userId String
+  endpoint String @unique
+  p256dh String
+  auth String
+  origin String
+  language String @default("ru")
+  active Boolean @default(true)
+  lastRelease String?
+  failures Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  @@index([active,nextAttemptAt])
+  @@index([userId,active])
 }
