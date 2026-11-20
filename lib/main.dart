@@ -719,6 +719,7 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     repositories.onSessionInvalidated = _onSessionInvalidated;
+    configureWebUpdates(_handleWebUpdate);
     _loadInitialData();
   }
 
@@ -729,7 +730,74 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
     _remoteDraftTimer?.cancel();
     _qualityQueueTimer?.cancel();
     repositories.onSessionInvalidated = null;
+    configureWebUpdates(null);
+    setWebPushAvailable(false);
     super.dispose();
+  }
+
+  Future<Map<String, dynamic>> _handleWebUpdate(
+    String action,
+    Map<String, dynamic> payload,
+  ) async {
+    if (!mounted) return {'ok': false};
+    if (action == 'release-current') {
+      setState(() => apiState = 'Установлена актуальная версия сайта');
+      return {'ok': true};
+    }
+    if (action == 'save') {
+      if (bootstrapping ||
+          authBusy ||
+          _checkingSelectedFile ||
+          _openingDraft ||
+          _inspectionSubmitting ||
+          qualityBusy ||
+          _editingQualityInspection ||
+          screen == 3 ||
+          screen == 40 ||
+          (screen == 2 && authPassword.isNotEmpty) ||
+          Navigator.of(context).canPop()) {
+        return {'ok': false};
+      }
+      if (_canRecover &&
+          (_localDraftId != null || (screen >= 15 && screen <= 23))) {
+        final owner = currentUser!.id;
+        await _persistInspectionRecovery();
+        final id = _localDraftId;
+        _remoteDraftTimer?.cancel();
+        if (kIsWeb) _queueDraftSync(owner, _inspectionRecoverySnapshot());
+        try {
+          await _remoteDraftQueue.timeout(const Duration(seconds: 20));
+        } catch (_) {}
+        return {
+          'ok':
+              mounted &&
+              currentUser?.id == owner &&
+              _localDraftId == id &&
+              id != null &&
+              _fullySyncedDraftIds.contains(id),
+        };
+      }
+      return {'ok': !(screen >= 15 && screen <= 23)};
+    }
+    if (currentUser == null || bootstrapping || screen < 4) {
+      return {'ok': false};
+    }
+    if (action == 'push-status') {
+      return {
+        'ok': true,
+        ...await repositories.api.getJson('/notifications/push'),
+      };
+    }
+    if (action == 'push-subscribe') {
+      return repositories.api.postJson('/notifications/push', payload);
+    }
+    if (action == 'push-unsubscribe') {
+      return repositories.api.postJson(
+        '/notifications/push/unsubscribe',
+        payload,
+      );
+    }
+    return {'ok': false};
   }
 
   void _forgetDraftAccount() {
@@ -1729,6 +1797,17 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
   }
 
   Future<void> _openNotification(AppNotification notification) async {
+    if (notification.entity == 'web_release') {
+      try {
+        await repositories.api.patchJson(
+          '/notifications/${notification.id}/read',
+          {},
+        );
+      } catch (_) {}
+      if (mounted) checkWebRelease();
+      return;
+    }
+
     if (notification.entity == 'password_recovery_request' &&
         _isInspectionManager) {
       await Navigator.of(context).push(
@@ -3684,6 +3763,7 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
       markWebChangesSaved();
     }
     _webPreviousScreen = screen;
+    setWebPushAvailable(currentUser != null && !bootstrapping && screen >= 4);
     setWebUpdateBusy(
       'screen',
       bootstrapping ||

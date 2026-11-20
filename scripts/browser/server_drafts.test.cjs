@@ -32,6 +32,13 @@ try{
  await p.evaluate(async arg=>window.ersiInspectionRecovery.save('inspector-a',JSON.stringify({localDraftId:arg.id,screen:20,organizationId:arg.org,ownerName:'FIRST DRAFT',inspectionCertificateNumber:'777',techPassportPhotoName:'original.jpg'}),[{type:'primary_tech',bytes:new Uint8Array(arg.bytes),version:1}]),{id:first,org,bytes:Array.from(original)});
  await p.goto(origin+'/');await ready(p);
  await until(()=>rows.get(first)?.files.primary_tech!=null);assert.deepEqual(blobs.get(first+'/primary_tech'),original);console.log('PASS partial form and original photo synchronize to the private server draft');
+ const saved=await p.evaluate(()=>new Promise(resolve=>{
+  const id='release-save-test';const listener=e=>{const result=JSON.parse(e.detail);if(result.id===id){window.removeEventListener('ersi-update-response',listener);resolve(result)}};
+  window.addEventListener('ersi-update-response',listener);
+  window.dispatchEvent(new CustomEvent('ersi-update-request',{detail:JSON.stringify({id,action:'save',payload:{}})}));
+ }));
+ assert.equal(saved.ok,true);assert.deepEqual(blobs.get(first+'/primary_tech'),original);assert.equal(submissions,0);
+ console.log('PASS release update handshake waits for the private draft and original bytes to be saved');
  await p.getByText('ПРОФИЛЬ',{exact:true}).last().click();await p.getByText('ГЛАВНАЯ',{exact:true}).last().click();await p.getByText('ЧЕРНОВИКИ',{exact:true}).waitFor();
  await p.getByRole('button',{name:'НОВАЯ ИНСПЕКЦИЯ',exact:true}).click();
  await p.getByRole('textbox',{name:'ФИО / НАИМЕНОВАНИЕ',exact:true}).click();await p.keyboard.type('SECOND DRAFT');await p.keyboard.press('Tab');
