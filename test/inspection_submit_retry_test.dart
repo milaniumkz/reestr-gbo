@@ -37,10 +37,14 @@ class RetryLocation extends GeolocatorPlatform {
 
 void main() {
   setUpAll(loadTestFonts);
-  for (final conflict in [false, true]) {
+  for (final mode in ['retry', 'conflict', 'missingName']) {
+    final conflict = mode == 'conflict';
+    final missingName = mode == 'missingName';
     testWidgets(
       conflict
           ? 'real duplicate keeps the completed review and original photos'
+          : missingName
+          ? 'accepted bytes with lost filename metadata still upload with a safe PNG name'
           : 'server inspection ID is saved before failed photo upload and reused on retry',
       (t) async {
         final location = GeolocatorPlatform.instance;
@@ -75,7 +79,7 @@ void main() {
               'cylinderShape': 'Цилиндрический',
               'reducerName': 'Test',
               'controlUnitName': 'Test',
-              'cylinderPhotoName': 'original.png',
+              'cylinderPhotoName': missingName ? null : 'original.png',
               'vehiclePhotoUploaded': true,
               'techPassportPhotoUploaded': true,
               'packageDocumentUploaded': {
@@ -157,6 +161,12 @@ void main() {
               }
               if (p == '/inspections/created/photos') {
                 uploads++;
+                if (missingName) {
+                  expect(
+                    utf8.decode(r.bodyBytes, allowMalformed: true),
+                    contains('filename="cylinder.png"'),
+                  );
+                }
                 expect(
                   store.entries['inspector']!.fields['draftInspectionId'],
                   'created',
