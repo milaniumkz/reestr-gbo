@@ -1,4 +1,6 @@
 import 'dart:async';
+import '../l10n/app_language.dart';
+import 'identity_browser_preview.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart' hide Text;
 import '../widgets/uppercase_text.dart';
@@ -29,7 +31,34 @@ class _InspectorIdentityPageState extends State<InspectorIdentityPage>
     with WidgetsBindingObserver {
   final _voice = IdentityVoice();
   final _monitor = IdentityFaceMonitor();
+  late final IdentityBrowserPreview _browserPreview;
+  final _scroll = ScrollController();
+  void _syncBrowserPreview() {
+    if (!mounted || !_browserPreview.enabled) return;
+    if (_camera?.value.isInitialized != true) {
+      _browserPreview.hide();
+      return;
+    }
+    _browserPreview.show({
+      'title': tr(context, 'Видеопроверка инспектора'),
+      'instruction': tr(context, _instruction),
+      'face': tr(context, facePositionText(facePosition(_sample))),
+      'centered': facePosition(_sample) == IdentityFacePosition.centered,
+      'message': _message,
+      'playError': tr(
+        context,
+        'Не удалось открыть камеру. Разрешите доступ к фронтальной камере и повторите.',
+      ),
+      'busy': _busy,
+      'recording': _recording,
+      'progress': _recording ? '${_seconds.floor()} / $_duration сек.' : '',
+      'start': tr(context, 'Начать запись'),
+      'cancel': tr(context, 'Отмена'),
+    });
+  }
+
   CameraController? _camera;
+  bool _monitorStarted = false;
   IdentityFaceSample _sample = IdentityFaceSample.unavailable;
   Map<String, dynamic>? _challenge;
   Timer? _timer;
@@ -57,6 +86,14 @@ class _InspectorIdentityPageState extends State<InspectorIdentityPage>
   @override
   void initState() {
     super.initState();
+    _browserPreview = IdentityBrowserPreview(
+      onStart: () {
+        if (mounted) unawaited(_record());
+      },
+      onCancel: () {
+        if (mounted && !_busy && !_recording) Navigator.of(context).pop(false);
+      },
+    );
     setWebUpdateBusy('identity', true);
     WidgetsBinding.instance.addObserver(this);
   }
@@ -66,6 +103,8 @@ class _InspectorIdentityPageState extends State<InspectorIdentityPage>
     setWebUpdateBusy('identity', false);
     WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
+    _browserPreview.hide();
+    _scroll.dispose();
     _voice.dispose();
     unawaited(_monitor.dispose());
     unawaited(_camera?.dispose());
@@ -88,7 +127,9 @@ class _InspectorIdentityPageState extends State<InspectorIdentityPage>
   Future<void> _closeCamera() async {
     final camera = _camera;
     _camera = null;
+    _browserPreview.hide();
     await _monitor.stop();
+    _monitorStarted = false;
     await camera?.dispose();
     if (mounted) setState(() {});
   }
@@ -164,14 +205,20 @@ class _InspectorIdentityPageState extends State<InspectorIdentityPage>
       }
       setState(() => _sample = IdentityFaceSample.unavailable);
       await WidgetsBinding.instance.endOfFrame;
+      if (_scroll.hasClients) _scroll.jumpTo(0);
+      _syncBrowserPreview();
       await _monitor.waitForCamera(camera);
       if (!mounted || _cancelled || _camera != camera) return;
       await _monitor.start(camera, (sample) {
         if (mounted) setState(() => _sample = sample);
       });
+      _monitorStarted = true;
       autoStart = true;
     } catch (error) {
-      await _closeCamera().catchError((_) {});
+      // Keep an initialized preview so Safari can retry play from a real tap.
+      if (_camera?.value.isInitialized != true) {
+        await _closeCamera().catchError((_) {});
+      }
       _error(error);
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -195,6 +242,12 @@ class _InspectorIdentityPageState extends State<InspectorIdentityPage>
     try {
       await _monitor.waitForCamera(camera);
       if (!mounted || _cancelled || _camera != camera) return;
+      if (!_monitorStarted) {
+        await _monitor.start(camera, (sample) {
+          if (mounted) setState(() => _sample = sample);
+        });
+        _monitorStarted = true;
+      }
       final faceDeadline = DateTime.now().add(const Duration(seconds: 20));
       while (_sample.available && _sample.faces.length != 1) {
         if (!mounted || _cancelled || _camera != camera) return;
@@ -348,12 +401,14 @@ class _InspectorIdentityPageState extends State<InspectorIdentityPage>
     } catch (error) {
       _error(error);
     } finally {
+      await _closeCamera().catchError((_) {});
       if (mounted) setState(() => _busy = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncBrowserPreview());
     final cameraReady = _camera?.value.isInitialized == true;
     return PopScope(
       canPop: false,
@@ -367,6 +422,7 @@ class _InspectorIdentityPageState extends State<InspectorIdentityPage>
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 560),
               child: SingleChildScrollView(
+                controller: _scroll,
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
