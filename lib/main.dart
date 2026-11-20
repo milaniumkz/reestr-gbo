@@ -2802,20 +2802,19 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
       }
 
       final missingLocal = <String>[
-        if (usesTwoCylinders &&
-            packageDocumentUploaded['cylinder_label_2'] != true &&
-            !packageDocumentBytes.containsKey('cylinder_label_2'))
+        if (usesTwoCylinders && !_hasPackagePhoto('cylinder_label_2'))
           'Фото бирки второго баллона',
-        if (!cylinderPhotoUploaded && cylinderPhotoBytes == null)
+        if (!_hasInspectionPhoto(cylinderPhotoUploaded, cylinderPhotoBytes))
           'фото бирки баллона',
-        if (!vehiclePhotoUploaded && vehiclePhotoBytes == null)
+        if (!_hasInspectionPhoto(vehiclePhotoUploaded, vehiclePhotoBytes))
           'фото автомобиля',
-        if (!techPassportPhotoUploaded && techPassportPhotoBytes == null)
+        if (!_hasInspectionPhoto(
+          techPassportPhotoUploaded,
+          techPassportPhotoBytes,
+        ))
           'фото техпаспорта',
         for (final entry in _inspectionPackageDocuments.entries)
-          if (packageDocumentUploaded[entry.key] != true &&
-              !packageDocumentBytes.containsKey(entry.key))
-            entry.value,
+          if (!_hasPackagePhoto(entry.key)) entry.value,
       ];
       if (missingLocal.isNotEmpty) {
         final message = 'Не хватает: ${missingLocal.join(', ')}';

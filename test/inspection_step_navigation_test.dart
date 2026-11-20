@@ -199,6 +199,28 @@ void main() {
     await t.pumpWidget(const SizedBox());
   });
   testWidgets(
+    'an empty recovered tag cannot create an inspection at final submission',
+    (t) async {
+      final store = await open(
+        t,
+        seed(
+          23,
+          files: {
+            'primary_cylinder': [],
+            'primary_vehicle': original,
+            'primary_tech': original,
+            for (final type in docs) type: original,
+          },
+        ),
+      );
+      await forward(t, 'Отправить в контроль качества');
+      expect(store.entries['inspector']!.fields['screen'], 18);
+      expect(store.entries['inspector']!.fields['draftInspectionId'], isNull);
+      expect(find.text('Далее'), findsNothing);
+      await t.pumpWidget(const SizedBox());
+    },
+  );
+  testWidgets(
     'final local missing-tag error goes to the tag, not cylinder data, and back remains sequential',
     (t) async {
       final store = await open(
