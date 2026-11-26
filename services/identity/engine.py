@@ -13,6 +13,7 @@ from documents import read_image,preview,vehicle_text
 cv2.setNumThreads(1)
 ROOT=Path(__file__).parent/'models'
 MODEL='intercity-sface-yunet-minifas2-mesh-v1'
+ANALYSIS_REVISION='v2-frontal-motion'
 LOCK=threading.Lock()
 for manifest in ['opencv-models.json','pad-manifest.json']:
  for item in json.loads((ROOT/manifest).read_text()):
@@ -66,11 +67,15 @@ def action_passed(action,samples,baseline):
  if action=='LOOK_UP':return sustained(samples,lambda p:p['pitch']-baseline['pitch']<-.045)
  if action=='OPEN_MOUTH':return sustained(samples,lambda p:p['mouth']>max(.16,baseline['mouth']+.07))
  if action=='BLINK':
-  closed=False;blinks=0
+  closed=False;opened=False
   for p in samples:
-   if p['eye']<baseline['eye']*.72:closed=True
-   elif closed and p['eye']>baseline['eye']*.85:blinks+=1;closed=False
-  return blinks>=1
+   # Eyelids change shape in profile: require a frontal open-close-open cycle.
+   if abs(p['yaw']-baseline['yaw'])>=.12:closed=False;opened=False;continue
+   if p['eye']>baseline['eye']*.85:
+    if closed:return True
+    opened=True
+   elif opened and p['eye']<baseline['eye']*.78:closed=True
+  return False
  return False
 
 def reject(reason):return {'verdict':'REJECT','reason':reason,'model':MODEL}
@@ -85,7 +90,7 @@ def verify(path,actions):
  # Validate decoded timestamps, never trust a missing container duration.
  valid_fps=5<=fps<=65
  first_stamp=None;last_frame_time=0;last_delta=.033;fingerprints=[];last_fingerprint=-1
- poses=[[] for _ in actions];neutral=[];vectors=[];neutral_vectors=[];scores=[];sharpness=[];reference=None;seen=0;missing=0;last=-1;last_vector=-1;last_pad=-1;started=time.monotonic()
+ poses=[[] for _ in actions];neutral=[];vectors=[];neutral_vectors=[];frontal_vectors=[];frontal_phases=[0]*(len(actions)+1);scores=[];sharpness=[];reference=None;seen=0;missing=0;last=-1;last_vector=-1;last_pad=-1;started=time.monotonic()
  try:
   with mp.solutions.face_mesh.FaceMesh(static_image_mode=False,max_num_faces=2,refine_landmarks=False,min_detection_confidence=.7,min_tracking_confidence=.7) as mesh:
    index=0
@@ -125,15 +130,24 @@ def verify(path,actions):
      for phase in range(len(actions)):
       if 2+phase*6-.20<=t<=2+phase*6+4.65:poses[phase].append(p)
     neutral_phase=t<2 or (t>=2 and (t-2)%6>=4)
+    # Evaluate identity on frontal frames. A requested profile turn reduces
+    # SFace similarity even for the same person; landmarks still verify it.
+    anchor_yaw=float(np.median([q['yaw'] for q in neutral])) if neutral else 0.
+    frontal=abs(p['yaw']-anchor_yaw)<.12
     if t-last_vector>=.35:
      last_vector=t
      v=vector(frame,face);vectors.append(v)
-     if neutral_phase and abs(p['yaw'])<.18:neutral_vectors.append(v)
-     if len(vectors)>1 and float(v@vectors[0])<.45:return reject('Лицо изменилось во время записи. Повторите проверку')
+     if frontal:
+      frontal_vectors.append(v)
+      if len(frontal_vectors)>1 and float(v@frontal_vectors[0])<.45:return reject('Лицо изменилось во время записи. Повторите проверку')
+      if neutral_phase:
+       neutral_vectors.append(v)
+       phase=0 if t<2 else min(len(actions),1+int((t-2)//6))
+       frontal_phases[phase]+=1
     # PAD models are trained on frontal faces; head-turn frames must not
     # be mistaken for a photo attack. All active tasks are still mandatory.
     neutral_phase=t<2 or (t>=2 and (t-2)%6>=4)
-    if t-last_pad>=.30 and neutral_phase and abs(p['yaw'])<.18:
+    if t-last_pad>=.30 and neutral_phase and frontal:
      last_pad=t
      scores.append(pad(frame,face))
      x,y,w,h=map(int,face[:4]);crop=frame[max(0,y):max(0,y)+h,max(0,x):max(0,x)+w]
@@ -150,6 +164,7 @@ def verify(path,actions):
  if missing>seen*(.25 if enrollment else .15) or reference is None:return reject('Лицо часто пропадает из кадра или слишком далеко. Держите лицо целиком в овале и направьте свет на лицо')
  if len(neutral)<10:return reject('В начале записи смотрите прямо в камеру и держите лицо неподвижно')
  if len(vectors)<(18 if enrollment else 25):return reject('Недостаточно чётких кадров лица. Держите телефон устойчиво и повторите запись')
+ if frontal_phases[0]<3 or any(n<2 for n in frontal_phases[1:]):return reject('После каждого движения снова смотрите прямо в камеру')
  if len(scores)<10:return reject('Недостаточно кадров с лицом прямо в камеру. После каждого движения снова смотрите прямо')
  baseline={k:float(np.median([p[k] for p in neutral])) for k in neutral[0]}
  if baseline['mouth']>.40 or baseline['eye']<.09:return reject('В начале смотрите прямо в камеру, с открытыми глазами и закрытым ртом')
@@ -157,24 +172,26 @@ def verify(path,actions):
  if not any(actions_ok):return reject('Не все задания выполнены. Запишите новое видео по подсказкам')
  values=np.array(scores);medians=np.median(values,axis=0);lower=np.quantile(values,.20,axis=0)
  if min(medians)<.50 or min(lower)<.15:return reject('Проверка подлинности видео не пройдена. Снимите себя вживую без экранов и фотографий')
- averaged=np.mean(neutral_vectors if len(neutral_vectors)>=6 else vectors,axis=0);averaged/=np.linalg.norm(averaged)
- continuity=min(float(v@averaged) for v in vectors)
+ averaged=np.mean(neutral_vectors,axis=0);averaged/=np.linalg.norm(averaged)
+ continuity=min(float(v@averaged) for v in frontal_vectors)
  problems=[];issues=[]
  names={'TURN_LEFT':'поворот головы налево','TURN_RIGHT':'поворот головы направо','LOOK_UP':'поднять подбородок','OPEN_MOUTH':'открыть рот','BLINK':'моргание'}
  if not all(actions_ok):issues.append('ACTIONS');problems.append('Не распознаны задания: '+', '.join(names[a] for a,ok in zip(actions,actions_ok) if not ok))
- if min(medians)<(.85 if enrollment else .97) or min(lower)<(.50 if enrollment else .85):issues.append('PAD');problems.append('Не удалось уверенно подтвердить живое лицо: уберите блики, направьте свет на лицо')
+ # Small PAD margin is allowed only with independently stable frontal identity.
+ pad_required=.85 if enrollment else (.95 if continuity>=.80 else .97)
+ if min(medians)<pad_required or min(lower)<(.50 if enrollment else .85):issues.append('PAD');problems.append('Не удалось уверенно подтвердить живое лицо: уберите блики, направьте свет на лицо')
  if np.median(sharpness)<(25 if enrollment else 35):issues.append('SHARPNESS');problems.append('Изображение размыто: протрите камеру и держите телефон неподвижно')
  if continuity<(.55 if enrollment else .60):issues.append('CONTINUITY');problems.append('Лицо теряется при движении: поворачивайте голову плавно')
  uncertain=bool(problems)
  return {'verdict':'REVIEW' if uncertain else 'PASS','reason':'. '.join(problems), 'model':MODEL,
   'videoSignature':fingerprints,'embedding':averaged.tolist(),'reference':base64.b64encode(reference).decode(),
-  'checks':{'issues':issues,'passedActions':sum(actions_ok),'totalActions':len(actions),'activeChallenge':all(actions_ok),'oneFace':True,'sharpness':round(float(np.median(sharpness)),3),'padLower':[round(float(x),3) for x in lower],'continuity':round(continuity,3),'padMedian':[round(float(x),3) for x in medians]}}
+  'checks':{'analysisRevision':ANALYSIS_REVISION,'frontalPhaseSamples':frontal_phases,'issues':issues,'passedActions':sum(actions_ok),'totalActions':len(actions),'activeChallenge':all(actions_ok),'oneFace':True,'sharpness':round(float(np.median(sharpness)),3),'padLower':[round(float(x),3) for x in lower],'continuity':round(continuity,3),'padMedian':[round(float(x),3) for x in medians]}}
 
 class Handler(BaseHTTPRequestHandler):
  def log_message(self,*args):pass
  def reply(self,code,obj):
   body=json.dumps(obj,ensure_ascii=False).encode();self.send_response(code);self.send_header('Content-Type','application/json; charset=utf-8');self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
- def do_GET(self):self.reply(200 if self.path=='/health' else 404,{'ready':True,'liveness':True,'model':MODEL,'externalServices':False})
+ def do_GET(self):self.reply(200 if self.path=='/health' else 404,{'ready':True,'liveness':True,'model':MODEL,'analysisRevision':ANALYSIS_REVISION,'externalServices':False})
  def do_POST(self):
   if self.path not in ('/verify','/document-face','/vehicle-text'):return self.reply(404,{})
   self.connection.settimeout(30)
