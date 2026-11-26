@@ -1,4 +1,4 @@
-import unittest,tempfile
+import unittest,tempfile,gc
 from unittest.mock import patch
 from types import SimpleNamespace
 from pathlib import Path
@@ -68,6 +68,7 @@ class IdentityEngineTests(unittest.TestCase):
 
  def motion_video(self,mode='normal',pad_score=1.):
   # Full decoded video with synthetic landmarks/features; never production faces.
+  gc.collect()
   frame=np.random.default_rng(83).integers(0,256,(480,640,3),dtype=np.uint8)
   face=np.array([120,120,180,180]+[0]*11,dtype=np.float32)
   normal=np.zeros(128);normal[0]=1
@@ -85,12 +86,12 @@ class IdentityEngineTests(unittest.TestCase):
    if mode=='swapped-face' and state['t']>=14:return other
    return other if abs(state['yaw'])>.5 else normal
   landmarks=SimpleNamespace(multi_face_landmarks=[SimpleNamespace(landmark=[])])
-  mesh=unittest.mock.MagicMock();mesh.__enter__.return_value.process.return_value=landmarks
+  mesh=unittest.mock.MagicMock();mesh.__enter__.return_value.process=lambda *_:landmarks
   with tempfile.TemporaryDirectory() as root:
    path=Path(root)/'motion.mp4';writer=cv2.VideoWriter(str(path),cv2.VideoWriter_fourcc(*'mp4v'),15,(640,480))
    for _ in range(300):writer.write(frame)
    writer.release()
-   with patch.object(engine,'detect',return_value=face),patch.object(engine,'pose',side_effect=pose),patch.object(engine,'vector',side_effect=vector),patch.object(engine,'pad',return_value=[pad_score,pad_score]),patch.object(engine.mp.solutions.face_mesh,'FaceMesh',return_value=mesh):
+   with patch.object(engine,'detect',new=lambda *_:face),patch.object(engine,'pose',new=pose),patch.object(engine,'vector',new=vector),patch.object(engine,'pad',new=lambda *_:[pad_score,pad_score]),patch.object(engine.mp.solutions.face_mesh,'FaceMesh',return_value=mesh):
     return engine.verify(path,['TURN_LEFT','TURN_RIGHT','BLINK'])
 
  def test_requested_profiles_do_not_invalidate_the_same_frontal_face(self):
