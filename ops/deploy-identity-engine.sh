@@ -26,7 +26,7 @@ fi
 worker_ip=\$(docker inspect reestr-identity --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
 ready=false
 for n in \$(seq 1 30); do
- if curl -fsS --max-time 3 http://\$worker_ip:8080/health 2>/dev/null | python3 -c 'import json,sys;v=json.load(sys.stdin);assert v[\"ready\"] and v[\"liveness\"]'; then ready=true; break; fi
+ if curl -fsS --max-time 3 http://\$worker_ip:8080/health 2>/dev/null | python3 -c 'import json,sys;v=json.load(sys.stdin);assert v[\"ready\"] and v[\"liveness\"] and v.get(\"analysisRevision\")==\"v2-frontal-motion\"'; then ready=true; break; fi
  sleep 2
 done
 if [ \"\$ready\" != true ]; then
