@@ -1,0 +1,42 @@
+name: Correct leading dot and publish verified inspection 10966
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_number:
+        description: Confirm owner-requested correction and publication of 10966
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+jobs:
+  correct:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+      - name: Back up database and publish only the verified corrected record
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          CONFIRM_NUMBER: ${{ inputs.confirm_number }}
+        run: |
+          set -euo pipefail
+          [[ "$CONFIRM_NUMBER" == 10966 ]]
+          mkdir -p ~/.ssh
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          server="${DEPLOY_USER:-root}@${DEPLOY_HOST}"
+          remote="$(ssh "$server" 'mktemp -d /tmp/reestr-correct-10966.XXXXXX')"
+          trap 'ssh "$server" "rm -rf -- \"$remote\""' EXIT
+          scp ops/publish-corrected-10966.cjs "$server:$remote/correct.cjs"
+          scp ops/backup-reestr.sh "$server:$remote/backup.sh"
+          ssh "$server" "BACKUP_SCOPE=database bash '$remote/backup.sh'"
+          ssh "$server" "set -a; source /opt/reestr/app/backend/.env; set +a; CONFIRM_NUMBER=10966 GITHUB_RUN_ID='$GITHUB_RUN_ID' node '$remote/correct.cjs'"
