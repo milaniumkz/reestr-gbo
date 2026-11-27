@@ -3,6 +3,7 @@ import 'package:crypto/crypto.dart';
 import 'identity/inspector_identity_page.dart';
 import 'widgets/inspection_address_gate.dart';
 import 'widgets/quality_certificate_uploads.dart';
+import 'widgets/certificate_number_availability.dart';
 import 'platform/web_updates.dart';
 import 'platform/inspection_recovery_store.dart';
 import 'data/inspection_recovery.dart';
@@ -3245,16 +3246,29 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
       return;
     }
     final number = _normalizeCertificateNumber(inspectionCertificateNumber);
+    final userId = currentUser?.id;
+    final inspectionId = draftInspectionId;
+    final vin = vehicleVin;
+    final bin = authBin.trim();
+    bool stillCurrent() =>
+        mounted &&
+        screen == 15 &&
+        currentUser?.id == userId &&
+        draftInspectionId == inspectionId &&
+        vehicleVin == vin &&
+        authBin.trim() == bin &&
+        _normalizeCertificateNumber(inspectionCertificateNumber) == number;
     _ownerNextBusy = true;
     setState(() => apiState = 'Проверка номера свидетельства');
     try {
       final available = await repositories.inspections
           .isCertificateNumberAvailable(
             number,
-            inspectionId: draftInspectionId,
-            vehicleVin: vehicleVin,
+            inspectionId: inspectionId,
+            vehicleVin: vin,
             organizationId: await _inspectionOrganizationId(),
           );
+      if (!stillCurrent()) return;
       if (!available) {
         if (mounted) {
           setState(
@@ -3264,7 +3278,6 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
         }
         return;
       }
-      if (!mounted) return;
       if (!AppEnvironment.isDemo) {
         if (draftInspectionId != null) {
           if (!await _confirmSavedInspectionAddress()) return;
@@ -3272,11 +3285,11 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
           return;
         }
       }
-      if (!mounted) return;
+      if (!stillCurrent()) return;
       setState(() => apiState = '');
       go(16);
     } catch (error) {
-      if (mounted) {
+      if (stillCurrent()) {
         setState(
           () => apiState = error is ApiException
               ? error.message
@@ -3285,6 +3298,12 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
       }
     } finally {
       _ownerNextBusy = false;
+      if (mounted &&
+          screen == 15 &&
+          !stillCurrent() &&
+          apiState == 'Проверка номера свидетельства') {
+        setState(() => apiState = '');
+      }
     }
   }
 
@@ -3994,6 +4013,19 @@ class _ErsiDemoState extends State<ErsiDemo> with WidgetsBindingObserver {
         onOpenInspection: _openInspectionDetail,
       ),
       15 => _OwnerStep(
+        certificateScopeKey:
+            '${currentUser?.id}:${_currentInspectionOrganization?.id}:$draftInspectionId:$vehicleVin',
+        checkCertificateNumber: (number) async {
+          final inspectionId = draftInspectionId;
+          final vin = vehicleVin;
+          final organizationId = await _inspectionOrganizationId();
+          return repositories.inspections.isCertificateNumberAvailable(
+            _normalizeCertificateNumber(number),
+            inspectionId: inspectionId,
+            vehicleVin: vin,
+            organizationId: organizationId,
+          );
+        },
         reviewFiles:
             selectedInspection?.files
                 .where(
@@ -7699,6 +7731,8 @@ String _shortDateTime(String value) {
 
 class _OwnerStep extends StatelessWidget {
   const _OwnerStep({
+    required this.certificateScopeKey,
+    required this.checkCertificateNumber,
     this.reviewFiles = const [],
     required this.certificateNumber,
     required this.inspectionDate,
@@ -7718,6 +7752,8 @@ class _OwnerStep extends StatelessWidget {
     required this.onNext,
   });
   final String inspectionDate;
+  final String certificateScopeKey;
+  final Future<bool> Function(String number) checkCertificateNumber;
   final String ownerPhone;
   final String ownerIin;
   final bool editingQuality;
@@ -7758,12 +7794,17 @@ class _OwnerStep extends StatelessWidget {
               onSelected: onOwnerKind,
             ),
             const SizedBox(height: 26),
-            _Input(
-              label: 'Номер свидетельства',
+            CertificateNumberAvailability(
               value: certificateNumber,
-              hint: 'Введите номер свидетельства',
-              inputFormatters: const [_CertificateNumberFormatter()],
-              onChanged: onCertificateNumber,
+              scopeKey: certificateScopeKey,
+              check: checkCertificateNumber,
+              child: _Input(
+                label: 'Номер свидетельства',
+                value: certificateNumber,
+                hint: 'Введите номер свидетельства',
+                inputFormatters: const [_CertificateNumberFormatter()],
+                onChanged: onCertificateNumber,
+              ),
             ),
             _Input(
               label: 'ФИО / наименование',
