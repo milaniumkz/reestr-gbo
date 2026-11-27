@@ -36,7 +36,8 @@ describe('InspectionsService.list', () => {
         lte: new Date('2026-09-25T23:59:59.999Z'),
       },
     });
-    expect(where.OR).toHaveLength(5);
+    expect(where.OR).toHaveLength(6);
+    expect(where.OR).toContainEqual({certificateNumber: {contains: 'ABC', mode: 'insensitive'}});
     expect(prisma.inspection.count).toHaveBeenCalledWith({ where });
     expect(prisma.inspection.groupBy).toHaveBeenCalledWith({ by: ["status"], where: where, _count: { _all: true } });
     expect(result.items).toHaveLength(0);

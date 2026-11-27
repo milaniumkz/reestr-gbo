@@ -1,6 +1,7 @@
 import { assertCylinderAvailable } from './cylinder-uniqueness';
 import { requiredCylinderShape } from './cylinder-pair';
 import { certificateNumberConflict } from '../common/certificate-number-conflict';
+import { normalizeCertificateNumber } from '../common/certificate-number';
 import { reverseGeocodeInspection, inspectionAddressUnavailable } from './inspection-address';
 import { Prisma, type Inspection } from '@prisma/client';
 import { TechPassportService } from '../tech-passport/tech-passport.service';
@@ -98,6 +99,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       ...(query
         ? {
             OR: [
+              { certificateNumber: { contains: query, mode: "insensitive" as const } },
               { status: { contains: query, mode: "insensitive" as const } },
               { vehicle: { vin: { contains: query, mode: "insensitive" as const } } },
               {
@@ -590,7 +592,8 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
       this.prisma.certificate.findUnique({ where: { organizationId_number: { organizationId, number: certificateNumber } } }),
       this.prisma.inspection.findUnique({ where: { organizationId_certificateNumber: { organizationId, certificateNumber } } }),
     ]);
-    const available = !certificate && (!inspection || inspection.id === inspectionId);
+    const available = (!certificate || (!!inspectionId && certificate.inspectionId === inspectionId)) &&
+      (!inspection || inspection.id === inspectionId);
     if (!available && !inspectionId && !certificate && inspection?.status === "draft" &&
         user?.sub && inspection.createdById === user.sub && vehicleVin?.trim()) {
       const vehicle = await this.prisma.vehicle.findUnique({where:{id:inspection.vehicleId},select:{vin:true}});
@@ -873,7 +876,7 @@ export class InspectionsService implements OnModuleInit, OnModuleDestroy {
   }
 
   private normalizeCertificateNumber(value?: string) {
-    return value?.replace(/\s+/g, "").trim().toUpperCase();
+    return normalizeCertificateNumber(value);
   }
 
   async resolveSavedLocation(id: string, user?: RequestUser) {
