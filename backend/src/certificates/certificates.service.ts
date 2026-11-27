@@ -1,4 +1,5 @@
 import { certificateNumberConflict } from '../common/certificate-number-conflict';
+import { normalizeCertificateNumber } from '../common/certificate-number';
 import { activeCylinderPhotos } from '../inspections/cylinder-pair';
 import { ownerPhone as normalizeOwnerPhone } from '../common/owner-phone';
 import { inspectionPeriod } from '../common/inspection-period';
@@ -1051,7 +1052,7 @@ export class CertificatesService {
 
     const parsed = {
       reportNumber,
-      certificateNumber: reportNumber,
+      certificateNumber: normalizeCertificateNumber(reportNumber),
       organizationName: this.normalizeOrganizationName(
         cell("G100") || cell("G136") || cell("D2"),
       ),
