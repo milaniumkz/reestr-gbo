@@ -1,0 +1,58 @@
+name: Diagnose or remove genuinely empty inactive drafts
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        required: true
+        default: diagnose
+        type: choice
+        options: [diagnose, apply]
+      plan_run:
+        required: false
+        type: string
+      plan_sha256:
+        required: false
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+      - name: Inspect plan or back up and remove verified blank rows only
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          MODE: ${{ inputs.operation }}
+          PLAN_RUN: ${{ inputs.plan_run }}
+          PLAN_SHA256: ${{ inputs.plan_sha256 }}
+        run: |
+          set -euo pipefail
+          [[ "$MODE" == diagnose || "$MODE" == apply ]]
+          if [[ "$MODE" == apply ]]; then
+            [[ "$PLAN_RUN" =~ ^[0-9]+$ && "$PLAN_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          else
+            PLAN_RUN=''; PLAN_SHA256=''
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          server="${DEPLOY_USER:-root}@${DEPLOY_HOST}"
+          remote="$(ssh "$server" 'mktemp -d /tmp/reestr-empty-drafts.XXXXXX')"
+          trap 'ssh "$server" "rm -rf -- \"$remote\""' EXIT
+          scp ops/cleanup-empty-drafts.cjs ops/empty-draft-policy.cjs ops/backup-reestr.sh "$server:$remote/"
+          if [[ "$MODE" == apply ]]; then
+            ssh "$server" "set -a; source /opt/reestr/app/backend/.env; set +a; MODE=verify PLAN_RUN='$PLAN_RUN' PLAN_SHA256='$PLAN_SHA256' GITHUB_RUN_ID='$GITHUB_RUN_ID' node '$remote/cleanup-empty-drafts.cjs'"
+            ssh "$server" "BACKUP_SCOPE=full bash '$remote/backup-reestr.sh'"
+          fi
+          ssh "$server" "set -a; source /opt/reestr/app/backend/.env; set +a; MODE='$MODE' PLAN_RUN='$PLAN_RUN' PLAN_SHA256='$PLAN_SHA256' GITHUB_RUN_ID='$GITHUB_RUN_ID' node '$remote/cleanup-empty-drafts.cjs'"

@@ -167,6 +167,8 @@ jobs:
       - uses: actions/checkout@v4
       - run: bash -n ops/backup-reestr.sh ops/publish-web-only.sh
       - run: python3 scripts/backup_live_storage_test.py
+      - run: node --test scripts/empty_draft_policy.test.cjs
+      - run: node --check ops/cleanup-empty-drafts.cjs
 
   schema-migrations:
     if: github.event_name == 'pull_request'
