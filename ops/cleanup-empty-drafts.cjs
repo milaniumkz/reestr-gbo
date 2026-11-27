@@ -9,7 +9,10 @@ const actorId = '5e0944a8-f163-48c2-a62f-efff903e420b';
 const directory = '/opt/reestr/backups';
 const policy = 'blank-default-only-v1';
 const digest = row => createHash('sha256').update(JSON.stringify(row)).digest('hex');
-const include = {photos:{orderBy:{id:'asc'}},certificate:true,vehicle:{include:{owners:{orderBy:{id:'asc'}},cylinders:{orderBy:{id:'asc'}}}};
+const include = {
+  photos: {orderBy: {id: 'asc'}}, certificate: true,
+  vehicle: {include: {owners: {orderBy: {id: 'asc'}}, cylinders: {orderBy: {id: 'asc'}}}},
+};
 const prefix = (type,row) => type === 'private' ? `inspection-drafts/${row.userId}/${row.id}/` : `inspections/${row.id}/`;
 async function hasStoredFiles(client,type,row) {
   return await client.storageObject.count({where:{objectKey:{startsWith:prefix(type,row)}}}) > 0;
